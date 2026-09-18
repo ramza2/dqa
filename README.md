@@ -88,6 +88,7 @@ Start here:
 5. [Security](docs/security.md)
 6. [Roadmap](docs/roadmap.md)
 7. [Runtime and Deployment](docs/runtime-and-deployment.md)\n8. [Cursor Handoff Guide](docs/cursor-handoff.md)
+9. [Bootstrap Design Review](docs/design-review.md)
 
 ## Development workflow
 
