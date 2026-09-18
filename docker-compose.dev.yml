@@ -7,8 +7,8 @@
 #   docker compose -f docker-compose.dev.yml up --build
 #
 # By default the backend is host-only (127.0.0.1).
-# For trusted-LAN testing set DQA_LAN_BIND_IP to this development PC's LAN IPv4.
-# PostgreSQL remains loopback-only by default.
+# For GPU-server LAN testing set DQA_LAN_BIND_IP to the GPU server's internal IPv4.
+# PostgreSQL remains loopback-only by default. While DQA has no frontend yet, the backend is the LAN-facing test endpoint.
 
 services:
   dqa-db:
