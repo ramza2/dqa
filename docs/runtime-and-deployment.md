@@ -9,9 +9,10 @@ Expected production services:
 - backend
 - dqa-db (PostgreSQL)
 
-Live DEMIS DB remains external.
+Live DEMIS DB remains external and is reached through an operator-managed Connection Profile.
 
 LLM endpoint remains external unless future requirements change.
+Query result rows are not sent to the LLM by default.
 
 ## Reverse proxy
 
@@ -72,3 +73,10 @@ DQA PostgreSQL stores:
 - execution/audit metadata
 
 Imported raw package retention policy should be configurable.
+
+
+## Production query enablement
+
+Deployment success alone does not enable live DEMIS querying.
+
+Live execution requires the production execution gate defined in `docs/architecture.md`, including authentication/RBAC, an active READY Catalog revision, an enabled Connection Profile, approved Query Template, SQL/parameter validation, read-only DB privileges, limits, and audit persistence.
