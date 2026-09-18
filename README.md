@@ -87,7 +87,7 @@ Start here:
 4. [Query Template Design](docs/query-template-design.md)
 5. [Security](docs/security.md)
 6. [Roadmap](docs/roadmap.md)
-7. [Runtime and Deployment](docs/runtime-and-deployment.md)
+7. [Runtime and Deployment](docs/runtime-and-deployment.md)\n8. [Cursor Handoff Guide](docs/cursor-handoff.md)
 
 ## Development workflow
 
