@@ -101,6 +101,9 @@ Default policy:
 - do not send patient identifiers to an LLM
 - do not send sensitive medical fields to an LLM
 - do not persist full result sets unless an explicit retention requirement exists
+- serve result-bearing endpoints only over approved TLS termination
+- return no-store/private cache controls for sensitive query results
+- do not place result rows or patient identifiers in analytics/telemetry logs
 
 LLM result summarization requires a reviewed data-egress policy covering provider, network boundary, permitted fields, redaction/minimization, retention, and audit.
 
