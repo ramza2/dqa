@@ -61,7 +61,7 @@ docker compose -f docker-compose.dev.yml up --build
 By default the backend is exposed only on `127.0.0.1:8000` and PostgreSQL on
 `127.0.0.1:5432`.
 
-For trusted-LAN testing, set `DQA_LAN_BIND_IP` to this development PC's LAN IPv4
+For GPU-server LAN testing, set `DQA_LAN_BIND_IP` to the GPU server's internal IPv4
 address. Keep `DQA_DB_BIND_IP=127.0.0.1`.
 
 Example:
@@ -73,7 +73,10 @@ DQA_DB_BIND_IP=127.0.0.1
 ```
 
 Then the backend is reachable at `http://192.168.0.100:8000` from the trusted LAN,
-subject to the host firewall. DNS and Traefik are not required.
+subject to the GPU server firewall. DNS and Traefik are not required.
+
+This direct backend exposure is for the current backend-only phase. After the DQA frontend is
+implemented, prefer exposing the frontend on the LAN and keeping the backend internal/loopback.
 
 ## Tests
 
