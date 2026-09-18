@@ -1,0 +1,17 @@
+---
+description: Backend implementation conventions
+globs: "backend/**/*.py"
+alwaysApply: false
+---
+
+Use FastAPI, SQLAlchemy, Pydantic and pytest conventions already established in the repository.
+
+Keep routes thin.
+Put business logic in services/domain code.
+Put persistence in repositories.
+Put live DB, Catalog Package and LLM integrations behind adapters.
+
+Use explicit typed request/response models.
+Do not return ORM entities directly from APIs.
+
+Add focused pytest coverage for behavior changes.
