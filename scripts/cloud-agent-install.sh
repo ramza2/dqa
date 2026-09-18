@@ -62,19 +62,22 @@ install_backend() {
   if [[ ! -d backend ]]; then
     return
   fi
-  if [[ -f backend/requirements.txt || -f backend/pyproject.toml ]]; then
+    if [[ -f backend/requirements.txt || -f backend/pyproject.toml ]]; then
     log "Setting up backend Python virtualenv (backend/.venv)."
     python3 -m venv backend/.venv
     # shellcheck disable=SC1091
     source backend/.venv/bin/activate
     python -m pip install --upgrade pip wheel
-    if [[ -f backend/requirements.txt ]]; then
-      log "Installing backend requirements.txt."
-      python -m pip install -r backend/requirements.txt
-    elif [[ -f backend/pyproject.toml ]]; then
-      log "Installing backend project (editable)."
-      python -m pip install -e backend
+    # Install from backend/ so requirements.txt editable paths (.-relative) resolve.
+    pushd backend >/dev/null
+    if [[ -f requirements.txt ]]; then
+      log "Installing backend requirements.txt (delegates to pyproject.toml)."
+      python -m pip install -r requirements.txt
+    elif [[ -f pyproject.toml ]]; then
+      log "Installing backend project (editable, with dev extras)."
+      python -m pip install -e ".[dev]"
     fi
+    popd >/dev/null
     deactivate
   else
     log "No backend dependency manifest yet (requirements.txt / pyproject.toml); skipping."

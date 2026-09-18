@@ -185,14 +185,16 @@ Scope:
 
 ## Phase 7 - Operations
 
-### PR 20 - Production deployment
+### PR 20 - Internal/on-premise deployment
 Scope:
 - Dockerfiles
 - Compose
-- external Traefik
-- `.env.production`
-- `scripts/deploy.sh`
+- explicit LAN IP / port binding
+- internal-only DQA DB exposure
+- non-committed deployment environment
+- deploy/status/logs/down workflow
 - health/readiness checks
+- optional Traefik override only if an external-access requirement exists
 
 ### PR 21 - Hardening
 Scope:

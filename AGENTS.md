@@ -248,23 +248,27 @@ Before asking for merge approval, report:
 
 ## 12. Deployment target
 
-Target production pattern:
+Initial deployment pattern for development, internal testing, and expected on-premise operation:
 - Docker Compose
-- external Traefik network
-- Traefik labels
-- `.env.production`
-- `./scripts/deploy.sh`
+- direct LAN IP + explicit host ports
+- no public DNS requirement
+- no Traefik requirement
+- application ports exposed only on the configured trusted LAN interface
+- DQA PostgreSQL kept loopback/internal-only unless explicitly required
 
-When implemented, the deploy script should:
+External Traefik/DNS routing is optional and must only be added when an explicitly public or shared external deployment is required.
+
+When implemented, the internal deployment script should:
 - validate required environment variables
+- require/print the selected LAN bind IP
 - validate Compose configuration
-- verify external Traefik network
 - build required images
 - deploy with `--remove-orphans`
-- wait for backend health
-- print service status
+- wait for backend/frontend health
+- print LAN access URLs and service status
 
-Do not expose application ports directly in production when routed through Traefik.
+Do not expose database ports broadly to the LAN or Internet.
+Do not assume Traefik is present in an on-premise installation.
 
 ## 13. Testing expectations
 
