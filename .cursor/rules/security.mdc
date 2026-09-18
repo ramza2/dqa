@@ -1,0 +1,28 @@
+---
+description: DQA read-only query execution and security requirements
+alwaysApply: true
+---
+
+DQA is strictly read-only toward DEMIS.
+
+Never implement direct execution of arbitrary LLM-generated SQL.
+
+Executable SQL must come from an APPROVED and ENABLED Query Template.
+
+Reject:
+- DML
+- DDL
+- privilege changes
+- transaction-control statements
+- procedural blocks
+- multiple statements
+
+Use bound parameters.
+Use execution timeout and row limits.
+Use a read-only database account.
+Use database read-only transaction/session support when available.
+
+Never commit or expose credentials.
+Mask sensitive connection data in logs and errors.
+
+Security decisions must be deterministic application logic, not LLM judgment.
