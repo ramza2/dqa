@@ -58,6 +58,23 @@ Or with Docker Compose (from repository root):
 docker compose -f docker-compose.dev.yml up --build
 ```
 
+By default the backend is exposed only on `127.0.0.1:8000` and PostgreSQL on
+`127.0.0.1:5432`.
+
+For trusted-LAN testing, set `DQA_LAN_BIND_IP` to this development PC's LAN IPv4
+address. Keep `DQA_DB_BIND_IP=127.0.0.1`.
+
+Example:
+
+```text
+DQA_LAN_BIND_IP=192.168.0.100
+DQA_BACKEND_PORT=8000
+DQA_DB_BIND_IP=127.0.0.1
+```
+
+Then the backend is reachable at `http://192.168.0.100:8000` from the trusted LAN,
+subject to the host firewall. DNS and Traefik are not required.
+
 ## Tests
 
 ```bash
