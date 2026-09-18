@@ -22,7 +22,7 @@ DQA containers
 
 Public DNS and Traefik are not required for this mode.
 
-The initial development environment may expose only the backend until the frontend is implemented.
+The current backend-only skeleton exposes the backend on the GPU server LAN for API testing. Once the frontend is implemented, prefer exposing only the frontend to the LAN and keeping the backend on the Compose network or server loopback.
 
 ## 2. Services
 
@@ -39,7 +39,8 @@ Query result rows are not sent to the LLM by default.
 ## 3. Network exposure rules
 
 Application services:
-- may bind to an explicitly configured trusted LAN IPv4 address
+- current backend-only phase: backend may bind to the GPU server's explicitly configured LAN IPv4 for API testing
+- after frontend implementation: prefer frontend as the LAN-facing service and keep backend internal/loopback
 - use explicit host ports
 - must not rely on wildcard public DNS
 
@@ -82,7 +83,7 @@ Default:
 - backend -> `127.0.0.1:8000`
 - PostgreSQL -> `127.0.0.1:5432`
 
-For trusted-LAN testing set `DQA_LAN_BIND_IP` to the development PC's LAN IPv4 address.
+For current integration testing, set `DQA_LAN_BIND_IP` to the existing GPU server's internal IPv4 address.
 
 Example:
 
