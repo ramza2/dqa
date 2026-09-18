@@ -15,3 +15,4 @@ alwaysApply: true
 - Separate static test success from runtime/deployment validation.
 - Report changed files, test results, and remaining risks.
 - Prefer ./scripts/deploy.sh once the deployment script exists.
+- When a change alters architecture, security boundaries, package contracts, or roadmap sequencing, update the corresponding docs in the same PR.
