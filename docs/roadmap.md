@@ -33,6 +33,7 @@ Scope:
 - version validation
 - checksum validation
 - required JSON validation
+- zip-slip / duplicate-entry / zip-bomb defenses
 - tamper tests
 
 No activation yet.
@@ -40,14 +41,15 @@ No activation yet.
 ### PR 4 - Catalog import persistence
 Scope:
 - immutable package import revision
+- archive SHA-256 / manifest SHA-256
 - normalized import metadata
 - package validation status
 - import history API
 
 ### PR 5 - Active Catalog management
 Scope:
-- activation rules
-- READY/WARNING/BLOCKED policy
+- READY-only activation policy
+- WARNING/BLOCKED inspection behavior
 - active revision per source
 - activation audit
 
@@ -83,11 +85,13 @@ Scope:
 - IN_REVIEW / APPROVED / REJECTED
 - enable/disable
 - immutable approved version behavior
-- approval audit
+- approval audit fields
 
 ### PR 10 - SQL safety validator
 Scope:
-- single SELECT statement
+- one statement
+- SELECT / WITH ... SELECT allow rules
+- reject FOR UPDATE / SELECT INTO
 - parser/tokenizer
 - forbidden construct rejection
 - declared parameter validation
@@ -103,6 +107,7 @@ Scope:
 - structured response model
 - timeout/error handling
 - provider test doubles
+- no query-result data egress
 
 ### PR 12 - Template retrieval/recommendation
 Scope:
@@ -117,26 +122,58 @@ Scope:
 - deterministic type/constraint validation
 - clarification workflow
 
-## Phase 5 - Read-only execution
+## Phase 5 - Production execution prerequisites
 
-### PR 14 - DEMIS read-only adapter
+### PR 14 - Authentication / RBAC foundation
 Scope:
-- Oracle connection adapter
-- read-only session
+- authenticated actor abstraction
+- roles/permissions foundation
+- template author/approver/operator/auditor authorization points
+- test/dev identity provider abstraction
+
+### PR 15 - Connection Profile management
+Scope:
+- source/environment -> live DEMIS target binding
+- non-secret connection metadata
+- secret-reference boundary
+- enable/disable
+- sanitized connection diagnostics
+- no live query execution yet
+
+### PR 16 - Audit foundation
+Scope:
+- request/execution audit model
+- active Catalog revision/fingerprint
+- template/version
+- actor
+- sensitive parameter logging policy
+- no full result-set logging by default
+
+## Phase 6 - Read-only execution
+
+### PR 17 - DEMIS read-only adapter
+Scope:
+- DBMS-neutral adapter interface
+- first concrete DBMS implementation only after actual DEMIS requirements are confirmed
+- read-only session/transaction
 - timeout
 - bound parameters
 - row limit
 - connection diagnostics
+- least-privilege assumptions documented
 
-### PR 15 - Execution preview and execution service
+### PR 18 - Execution preview and execution service
 Scope:
+- complete production execution gate
 - executable eligibility checks
 - preview
-- approved execution
+- explicit user execution action
+- approved read-only execution
 - normalized result
+- audit write
 - failure categories
 
-### PR 16 - Query Assistant frontend
+### PR 19 - Query Assistant frontend
 Scope:
 - natural-language request
 - recommended template
@@ -144,17 +181,11 @@ Scope:
 - execution preview
 - explicit execution action
 - result table
+- audit reference
 
-## Phase 6 - Audit and operations
+## Phase 7 - Operations
 
-### PR 17 - Audit log
-Scope:
-- request/execution audit
-- catalog/template versions
-- safe parameter logging policy
-- audit search API/UI
-
-### PR 18 - Deployment
+### PR 20 - Production deployment
 Scope:
 - Dockerfiles
 - Compose
@@ -163,21 +194,28 @@ Scope:
 - `scripts/deploy.sh`
 - health/readiness checks
 
-### PR 19 - Hardening
+### PR 21 - Hardening
 Scope:
-- RBAC foundation
 - rate/size limits
 - operational error handling
 - security regression suite
 - backup/restore guidance
+- audit retention
+- RBAC refinement
+- data-egress policy enforcement
 
 ## Exit criteria before real DEMIS use
 
-- Catalog Package import validated against real package
+- Catalog Package import validated against a real finalized package
+- only READY Catalog revisions can be execution-active
 - approved template workflow operational
 - unsafe SQL rejection demonstrated
+- authentication/RBAC enabled
+- explicit Connection Profile bound to the active source/environment
 - read-only DB privilege verified externally
+- risky function/package EXECUTE privileges constrained
 - timeout/row cap verified
-- audit enabled
+- audit persistence enabled
 - secrets not logged
+- full result rows not sent to LLM by default
 - deployment health checks pass
