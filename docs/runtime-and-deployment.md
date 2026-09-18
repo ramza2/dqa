@@ -1,61 +1,140 @@
 # Runtime and Deployment Plan
 
-This is a design target, not yet an implemented deployment.
+This document defines the deployment direction for DQA.
 
-## Services
+## 1. Default deployment mode
 
-Expected production services:
-- frontend
+DQA is initially operated as an internal/on-premise application.
+
+Default access pattern:
+
+```text
+Trusted LAN client
+    |
+    | http://<DQA_LAN_IP>:<frontend/backend port>
+    v
+DQA containers
+    |
+    +--> DQA PostgreSQL (internal/loopback-only host exposure)
+    |
+    +--> operator-managed read-only DEMIS Connection Profile
+```
+
+Public DNS and Traefik are not required for this mode.
+
+The initial development environment may expose only the backend until the frontend is implemented.
+
+## 2. Services
+
+Expected services:
+- frontend (later roadmap phase)
 - backend
 - dqa-db (PostgreSQL)
 
-Live DEMIS DB remains external and is reached through an operator-managed Connection Profile.
+Live DEMIS DB remains external to the DQA stack and is reached through an operator-managed Connection Profile.
 
 LLM endpoint remains external unless future requirements change.
 Query result rows are not sent to the LLM by default.
 
-## Reverse proxy
+## 3. Network exposure rules
 
-Use the server's existing external Traefik network.
+Application services:
+- may bind to an explicitly configured trusted LAN IPv4 address
+- use explicit host ports
+- must not rely on wildcard public DNS
 
-Production application containers should be attached to:
-- internal application network as needed
-- external Traefik network for routed services
+DQA PostgreSQL:
+- stays on the Compose network for application access
+- if a host port is needed for development tools, bind it to `127.0.0.1` by default
+- must not be broadly exposed to the LAN or Internet
 
-Do not expose backend/frontend host ports unless required for controlled diagnostics.
+DEMIS database:
+- is never published by DQA
+- connectivity is defined by Connection Profile and site network policy
 
-## Environment files
+## 4. Environment files
 
 Development:
 - `.env` or local override, never committed
+- LAN bind values may be provided through `.env`
 
-Production:
-- `.env.production`, never committed
+On-premise/internal deployment:
+- use a dedicated non-committed environment file when deployment automation is added
 
 Template:
 - `.env.example`
 
-## Deployment script target
+Current development bind variables:
+- `DQA_LAN_BIND_IP`
+- `DQA_BACKEND_PORT`
+- `DQA_DB_BIND_IP`
+- `DQA_DB_EXTERNAL_PORT`
 
-`scripts/deploy.sh` should eventually support:
+## 5. Development Compose
+
+Current backend skeleton:
 
 ```bash
-./scripts/deploy.sh
-./scripts/deploy.sh status
-./scripts/deploy.sh logs
+docker compose -f docker-compose.dev.yml up --build
 ```
 
-Deploy should:
+Default:
+- backend -> `127.0.0.1:8000`
+- PostgreSQL -> `127.0.0.1:5432`
+
+For trusted-LAN testing set `DQA_LAN_BIND_IP` to the development PC's LAN IPv4 address.
+
+Example:
+
+```text
+DQA_LAN_BIND_IP=192.168.0.100
+DQA_BACKEND_PORT=8000
+DQA_DB_BIND_IP=127.0.0.1
+```
+
+Then another trusted LAN device may access:
+
+```text
+http://192.168.0.100:8000
+```
+
+subject to the host firewall.
+
+## 6. Future deployment script target
+
+The later deployment PR should provide commands equivalent to:
+
+```text
+deploy
+status
+logs
+down
+```
+
+The internal deployment flow should:
 1. validate environment
-2. validate required Docker/Compose availability
-3. verify Traefik external network
+2. validate Docker/Compose availability
+3. validate the selected LAN bind IP
 4. validate Compose config
 5. build images
 6. deploy with remove-orphans
-7. wait for backend health
-8. print service status
+7. wait for backend/frontend health
+8. print LAN access URLs and service status
 
-## Health model
+Traefik checks must not be mandatory for internal/on-premise mode.
+
+## 7. Optional external reverse proxy
+
+If a future requirement explicitly needs external/public access, an additional Compose override may attach the application to an external Traefik network.
+
+That optional mode may provide:
+- Host-based routing
+- TLS
+- public DNS integration
+
+It must remain separate from the default internal/on-premise Compose configuration.
+
+## 8. Health model
 
 Backend:
 - liveness: process/API alive
@@ -63,7 +142,7 @@ Backend:
 
 DEMIS DB and LLM availability should normally be exposed as dependency diagnostics rather than make the application process itself unhealthy.
 
-## Persistence
+## 9. Persistence
 
 DQA PostgreSQL stores:
 - imported Catalog revisions
@@ -74,8 +153,7 @@ DQA PostgreSQL stores:
 
 Imported raw package retention policy should be configurable.
 
-
-## Production query enablement
+## 10. Production query enablement
 
 Deployment success alone does not enable live DEMIS querying.
 
