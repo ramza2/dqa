@@ -59,10 +59,12 @@ Validate at minimum:
 8. package readiness
 9. JSON parseability and required fields
 
-Activation policy:
+Activation policy for the initial implementation:
 - READY: may be activated
-- WARNING: may be imported for inspection, but must not be activated for query execution without an explicit operator decision
+- WARNING: may be imported for inspection but must not be activated for query execution
 - BLOCKED: must not be activated
+
+Any future WARNING override requires an explicit reviewed design change and audit policy.
 
 Never silently repair, rewrite, or partially accept a corrupt package.
 
@@ -150,7 +152,7 @@ The LLM may:
 - rank approved Query Templates
 - extract parameters
 - explain catalog metadata
-- summarize query results when permitted
+- summarize query results only when an approved data-egress policy explicitly permits it
 
 The LLM must not:
 - execute arbitrary generated SQL
@@ -162,6 +164,9 @@ The LLM must not:
 
 Use a provider abstraction for all LLM calls.
 Do not bind domain code to one model vendor.
+
+By default, query result rows, patient identifiers, and other sensitive medical data must not be sent to an LLM.
+Result summarization is disabled until an explicit provider/data-egress policy is approved and implemented.
 
 ## 8. Security
 
