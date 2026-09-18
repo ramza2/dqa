@@ -55,7 +55,7 @@ def check_database_connectivity(
     """
     cfg = settings or get_settings()
     engine = create_engine(
-        cfg.database_url,
+        cfg.sqlalchemy_database_url,
         pool_pre_ping=True,
         future=True,
         connect_args={"connect_timeout": max(1, int(timeout_seconds))},

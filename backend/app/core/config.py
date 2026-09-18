@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
@@ -31,21 +32,26 @@ class Settings(BaseSettings):
     dqa_db_password: SecretStr = Field(default=SecretStr("change-me"), alias="DQA_DB_PASSWORD")
 
     @property
-    def database_url(self) -> str:
-        """SQLAlchemy URL for the DQA application PostgreSQL database."""
-        password = self.dqa_db_password.get_secret_value()
-        return (
-            f"postgresql+psycopg://{self.dqa_db_user}:{password}"
-            f"@{self.dqa_db_host}:{self.dqa_db_port}/{self.dqa_db_name}"
+    def sqlalchemy_database_url(self) -> URL:
+        """SQLAlchemy URL object for the DQA application PostgreSQL database."""
+        return URL.create(
+            drivername="postgresql+psycopg",
+            username=self.dqa_db_user,
+            password=self.dqa_db_password.get_secret_value(),
+            host=self.dqa_db_host,
+            port=self.dqa_db_port,
+            database=self.dqa_db_name,
         )
+
+    @property
+    def database_url(self) -> str:
+        """Rendered SQLAlchemy URL (password preserved, properly escaped)."""
+        return self.sqlalchemy_database_url.render_as_string(hide_password=False)
 
     @property
     def database_url_safe(self) -> str:
         """Connection URL with the password redacted for logs and errors."""
-        return (
-            f"postgresql+psycopg://{self.dqa_db_user}:***"
-            f"@{self.dqa_db_host}:{self.dqa_db_port}/{self.dqa_db_name}"
-        )
+        return self.sqlalchemy_database_url.render_as_string(hide_password=True)
 
 
 @lru_cache

@@ -43,11 +43,14 @@ backend/
 # from repository root
 python3 -m venv backend/.venv
 source backend/.venv/bin/activate
-pip install -r backend/requirements.txt
+cd backend && pip install -r requirements.txt
 
 # requires local PostgreSQL matching .env (see scripts/cloud-agent-start.sh)
-uvicorn app.main:app --app-dir backend --reload --port 8000
+uvicorn app.main:app --reload --port 8000
 ```
+
+Dependency pins live in `pyproject.toml`. `requirements.txt` is a thin
+`-e .[dev]` entrypoint for local/Cloud Agent installs.
 
 Or with Docker Compose (from repository root):
 

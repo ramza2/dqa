@@ -12,12 +12,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
-
+# Install runtime dependencies from pyproject.toml (source of truth).
+COPY pyproject.toml README.md ./
 COPY app ./app
-COPY pyproject.toml ./
+RUN pip install --upgrade pip \
+    && pip install .
 
 EXPOSE 8000
 

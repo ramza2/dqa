@@ -1,24 +1,32 @@
 """Shared pytest fixtures for the DQA backend."""
 
-import os
-
 import pytest
 from fastapi.testclient import TestClient
 
-# Ensure deterministic settings before the application module is imported.
-os.environ.setdefault("APP_ENV", "test")
-os.environ.setdefault("APP_NAME", "DEMIS Query Assistant")
-os.environ.setdefault("LOG_LEVEL", "INFO")
-os.environ.setdefault("DQA_DB_HOST", "localhost")
-os.environ.setdefault("DQA_DB_PORT", "5432")
-os.environ.setdefault("DQA_DB_NAME", "dqa")
-os.environ.setdefault("DQA_DB_USER", "dqa")
-os.environ.setdefault("DQA_DB_PASSWORD", "dqa")
+# Deterministic defaults applied via monkeypatch in fixtures (not setdefault).
+_TEST_ENV = {
+    "APP_ENV": "test",
+    "APP_NAME": "DEMIS Query Assistant",
+    "LOG_LEVEL": "INFO",
+    "DQA_DB_HOST": "localhost",
+    "DQA_DB_PORT": "5432",
+    "DQA_DB_NAME": "dqa",
+    "DQA_DB_USER": "dqa",
+    "DQA_DB_PASSWORD": "test-password",
+}
 
 
 @pytest.fixture()
-def client() -> TestClient:
-    """HTTP client bound to the FastAPI app."""
+def test_settings_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """Force a known settings environment for the duration of a test."""
+    for key, value in _TEST_ENV.items():
+        monkeypatch.setenv(key, value)
+    return dict(_TEST_ENV)
+
+
+@pytest.fixture()
+def client(test_settings_env: dict[str, str]) -> TestClient:
+    """HTTP client bound to the FastAPI app with deterministic settings."""
     from app.core.config import get_settings
     from app.main import create_app
 

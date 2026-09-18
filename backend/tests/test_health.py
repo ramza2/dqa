@@ -16,7 +16,14 @@ def test_health_returns_ok(client: TestClient) -> None:
 
 
 def test_health_ready_succeeds_when_database_is_up(client: TestClient) -> None:
-    response = client.get("/health/ready")
+    """Unit test: readiness success path must not require a live PostgreSQL."""
+    with patch(
+        "app.api.routes.health.check_database_connectivity",
+        return_value=None,
+    ) as mock_check:
+        response = client.get("/health/ready")
+
+    mock_check.assert_called_once()
     assert response.status_code == 200
     payload = response.json()
     assert payload == {"status": "ready", "database": "ok"}

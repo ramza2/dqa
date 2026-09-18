@@ -8,7 +8,23 @@ version = "0.1.0"
 description = "DEMIS Query Assistant backend application skeleton"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+# Dependency version pins live here (single source of truth).
+# requirements.txt is a thin install entrypoint for Docker / install scripts.
+dependencies = [
+  "fastapi>=0.115.0,<1.0.0",
+  "uvicorn[standard]>=0.32.0,<1.0.0",
+  "pydantic>=2.9.0,<3.0.0",
+  "pydantic-settings>=2.6.0,<3.0.0",
+  "sqlalchemy>=2.0.36,<3.0.0",
+  "psycopg[binary]>=3.2.0,<4.0.0",
+  "python-dotenv>=1.0.1,<2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0,<9.0.0",
+  "httpx>=0.27.0,<1.0.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -18,3 +34,6 @@ include = ["app*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+markers = [
+  "integration: tests that require external services (e.g. PostgreSQL)",
+]
