@@ -76,7 +76,26 @@ Important properties:
 - active revision records package version, source identity and schema fingerprint
 - history is retained
 
-### 3.3 Catalog Explorer / Search
+### 3.3 Connection Profile
+
+A Connection Profile is separate from imported Catalog metadata.
+
+Responsibilities:
+- bind a logical Catalog source/environment to one live DEMIS target
+- reference credentials through environment/secret management rather than Catalog data
+- store non-secret compatibility metadata
+- expose sanitized connection diagnostics
+- support explicit enable/disable state
+
+Activation of a Catalog revision does not automatically create or modify a live connection profile.
+
+Before execution, DQA must verify that:
+- the selected Query Template is compatible with the active Catalog
+- the connection profile is enabled
+- the profile is bound to the intended source/environment
+- the read-only connection test succeeds
+
+### 3.4 Catalog Explorer / Search
 
 Provides structured discovery of:
 - tables
@@ -91,7 +110,7 @@ Provides structured discovery of:
 Search should initially be deterministic keyword/filter search.
 Semantic retrieval may be added later if it provides clear value.
 
-### 3.4 Query Template Registry
+### 3.5 Query Template Registry
 
 Maintains versioned templates.
 
@@ -103,7 +122,7 @@ Execution eligibility:
 
 Templates must be versioned rather than overwritten in place after approval.
 
-### 3.5 Intent / Recommendation
+### 3.6 Intent / Recommendation
 
 Input:
 - natural-language user request
@@ -118,7 +137,7 @@ Output:
 
 The LLM is advisory. The backend performs final deterministic validation.
 
-### 3.6 Parameter Validation
+### 3.7 Parameter Validation
 
 Validates:
 - required fields
@@ -130,7 +149,7 @@ Validates:
 
 Parameters are bound variables, never string-concatenated into SQL.
 
-### 3.7 SQL Safety Gate
+### 3.8 SQL Safety Gate
 
 Central deterministic component.
 
@@ -145,9 +164,10 @@ Minimum checks:
 
 The safety gate runs even for approved templates.
 
-### 3.8 Read-only DEMIS Adapter
+### 3.9 Read-only DEMIS Adapter
 
-Initial target is Oracle-compatible DEMIS access through a read-only account.
+The adapter interface is DBMS-neutral.
+The first concrete DBMS implementation must be selected after the actual DEMIS connection requirements are confirmed.
 
 Responsibilities:
 - connection lifecycle
@@ -160,7 +180,7 @@ Responsibilities:
 
 No query generation occurs here.
 
-### 3.9 Result Handling
+### 3.10 Result Handling
 
 Return:
 - columns
@@ -171,9 +191,10 @@ Return:
 - active Catalog fingerprint
 - audit reference
 
-Optional result summarization by LLM must be a post-processing step and must not change the underlying rows.
+Query result rows are not sent to an LLM by default.
+Optional result summarization may be added only after an explicit medical-data/data-egress policy approves the target provider and data scope, and it must remain a post-processing step that cannot change the underlying rows.
 
-### 3.10 Audit
+### 3.11 Audit
 
 Record at minimum:
 - request/audit ID
@@ -223,7 +244,8 @@ Keep these data classes separate:
 1. imported Catalog metadata
 2. Query Template authoring/approval state
 3. live DEMIS connection configuration
-4. query execution/audit history
+4. live connection profiles / secret references
+5. query execution/audit history
 
 Do not mix live DEMIS credentials into imported Catalog records.
 
@@ -239,3 +261,22 @@ Not in the initial implementation:
 - autonomous agent loops
 
 These can only be reconsidered through explicit design change.
+
+
+## 7. Production execution gate
+
+The following must exist before any real DEMIS query execution is enabled:
+
+- authentication and role-based authorization
+- explicit active Catalog revision
+- explicit enabled Connection Profile
+- externally verified read-only DB privileges
+- approved Query Template version
+- deterministic SQL safety validation
+- bound parameter validation
+- timeout and row limits
+- execution audit persistence
+- sensitive-parameter logging policy
+- LLM data-egress policy (default: no result rows sent to LLM)
+
+Development may implement these components incrementally, but live DEMIS execution must remain disabled until the complete gate is satisfied.
