@@ -29,6 +29,7 @@ A template is executable only when:
 - latest intended version is APPROVED
 - enabled = true
 - compatible with the active Catalog
+- bound to an enabled compatible Connection Profile
 - deterministic SQL validation passes
 
 Editing an approved template should create a new version requiring approval.
@@ -94,7 +95,9 @@ Initial types:
 
 Templates must:
 - contain one statement
-- be SELECT-only
+- be SELECT-only, including WITH ... SELECT when the final statement is read-only
+- reject SELECT ... FOR UPDATE
+- reject SELECT ... INTO or equivalent write/locking forms
 - use named bound parameters
 - avoid value interpolation
 - avoid dynamic object-name substitution from users
@@ -144,6 +147,7 @@ Before execution present:
 - row limit
 - timeout
 - active Catalog fingerprint
+- logical Connection Profile / target environment (without secrets)
 
 Do not require users to inspect raw SQL for basic use, but allow authorized operators to view it.
 
@@ -152,3 +156,16 @@ Do not require users to inspect raw SQL for basic use, but allow authorized oper
 Each execution references an immutable Query Template version.
 
 Never audit only the stable template ID without version.
+
+
+## 9. Result-to-LLM policy
+
+Query result rows, patient identifiers, and sensitive medical fields are not sent to an LLM by default.
+
+If result summarization is introduced later, it requires:
+- an approved provider/data-egress policy
+- explicit permitted field/data classifications
+- deterministic redaction/minimization before the provider call where required
+- audit of whether LLM post-processing occurred
+
+Template recommendation and parameter extraction should rely on the user request, Catalog metadata, and template metadata rather than raw query-result rows.
