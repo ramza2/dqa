@@ -61,7 +61,7 @@ Core catalog/runtime requirements should be defined in validation code.
 5. Validate supported package version.
 6. Validate every manifest-managed path exists exactly once.
 7. Verify each declared SHA-256.
-8. Reject unexpected path traversal entries.
+8. Reject path traversal, duplicate ZIP entries, excessive file counts, excessive uncompressed size, and zip-bomb style expansion.
 9. Parse required JSON files.
 10. Validate source identity and schema fingerprint.
 11. Evaluate package readiness.
@@ -76,12 +76,12 @@ Producer readiness values:
 - WARNING
 - BLOCKED
 
-DQA policy:
+Initial DQA policy:
 - READY: import + activation allowed
-- WARNING: import allowed; execution activation requires explicit operator decision and audit
-- BLOCKED: import may be retained for diagnostics, but activation is prohibited
+- WARNING: import allowed for inspection; activation is prohibited
+- BLOCKED: import may be retained for diagnostics; activation is prohibited
 
-Initial implementation may choose a stricter policy and prohibit WARNING activation.
+A future WARNING override must be a deliberate reviewed product/security change rather than an implicit operator shortcut.
 
 ## 6. Core metadata mapping
 
@@ -192,7 +192,8 @@ Each successful import should create an immutable revision with at least:
 - package format/version
 - generated_at
 - imported_at
-- manifest digest
+- original archive SHA-256
+- manifest SHA-256
 - schema fingerprint
 - readiness
 - validation status
@@ -200,6 +201,9 @@ Each successful import should create an immutable revision with at least:
 - activation status/history
 
 Never overwrite a previous revision because a new package has the same source name.
+
+Live DEMIS connection configuration is not part of this package.
+DQA must bind an imported source to a separately managed Connection Profile before query execution.
 
 ## 9. Security
 
