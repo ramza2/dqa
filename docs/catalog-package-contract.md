@@ -48,6 +48,7 @@ demis_catalog_package/
 ```
 
 The exact manifest is authoritative for managed files.
+Except for the manifest itself and explicitly documented container/root entries, files not declared by the package contract/manifest are rejected rather than silently ignored.
 
 DQA must not assume that every supplemental human-readable artifact is required for runtime execution.
 Core catalog/runtime requirements should be defined in validation code.
@@ -61,7 +62,7 @@ Core catalog/runtime requirements should be defined in validation code.
 5. Validate supported package version.
 6. Validate every manifest-managed path exists exactly once.
 7. Verify each declared SHA-256.
-8. Reject path traversal, duplicate ZIP entries, excessive file counts, excessive uncompressed size, and zip-bomb style expansion.
+8. Reject path traversal, duplicate ZIP entries, non-regular/symlink-like entries, unexpected unmanaged files, excessive file counts, excessive uncompressed size, and zip-bomb style expansion.
 9. Parse required JSON files.
 10. Validate source identity and schema fingerprint.
 11. Evaluate package readiness.
