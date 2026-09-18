@@ -1,8 +1,14 @@
 # Development Compose skeleton for DQA backend + PostgreSQL.
+#
+# Internal/LAN development is the default deployment model.
+# No DNS or Traefik is required.
+#
 # Usage (from repository root):
 #   docker compose -f docker-compose.dev.yml up --build
 #
-# Production Traefik wiring belongs to a later roadmap PR.
+# By default the backend is host-only (127.0.0.1).
+# For trusted-LAN testing set DQA_LAN_BIND_IP to this development PC's LAN IPv4.
+# PostgreSQL remains loopback-only by default.
 
 services:
   dqa-db:
@@ -12,7 +18,7 @@ services:
       POSTGRES_USER: ${DQA_DB_USER:-dqa}
       POSTGRES_PASSWORD: ${DQA_DB_PASSWORD:-dqa}
     ports:
-      - "5432:5432"
+      - "${DQA_DB_BIND_IP:-127.0.0.1}:${DQA_DB_EXTERNAL_PORT:-5432}:5432"
     volumes:
       - dqa_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -35,7 +41,7 @@ services:
       DQA_DB_USER: ${DQA_DB_USER:-dqa}
       DQA_DB_PASSWORD: ${DQA_DB_PASSWORD:-dqa}
     ports:
-      - "8000:8000"
+      - "${DQA_LAN_BIND_IP:-127.0.0.1}:${DQA_BACKEND_PORT:-8000}:8000"
     depends_on:
       dqa-db:
         condition: service_healthy
