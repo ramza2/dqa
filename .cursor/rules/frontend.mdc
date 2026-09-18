@@ -1,0 +1,14 @@
+---
+description: Frontend implementation conventions
+globs: "frontend/**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+Use TypeScript strictly.
+
+Keep API calls in shared client modules.
+Do not make frontend-only validation the authoritative security control.
+
+Keep operational state visible.
+Require explicit user action before query execution.
+Do not display credentials or infrastructure secrets.
