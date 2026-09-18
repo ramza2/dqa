@@ -230,9 +230,9 @@ DQA persistence:
 
 Deployment:
 - Docker Compose
-- external Traefik
-- `.env.production`
-- `scripts/deploy.sh`
+- direct LAN IP + explicit ports for internal/on-premise operation
+- DQA PostgreSQL kept internal or loopback-only
+- public DNS / external Traefik optional, not required by the core architecture
 
 LLM:
 - OpenAI-compatible provider abstraction
