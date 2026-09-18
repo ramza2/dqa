@@ -1,0 +1,25 @@
+.env
+.env.*
+!.env.example
+
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+node_modules/
+dist/
+build/
+
+data/
+runtime/
+tmp/
+uploads/
+*.zip
+*.docx
+
+# Do not index locally imported DEMIS packages or exported query results.
+catalog-packages/
+query-results/

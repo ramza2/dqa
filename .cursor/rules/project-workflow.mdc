@@ -1,0 +1,18 @@
+---
+description: DQA development and pull request workflow
+alwaysApply: true
+---
+
+- Read the root AGENTS.md before substantial work.
+- Read nested AGENTS.md files for the area being changed.
+- Inspect the relevant existing implementation before editing.
+- State a small implementation plan before broad changes.
+- Keep feature work on a feature branch.
+- Never merge a PR unless the user explicitly asks.
+- Avoid unrelated refactors.
+- Add focused tests for behavior changes.
+- Run focused tests before broader regression tests.
+- Separate static test success from runtime/deployment validation.
+- Report changed files, test results, and remaining risks.
+- Prefer ./scripts/deploy.sh once the deployment script exists.
+- When a change alters architecture, security boundaries, package contracts, or roadmap sequencing, update the corresponding docs in the same PR.
