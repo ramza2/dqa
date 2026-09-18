@@ -33,6 +33,8 @@ Required:
 
 Application-side SQL safety validation is additional protection, not a replacement for DB permissions.
 
+A syntactically SELECT statement may still invoke database functions/packages with side effects if the account has execute privileges. The read-only account must therefore also have tightly constrained EXECUTE privileges and least-privilege object grants.
+
 ## 4. SQL controls
 
 Execution is allowed only for approved Query Template versions.
@@ -44,6 +46,8 @@ Validator must reject at least:
 - transaction-control statements
 - procedural/anonymous blocks
 - multiple statements
+- SELECT ... FOR UPDATE
+- SELECT ... INTO or equivalent write/locking variants
 - unbound user value interpolation
 
 Do not rely on naive substring checks alone in the final validator.
@@ -67,7 +71,8 @@ Structured model output must be schema-validated.
 Treat uploaded ZIP as untrusted.
 
 Validate:
-- size limits
+- compressed and uncompressed size limits
+- file-count / expansion-ratio limits
 - safe paths
 - package root
 - format/version
@@ -89,7 +94,17 @@ Secrets:
 
 `.env.example` contains placeholders only.
 
-## 8. Audit and privacy
+## 8. Medical data and LLM egress
+
+Default policy:
+- do not send query result rows to an LLM
+- do not send patient identifiers to an LLM
+- do not send sensitive medical fields to an LLM
+- do not persist full result sets unless an explicit retention requirement exists
+
+LLM result summarization requires a reviewed data-egress policy covering provider, network boundary, permitted fields, redaction/minimization, retention, and audit.
+
+## 9. Audit and privacy
 
 Default audit should capture execution metadata, not complete query result data.
 
@@ -100,7 +115,7 @@ Parameter logging policy should distinguish:
 
 Sensitive parameter values should be masked or hashed according to future operational requirements.
 
-## 9. Authentication and authorization
+## 10. Authentication and authorization
 
 Authentication/RBAC is not implemented in bootstrap.
 
@@ -114,7 +129,7 @@ Before production use, define roles such as:
 
 Template author and approver separation should be supported where required.
 
-## 10. Production checklist
+## 11. Production checklist
 
 Before real DEMIS access:
 - read-only account verified
@@ -126,4 +141,7 @@ Before real DEMIS access:
 - unsafe SQL rejection tested
 - audit retention defined
 - authentication/RBAC enabled
+- Connection Profile binding/authorization defined
+- execution audit persistence enabled before live queries
 - package import/activation authorization defined
+- LLM result-data egress disabled unless explicitly approved
