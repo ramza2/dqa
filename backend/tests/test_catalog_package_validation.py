@@ -18,6 +18,7 @@ from tests.catalog_package_fixtures import (
     build_core_documents,
     build_manifest,
     build_package_zip,
+    package_with_manifest_path_override,
     sha256_hex,
     write_zip_with_infos,
 )
@@ -312,3 +313,87 @@ def test_validate_api_rejects_bad_format(client: TestClient) -> None:
     detail = response.json()["detail"]
     assert detail["code"] == CatalogPackageErrorCode.INVALID_PACKAGE_FORMAT
     assert "password" not in detail["message"].lower()
+
+
+def test_manifest_path_parent_traversal_rejected() -> None:
+    archive = package_with_manifest_path_override("../tables.json")
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_MANIFEST)
+
+
+def test_manifest_path_dot_dot_prefix_rejected() -> None:
+    archive = package_with_manifest_path_override("./../tables.json")
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_MANIFEST)
+
+
+def test_manifest_path_absolute_rejected() -> None:
+    archive = package_with_manifest_path_override("/tables.json")
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_MANIFEST)
+
+
+def test_manifest_path_backslash_rejected() -> None:
+    archive = package_with_manifest_path_override(r"tables\evil.json")
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_MANIFEST)
+
+
+def test_manifest_path_windows_drive_rejected() -> None:
+    archive = package_with_manifest_path_override(r"C:\tables.json")
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_MANIFEST)
+
+
+def test_tables_json_missing_top_level_key_rejected() -> None:
+    archive = build_package_zip(mutate_files={"tables.json": b'{"items":[]}'})
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_JSON)
+
+
+def test_columns_json_columns_not_list_rejected() -> None:
+    archive = build_package_zip(mutate_files={"columns.json": b'{"columns":{"id":1}}'})
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_JSON)
+
+
+def test_erd_json_nodes_edges_structure_rejected() -> None:
+    archive = build_package_zip(mutate_files={"erd.json": b'{"nodes":{},"edges":[]}'})
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_JSON)
+
+
+def test_producer_style_nested_latest_run_succeeds() -> None:
+    archive = build_package_zip(package_version="2.0", package_readiness="READY")
+    result = _validate(archive)
+    latest_run = result.parsed_documents["analysis/latest_run.json"]
+    assert latest_run["available"] is True
+    assert isinstance(latest_run["run"], dict)
+    assert latest_run["run"]["schema_fingerprint"] == DEFAULT_FINGERPRINT
+    snapshot = result.parsed_documents["analysis/schema_snapshot.json"]
+    assert snapshot["available"] is True
+    assert isinstance(snapshot["payload"], dict)
+    preflight = result.parsed_documents["validation/preflight.json"]
+    assert preflight["available"] is True
+    assert "status" in preflight
+    diff = result.parsed_documents["diff/latest.json"]
+    assert diff["available"] is True
+
+
+def test_manifest_database_name_missing_in_database_json_rejected() -> None:
+    files = build_core_documents()
+    database = json.loads(files["database.json"])
+    database["source"] = {
+        "source_name": DEFAULT_SOURCE["source_name"],
+        "db_type": DEFAULT_SOURCE["db_type"],
+        "default_schema": DEFAULT_SOURCE["default_schema"],
+        "database_name": None,
+    }
+    files["database.json"] = json.dumps(database, separators=(",", ":")).encode("utf-8")
+    archive = build_package_zip(files=files)
+    _expect_error(archive, CatalogPackageErrorCode.SOURCE_MISMATCH)
+
+
+def test_manifest_default_schema_missing_in_database_json_rejected() -> None:
+    files = build_core_documents()
+    database = json.loads(files["database.json"])
+    database["source"] = {
+        "source_name": DEFAULT_SOURCE["source_name"],
+        "db_type": DEFAULT_SOURCE["db_type"],
+        "database_name": DEFAULT_SOURCE["database_name"],
+    }
+    files["database.json"] = json.dumps(database, separators=(",", ":")).encode("utf-8")
+    archive = build_package_zip(files=files)
+    _expect_error(archive, CatalogPackageErrorCode.SOURCE_MISMATCH)

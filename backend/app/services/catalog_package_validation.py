@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from app.adapters.catalog.errors import CatalogPackageErrorCode, CatalogPackageValidationError
 from app.adapters.catalog.limits import (
@@ -25,11 +25,34 @@ from app.adapters.catalog.package_reader import (
 )
 from app.schemas.catalog_package import (
     CatalogPackageManifest,
+    CategoriesDocument,
+    ColumnsDocument,
     DatabaseDocument,
+    DiffLatestDocument,
+    ErdDocument,
+    IndexesDocument,
     LatestRunDocument,
     PackageReadiness,
     PackageSourceIdentity,
+    PreflightDocument,
+    RelationsDocument,
+    SchemaSnapshotDocument,
+    TablesDocument,
 )
+
+_REQUIRED_DOCUMENT_MODELS: dict[str, type[BaseModel]] = {
+    "database.json": DatabaseDocument,
+    "tables.json": TablesDocument,
+    "columns.json": ColumnsDocument,
+    "relations.json": RelationsDocument,
+    "indexes.json": IndexesDocument,
+    "categories.json": CategoriesDocument,
+    "erd.json": ErdDocument,
+    "analysis/latest_run.json": LatestRunDocument,
+    "analysis/schema_snapshot.json": SchemaSnapshotDocument,
+    "validation/preflight.json": PreflightDocument,
+    "diff/latest.json": DiffLatestDocument,
+}
 
 
 @dataclass(frozen=True)
@@ -254,7 +277,6 @@ def _parse_required_json_documents(archive: SafePackageArchive) -> dict[str, Any
     parsed: dict[str, Any] = {}
     for relative_path in REQUIRED_RUNTIME_JSON_FILES:
         entry = archive.files[relative_path]
-        # Supplemental non-JSON artifacts are never in this list.
         if relative_path.endswith(NON_CANONICAL_ARTIFACT_SUFFIXES):
             continue
         try:
@@ -267,24 +289,15 @@ def _parse_required_json_documents(archive: SafePackageArchive) -> dict[str, Any
             ) from exc
         parsed[relative_path] = payload
 
-    # Light structural models for cross-checks (extra fields allowed).
-    try:
-        DatabaseDocument.model_validate(parsed["database.json"])
-    except ValidationError as exc:
-        raise CatalogPackageValidationError(
-            CatalogPackageErrorCode.MALFORMED_JSON,
-            "database.json failed structural validation",
-            path="database.json",
-        ) from exc
-
-    try:
-        LatestRunDocument.model_validate(parsed["analysis/latest_run.json"])
-    except ValidationError as exc:
-        raise CatalogPackageValidationError(
-            CatalogPackageErrorCode.MALFORMED_JSON,
-            "analysis/latest_run.json failed structural validation",
-            path="analysis/latest_run.json",
-        ) from exc
+    for relative_path, model_cls in _REQUIRED_DOCUMENT_MODELS.items():
+        try:
+            model_cls.model_validate(parsed[relative_path])
+        except ValidationError as exc:
+            raise CatalogPackageValidationError(
+                CatalogPackageErrorCode.MALFORMED_JSON,
+                f"{relative_path} failed structural validation",
+                path=relative_path,
+            ) from exc
 
     return parsed
 
@@ -296,12 +309,6 @@ def _cross_check_consistency(
     warnings: list[str] = []
 
     database = DatabaseDocument.model_validate(parsed["database.json"])
-    if database.source is None:
-        raise CatalogPackageValidationError(
-            CatalogPackageErrorCode.SOURCE_MISMATCH,
-            "database.json is missing source identity",
-            path="database.json",
-        )
     _assert_source_match(manifest.source, database.source, path="database.json")
 
     db_fp = _extract_fingerprint_from_latest_analysis(database.latest_analysis)
@@ -319,21 +326,20 @@ def _cross_check_consistency(
         )
 
     run_doc = LatestRunDocument.model_validate(parsed["analysis/latest_run.json"])
-    run_fp = run_doc.schema_fingerprint or _extract_nested_fingerprint(
-        parsed["analysis/latest_run.json"]
-    )
-    if run_fp is None:
-        raise CatalogPackageValidationError(
-            CatalogPackageErrorCode.FINGERPRINT_MISMATCH,
-            "analysis/latest_run.json schema_fingerprint is missing",
-            path="analysis/latest_run.json",
-        )
-    if run_fp != manifest.schema_fingerprint:
-        raise CatalogPackageValidationError(
-            CatalogPackageErrorCode.FINGERPRINT_MISMATCH,
-            "schema_fingerprint mismatch between manifest and analysis/latest_run.json",
-            path="analysis/latest_run.json",
-        )
+    run_fp = _extract_latest_run_fingerprint(run_doc)
+    if run_doc.available:
+        if run_fp is None:
+            raise CatalogPackageValidationError(
+                CatalogPackageErrorCode.FINGERPRINT_MISMATCH,
+                "analysis/latest_run.json run.schema_fingerprint is missing",
+                path="analysis/latest_run.json",
+            )
+        if run_fp != manifest.schema_fingerprint:
+            raise CatalogPackageValidationError(
+                CatalogPackageErrorCode.FINGERPRINT_MISMATCH,
+                "schema_fingerprint mismatch between manifest and analysis/latest_run.json",
+                path="analysis/latest_run.json",
+            )
 
     _assert_counts(manifest.counts, parsed)
     return warnings
@@ -345,24 +351,21 @@ def _assert_source_match(
     *,
     path: str,
 ) -> None:
+    """Fields present on the manifest source must match database.json source exactly.
+
+    Optional manifest fields that are null/absent are not required on database.json.
+    """
     for field_name in ("source_name", "db_type", "database_name", "default_schema"):
         left = getattr(expected, field_name)
-        right = getattr(actual, field_name)
-        if left is None or right is None:
+        if left is None:
             continue
-        if left != right:
+        right = getattr(actual, field_name)
+        if right is None or right != left:
             raise CatalogPackageValidationError(
                 CatalogPackageErrorCode.SOURCE_MISMATCH,
                 f"source.{field_name} mismatch between manifest and {path}",
                 path=path,
             )
-    # Require at least source_name + db_type equality always.
-    if expected.source_name != actual.source_name or expected.db_type != actual.db_type:
-        raise CatalogPackageValidationError(
-            CatalogPackageErrorCode.SOURCE_MISMATCH,
-            "source identity mismatch between manifest and database.json",
-            path=path,
-        )
 
 
 def _extract_fingerprint_from_latest_analysis(latest_analysis: dict[str, Any] | None) -> str | None:
@@ -372,19 +375,11 @@ def _extract_fingerprint_from_latest_analysis(latest_analysis: dict[str, Any] | 
     return value if isinstance(value, str) and value.strip() else None
 
 
-def _extract_nested_fingerprint(payload: Any) -> str | None:
-    if not isinstance(payload, dict):
+def _extract_latest_run_fingerprint(doc: LatestRunDocument) -> str | None:
+    if not isinstance(doc.run, dict):
         return None
-    direct = payload.get("schema_fingerprint")
-    if isinstance(direct, str) and direct.strip():
-        return direct
-    for key in ("latest_run", "run", "analysis", "latest_analysis"):
-        nested = payload.get(key)
-        if isinstance(nested, dict):
-            value = nested.get("schema_fingerprint")
-            if isinstance(value, str) and value.strip():
-                return value
-    return None
+    value = doc.run.get("schema_fingerprint")
+    return value if isinstance(value, str) and value.strip() else None
 
 
 def _assert_counts(counts: dict[str, Any], parsed: dict[str, Any]) -> None:
@@ -392,11 +387,11 @@ def _assert_counts(counts: dict[str, Any], parsed: dict[str, Any]) -> None:
         return
 
     mapping = {
-        "tables": ("tables.json", ("tables", "items")),
-        "columns": ("columns.json", ("columns", "items")),
-        "relations": ("relations.json", ("relations", "items")),
-        "indexes": ("indexes.json", ("indexes", "items")),
-        "categories": ("categories.json", ("categories", "items")),
+        "tables": ("tables.json", ("tables",)),
+        "columns": ("columns.json", ("columns",)),
+        "relations": ("relations.json", ("relations",)),
+        "indexes": ("indexes.json", ("indexes",)),
+        "categories": ("categories.json", ("categories",)),
     }
     for count_key, (file_name, list_keys) in mapping.items():
         if count_key not in counts:

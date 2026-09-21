@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PackageReadiness = Literal["READY", "WARNING", "BLOCKED"]
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -33,11 +33,30 @@ class ManifestFileEntry(BaseModel):
 
     @field_validator("path")
     @classmethod
-    def path_must_be_relative(cls, value: str) -> str:
-        cleaned = value.strip().lstrip("./")
-        if not cleaned or cleaned.startswith("/") or "\\" in cleaned or ".." in cleaned.split("/"):
+    def path_must_be_safe_relative(cls, value: str) -> str:
+        """Reject unsafe paths. Never rewrite/normalize attacker-controlled input."""
+        if not isinstance(value, str):
+            raise ValueError("manifest file path must be a string")
+
+        # Do not strip/lstrip/repair — reject malformed forms outright.
+        if value == "" or value in {".", ".."}:
             raise ValueError("manifest file path must be a safe package-relative path")
-        return cleaned.replace("\\", "/")
+        if value.startswith("/") or value.startswith("\\"):
+            raise ValueError("manifest file path must not be absolute")
+        if "\\" in value:
+            raise ValueError("manifest file path must not contain backslash")
+        if len(value) >= 2 and value[1] == ":" and value[0].isalpha():
+            raise ValueError("manifest file path must not be a Windows drive path")
+        if value.startswith("./"):
+            raise ValueError("manifest file path must not start with ./")
+
+        parts = value.split("/")
+        if any(part == "" for part in parts):
+            raise ValueError("manifest file path must not contain empty segments")
+        if any(part in {".", ".."} for part in parts):
+            raise ValueError("manifest file path must not contain parent traversal")
+
+        return value
 
     @field_validator("sha256")
     @classmethod
@@ -94,17 +113,95 @@ class CatalogPackageValidateResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
-# --- Minimal JSON document shapes (extra fields allowed; do not invent required fields) ---
+# --- Producer-aligned minimal JSON document shapes (extra fields allowed) ---
 
 
 class DatabaseDocument(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    source: PackageSourceIdentity | None = None
+    source: PackageSourceIdentity
     latest_analysis: dict[str, Any] | None = None
 
 
-class LatestRunDocument(BaseModel):
+class TablesDocument(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    schema_fingerprint: str | None = None
+    tables: list[Any]
+
+
+class ColumnsDocument(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    columns: list[Any]
+
+
+class RelationsDocument(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    relations: list[Any]
+
+
+class IndexesDocument(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    indexes: list[Any]
+
+
+class CategoriesDocument(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    categories: list[Any]
+    table_assignments: list[Any] | None = None
+
+
+class ErdDocument(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    nodes: list[Any]
+    edges: list[Any]
+
+
+class LatestRunDocument(BaseModel):
+    """Producer v2 shape: {available, run?: {schema_fingerprint, ...}}."""
+
+    model_config = ConfigDict(extra="allow")
+
+    available: bool
+    run: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def run_required_when_available(self) -> LatestRunDocument:
+        if self.available and not isinstance(self.run, dict):
+            raise ValueError("analysis/latest_run.json requires run object when available=true")
+        return self
+
+
+class SchemaSnapshotDocument(BaseModel):
+    """Producer v2 wrapper: {available, run_id?, payload?}."""
+
+    model_config = ConfigDict(extra="allow")
+
+    available: bool
+    run_id: str | None = None
+    payload: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def payload_required_when_available(self) -> SchemaSnapshotDocument:
+        if self.available and not isinstance(self.payload, dict):
+            raise ValueError(
+                "analysis/schema_snapshot.json requires payload object when available=true"
+            )
+        return self
+
+
+class PreflightDocument(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    available: bool
+    status: str | None = None
+
+
+class DiffLatestDocument(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    available: bool

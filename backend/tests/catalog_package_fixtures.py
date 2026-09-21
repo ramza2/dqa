@@ -37,6 +37,7 @@ def build_core_documents(
     indexes: list[Any] | None = None,
     categories: list[Any] | None = None,
 ) -> dict[str, bytes]:
+    """Build producer-compatible Catalog Package v2 core files."""
     source = source or dict(DEFAULT_SOURCE)
     tables = tables if tables is not None else [{"schema": "DEMIS_OWNER", "name": "T1"}]
     columns = columns if columns is not None else [{"table": "T1", "name": "ID"}]
@@ -55,20 +56,55 @@ def build_core_documents(
         "columns.json": _json_bytes({"columns": columns}),
         "relations.json": _json_bytes({"relations": relations}),
         "indexes.json": _json_bytes({"indexes": indexes}),
-        "categories.json": _json_bytes({"categories": categories}),
+        "categories.json": _json_bytes(
+            {
+                "categories": categories,
+                "table_assignments": [],
+            }
+        ),
         "erd.json": _json_bytes({"nodes": [], "edges": []}),
+        # Schema Analyzer producer v2 shape (nested run).
         "analysis/latest_run.json": _json_bytes(
             {
-                "run_id": "run-1",
-                "schema_fingerprint": fingerprint,
-                "target_schema": source.get("default_schema"),
+                "available": True,
+                "run": {
+                    "run_id": "run-1",
+                    "status": "SUCCESS",
+                    "target_schema": source.get("default_schema"),
+                    "schema_fingerprint": fingerprint,
+                    "counts": {
+                        "tables": len(tables),
+                        "columns": len(columns),
+                        "relations": len(relations),
+                        "indexes": len(indexes),
+                    },
+                },
             }
         ),
         "analysis/schema_snapshot.json": _json_bytes(
-            {"schema_fingerprint": fingerprint, "objects": []}
+            {
+                "available": True,
+                "run_id": "run-1",
+                "payload": {
+                    "schema_fingerprint": fingerprint,
+                    "objects": [],
+                },
+            }
         ),
-        "validation/preflight.json": _json_bytes({"status": "ok", "checks": []}),
-        "diff/latest.json": _json_bytes({"changed": False, "entries": []}),
+        "validation/preflight.json": _json_bytes(
+            {
+                "available": True,
+                "status": "READY",
+                "checks": [],
+            }
+        ),
+        "diff/latest.json": _json_bytes(
+            {
+                "available": True,
+                "changed": False,
+                "entries": [],
+            }
+        ),
         "PACKAGE_README.md": b"# Catalog Package\n",
         "diff/latest_summary.md": b"No changes\n",
         "reports/sample.docx": b"PK\x03\x04fake-docx-bytes",
@@ -181,6 +217,15 @@ def build_package_zip(
     for path, data in sorted(package_files.items()):
         entries.append((f"{PACKAGE_ROOT_NAME}/{path}", data))
     return _write_entries(entries)
+
+
+def package_with_manifest_path_override(bad_path: str) -> bytes:
+    """Valid package bytes whose manifest.files lists an unsafe path (for reject tests)."""
+    files = build_core_documents()
+    manifest = json.loads(build_manifest(files))
+    # Point the first managed entry at an unsafe path while keeping digest metadata.
+    manifest["files"][0]["path"] = bad_path
+    return build_package_zip(files=files, manifest_override=_json_bytes(manifest))
 
 
 def _write_entries(entries: list[tuple[str, bytes]]) -> bytes:
