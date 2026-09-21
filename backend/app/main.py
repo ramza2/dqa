@@ -15,8 +15,8 @@ def create_app() -> FastAPI:
         version=__version__,
         description=(
             "DEMIS Query Assistant backend. "
-            "This skeleton provides settings, DQA PostgreSQL connectivity, "
-            "and health endpoints only."
+            "Provides settings, DQA PostgreSQL connectivity, health endpoints, "
+            "and Catalog Package v2 validation (no import persistence yet)."
         ),
     )
     application.include_router(api_router)
