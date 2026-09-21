@@ -1,0 +1,62 @@
+# Development Compose skeleton for DQA backend + PostgreSQL.
+#
+# Internal/LAN development is the default deployment model.
+# No DNS or Traefik is required.
+#
+# Usage (from repository root):
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# By default the backend is host-only (127.0.0.1).
+# For GPU-server LAN testing set DQA_LAN_BIND_IP to the GPU server's internal IPv4.
+# PostgreSQL remains loopback-only by default. While DQA has no frontend yet, the backend is the LAN-facing test endpoint.
+
+services:
+  dqa-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DQA_DB_NAME:-dqa}
+      POSTGRES_USER: ${DQA_DB_USER:-dqa}
+      POSTGRES_PASSWORD: ${DQA_DB_PASSWORD:-dqa}
+    ports:
+      - "${DQA_DB_BIND_IP:-127.0.0.1}:${DQA_DB_EXTERNAL_PORT:-5432}:5432"
+    volumes:
+      - dqa_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DQA_DB_USER:-dqa} -d ${DQA_DB_NAME:-dqa}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_NAME: ${APP_NAME:-DEMIS Query Assistant}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DQA_DB_HOST: dqa-db
+      DQA_DB_PORT: 5432
+      DQA_DB_NAME: ${DQA_DB_NAME:-dqa}
+      DQA_DB_USER: ${DQA_DB_USER:-dqa}
+      DQA_DB_PASSWORD: ${DQA_DB_PASSWORD:-dqa}
+    ports:
+      - "${DQA_LAN_BIND_IP:-127.0.0.1}:${DQA_BACKEND_PORT:-8000}:8000"
+    depends_on:
+      dqa-db:
+        condition: service_healthy
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+      ]
+    volumes:
+      - ./backend/app:/app/app
+
+volumes:
+  dqa_pgdata:

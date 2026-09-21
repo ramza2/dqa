@@ -1,0 +1,8 @@
+# Thin install entrypoint for Docker and scripts/cloud-agent-install.sh.
+# Version pins are declared once in pyproject.toml (source of truth).
+#
+# Install from the backend/ directory:
+#   pip install -r requirements.txt
+# Runtime-only (no test extras), e.g. Docker image:
+#   pip install .
+-e .[dev]
