@@ -68,7 +68,7 @@ def build_core_documents(
             {
                 "available": True,
                 "run": {
-                    "run_id": "run-1",
+                    "run_id": 3,
                     "status": "SUCCESS",
                     "target_schema": source.get("default_schema"),
                     "schema_fingerprint": fingerprint,
@@ -84,7 +84,7 @@ def build_core_documents(
         "analysis/schema_snapshot.json": _json_bytes(
             {
                 "available": True,
-                "run_id": "run-1",
+                "run_id": 3,
                 "payload": {
                     "schema_fingerprint": fingerprint,
                     "objects": [],

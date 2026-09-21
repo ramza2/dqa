@@ -364,7 +364,10 @@ def test_producer_style_nested_latest_run_succeeds() -> None:
     assert latest_run["run"]["schema_fingerprint"] == DEFAULT_FINGERPRINT
     snapshot = result.parsed_documents["analysis/schema_snapshot.json"]
     assert snapshot["available"] is True
+    assert snapshot["run_id"] == 3
+    assert isinstance(snapshot["run_id"], int)
     assert isinstance(snapshot["payload"], dict)
+    assert latest_run["run"]["run_id"] == 3
     preflight = result.parsed_documents["validation/preflight.json"]
     assert preflight["available"] is True
     assert "status" in preflight

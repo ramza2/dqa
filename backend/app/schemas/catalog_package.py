@@ -182,7 +182,7 @@ class SchemaSnapshotDocument(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     available: bool
-    run_id: str | None = None
+    run_id: int | None = None
     payload: dict[str, Any] | None = None
 
     @model_validator(mode="after")
