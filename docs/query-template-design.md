@@ -32,7 +32,36 @@ A template is executable only when:
 - bound to an enabled compatible Connection Profile
 - deterministic SQL validation passes
 
-Editing an approved template should create a new version requiring approval.
+Editing an approved or rejected template must create a **new DRAFT version**.
+Never mutate an `IN_REVIEW`, `APPROVED`, or `REJECTED` version in place, and never
+transition those statuses back to `DRAFT`.
+
+Allowed status transitions for a single version:
+
+```text
+DRAFT -> IN_REVIEW
+IN_REVIEW -> APPROVED
+IN_REVIEW -> REJECTED
+```
+
+`APPROVED` and `REJECTED` are terminal for that version.
+
+Stable template metadata (`name`, `description`, `target_schemas`) may be edited
+only while the template has never entered review. After any version reaches
+`IN_REVIEW` / `APPROVED` / `REJECTED`, those stable fields are frozen; further
+semantic changes require a new QueryTemplate. Version authoring fields
+(`sql_text`, `parameter_schema`, `row_limit`, `timeout_seconds`) remain editable
+on a later DRAFT version.
+
+`APPROVED` means workflow approval only. It does **not** mean SQL safety passed
+or that the template is executable.
+
+`enabled=true` is an operational candidacy flag only. Execution still requires
+later gates (SQL safety validator, Connection Profile, RBAC, Active Catalog
+compatibility, read-only adapter). Approval never auto-enables a template.
+
+Review transitions append `QueryTemplateReviewEvent` rows (append-only).
+`approved_by` / review `actor` remain nullable until Authentication/RBAC lands.
 
 ## 3. Suggested model
 

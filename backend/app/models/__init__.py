@@ -3,7 +3,11 @@
 from app.models.base import Base
 from app.models.catalog_active import CatalogActivationEvent, CatalogActiveRevision
 from app.models.catalog_import import CatalogImportRevision
-from app.models.query_template import QueryTemplate, QueryTemplateVersion
+from app.models.query_template import (
+    QueryTemplate,
+    QueryTemplateReviewEvent,
+    QueryTemplateVersion,
+)
 
 __all__ = [
     "Base",
@@ -11,5 +15,6 @@ __all__ = [
     "CatalogActiveRevision",
     "CatalogImportRevision",
     "QueryTemplate",
+    "QueryTemplateReviewEvent",
     "QueryTemplateVersion",
 ]
