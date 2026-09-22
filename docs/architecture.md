@@ -117,6 +117,11 @@ Provides structured discovery of:
 Search should initially be deterministic keyword/filter search.
 Semantic retrieval may be added later if it provides clear value.
 
+Query APIs read metadata from the **active** `CatalogImportRevision` JSONB
+documents only (no live DEMIS crawling, no normalized catalog replica tables).
+Responses include `source_name`, `revision_id`, and `schema_fingerprint` so
+callers can tell which active revision was used.
+
 ### 3.5 Query Template Registry
 
 Maintains versioned templates.
