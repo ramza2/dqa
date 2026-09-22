@@ -163,6 +163,39 @@ class CatalogImportRevisionDetail(CatalogImportRevisionSummary):
     created_at: datetime
 
 
+class CatalogActivateResult(BaseModel):
+    """POST /imports/{id}/activate operation result."""
+
+    source_name: str
+    active_revision_id: int
+    previous_revision_id: int | None
+    schema_fingerprint: str
+    package_readiness: PackageReadiness
+    package_version: str
+    activated_at: datetime
+    changed: bool
+
+
+class CatalogActiveSummary(BaseModel):
+    """Current active Catalog pointer metadata for one source."""
+
+    source_name: str
+    revision_id: int
+    schema_fingerprint: str
+    package_version: str
+    package_readiness: PackageReadiness
+    activated_at: datetime
+
+
+class CatalogActivationEventSummary(BaseModel):
+    """Append-only activation history row (no raw Catalog JSON)."""
+
+    source_name: str
+    previous_revision_id: int | None
+    activated_revision_id: int
+    activated_at: datetime
+
+
 # --- Producer-aligned minimal JSON document shapes (extra fields allowed) ---
 
 
