@@ -194,6 +194,68 @@ describe("CatalogExplorer", () => {
     restore();
   });
 
+  it("bounds active refresh when categories stay stale on the same revision", async () => {
+    let activeFetchCount = 0;
+    const restore = installFetchMock([
+      (url) => {
+        if (url.pathname === "/api/v1/catalog/active") {
+          return jsonResponse([activeRev2]);
+        }
+        return null;
+      },
+      (url) => {
+        const match = url.pathname.match(/^\/api\/v1\/catalog\/active\/([^/]+)$/);
+        if (!match) {
+          return null;
+        }
+        activeFetchCount += 1;
+        return jsonResponse(activeRev2);
+      },
+      (url) => {
+        if (!(url.pathname.endsWith("/tables") && !url.pathname.includes("/tables/"))) {
+          return null;
+        }
+        return jsonResponse({
+          ...tablesResponse,
+          revision_id: 2,
+          schema_fingerprint: activeRev2.schema_fingerprint,
+        });
+      },
+      (url) => {
+        if (!url.pathname.endsWith("/categories")) {
+          return null;
+        }
+        return jsonResponse(staleCategories);
+      },
+    ]);
+
+    render(<CatalogExplorer />);
+
+    expect(
+      await screen.findByText(/Catalog revision changed\. Refreshing metadata/i),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("TB_ADM_HIST")).toBeInTheDocument();
+    expect(screen.queryByText("Stale Category Name")).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(activeFetchCount).toBeGreaterThanOrEqual(2);
+    });
+
+    const settledCount = activeFetchCount;
+    expect(settledCount).toBeLessThanOrEqual(3);
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 250);
+    });
+
+    expect(activeFetchCount).toBe(settledCount);
+    expect(
+      screen.getByText(/Catalog revision changed\. Refreshing metadata/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Stale Category Name")).not.toBeInTheDocument();
+    restore();
+  });
+
   it("does not render mixed detail batch from divergent revisions", async () => {
     const user = userEvent.setup();
     const handlers = defaultCatalogHandlers({ actives: [activeRev2] });

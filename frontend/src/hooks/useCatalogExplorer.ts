@@ -91,6 +91,7 @@ export function useCatalogExplorer() {
   const [staleWarning, setStaleWarning] = useState<string | null>(null);
   const refreshGuard = useRef(false);
   const refreshedForActiveRevision = useRef<number | null>(null);
+  const lastActiveRevisionRef = useRef<number | null>(null);
   const convergedLoads = useRef({ tables: false, categories: false });
   const selectedSourceRef = useRef(selectedSource);
   selectedSourceRef.current = selectedSource;
@@ -114,6 +115,9 @@ export function useCatalogExplorer() {
   const clearWarningIfConverged = useCallback(() => {
     if (convergedLoads.current.tables && convergedLoads.current.categories) {
       setStaleWarning(null);
+      // Full convergence: allow a future refresh only after the next real revision change
+      // or a later full stale cycle for a new active revision.
+      refreshedForActiveRevision.current = null;
     }
   }, []);
 
@@ -156,7 +160,9 @@ export function useCatalogExplorer() {
         await handleStaleSnapshot(sourceName, current.revision_id);
         return false;
       }
-      refreshedForActiveRevision.current = null;
+      // Do not reset refreshedForActiveRevision here: a healthy tables response must not
+      // unlock another refresh while categories (or another endpoint) stay stale on the
+      // same active revision.
       return true;
     },
     [handleStaleSnapshot],
@@ -223,6 +229,7 @@ export function useCatalogExplorer() {
     setStaleWarning(null);
     setActive(null);
     refreshedForActiveRevision.current = null;
+    lastActiveRevisionRef.current = null;
     convergedLoads.current = { tables: false, categories: false };
 
     (async () => {
@@ -231,6 +238,7 @@ export function useCatalogExplorer() {
         if (cancelled || selectedSourceRef.current !== selectedSource) {
           return;
         }
+        lastActiveRevisionRef.current = summary.revision_id;
         setActive(summary);
       } catch (err) {
         if (!cancelled && selectedSourceRef.current === selectedSource) {
@@ -244,6 +252,20 @@ export function useCatalogExplorer() {
       cancelled = true;
     };
   }, [selectedSource]);
+
+  // Real active revision change (e.g. rev2 -> rev3): allow one guarded refresh for the new revision.
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    if (
+      lastActiveRevisionRef.current !== null &&
+      lastActiveRevisionRef.current !== active.revision_id
+    ) {
+      refreshedForActiveRevision.current = null;
+    }
+    lastActiveRevisionRef.current = active.revision_id;
+  }, [active]);
 
   // Tables: reload whenever active revision (or search) changes.
   useEffect(() => {
