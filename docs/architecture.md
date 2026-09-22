@@ -76,6 +76,13 @@ Important properties:
 - active revision records package version, source identity and schema fingerprint
 - history is retained
 
+Persistence split:
+- `catalog_import_revisions`: immutable imported package rows
+- `catalog_active_revisions`: current active pointer per `source_name` (unique)
+- `catalog_activation_events`: append-only activation / revision-switch audit
+
+Activation does not mutate import revision rows. Only READY + VALID revisions may be activated.
+
 ### 3.3 Connection Profile
 
 A Connection Profile is separate from imported Catalog metadata.

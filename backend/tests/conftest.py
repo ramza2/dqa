@@ -69,10 +69,22 @@ def db_session(test_settings_env: dict[str, str]):
     _clear_db_caches()
     init_db_schema()
     engine = get_engine()
-    # Ensure a clean table for persistence tests without dropping unrelated objects.
-    if inspect(engine).has_table("catalog_import_revisions"):
+    # Ensure clean catalog tables for persistence tests without dropping unrelated objects.
+    tables = (
+        "catalog_activation_events",
+        "catalog_active_revisions",
+        "catalog_import_revisions",
+    )
+    existing = [name for name in tables if inspect(engine).has_table(name)]
+    if existing:
         with engine.begin() as conn:
-            conn.execute(text("TRUNCATE TABLE catalog_import_revisions RESTART IDENTITY CASCADE"))
+            conn.execute(
+                text(
+                    "TRUNCATE TABLE "
+                    + ", ".join(existing)
+                    + " RESTART IDENTITY CASCADE"
+                )
+            )
 
     session = get_session_factory()()
     try:

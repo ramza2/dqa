@@ -199,7 +199,10 @@ Each successful import should create an immutable revision with at least:
 - readiness
 - validation status
 - original file metadata
-- activation status/history
+
+Activation is not stored on the import revision itself.
+DQA keeps a separate active pointer per `source_name` plus append-only activation history.
+Only READY revisions may become active.
 
 Never overwrite a previous revision because a new package has the same source name.
 
