@@ -107,7 +107,7 @@ def _template_http_error(exc: QueryTemplateError) -> HTTPException:
         QueryTemplateErrorCode.INVALID_TARGET_SCHEMA,
         QueryTemplateErrorCode.INVALID_REQUEST,
     }:
-        status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+        status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     else:
         status_code = status.HTTP_400_BAD_REQUEST
     return HTTPException(

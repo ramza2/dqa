@@ -69,5 +69,8 @@ class QueryTemplateRepository:
         return version
 
     def delete_template(self, template: QueryTemplate) -> None:
+        # Clear circular current_version_id before cascading version deletes.
+        template.current_version_id = None
+        self._session.flush()
         self._session.delete(template)
         self._session.flush()

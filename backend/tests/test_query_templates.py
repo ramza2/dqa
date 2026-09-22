@@ -194,7 +194,11 @@ def test_invalid_parameter_constraints_rejected(
     assert response.status_code == 422
 
 
-def test_create_without_active_catalog_rejected(db_client: TestClient) -> None:
+def test_create_without_active_catalog_rejected(
+    db_session: Session, db_client: TestClient
+) -> None:
+    # db_session truncates catalog/template tables so no leftover active pointer remains.
+    assert db_session.get(QueryTemplate, 1) is None
     response = db_client.post("/api/v1/query-templates", json=_create_body())
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == QueryTemplateErrorCode.ACTIVE_CATALOG_NOT_FOUND
