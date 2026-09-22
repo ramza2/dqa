@@ -268,9 +268,10 @@ def test_new_version_repins_active_catalog(
         json=_create_body(stable_key="repin"),
     )
     assert created.status_code == 201
-    template_id = created["id"]
-    v1_id = created["version"]["id"]
-    assert created.json()["version"]["compatibility"]["pinned_revision_id"] == first.id
+    created_body = created.json()
+    template_id = created_body["id"]
+    v1_id = created_body["version"]["id"]
+    assert created_body["version"]["compatibility"]["pinned_revision_id"] == first.id
 
     assert db_client.post(f"/api/v1/query-templates/{template_id}/submit-review").status_code == 200
     assert db_client.post(f"/api/v1/query-templates/{template_id}/approve", json={}).status_code == 200
@@ -307,7 +308,7 @@ def test_new_version_rejects_missing_target_schema_on_new_active(
         json=_create_body(stable_key="missing_schema", target_schemas=["OTHER_OWNER"]),
     )
     assert created.status_code == 201
-    template_id = created["id"]
+    template_id = created.json()["id"]
     assert db_client.post(f"/api/v1/query-templates/{template_id}/submit-review").status_code == 200
     assert db_client.post(f"/api/v1/query-templates/{template_id}/approve", json={}).status_code == 200
 
@@ -419,6 +420,22 @@ def test_enable_disable_rules(db_session: Session, db_client: TestClient) -> Non
     assert again_disable.status_code == 200
     assert again_disable.json()["enabled"] is False
 
+    # Rejected current version cannot be enabled.
+    rejected_tpl = _create_template(
+        db_session, db_client, stable_key="enable_rejected", fingerprint="fp-en-rej"
+    )
+    rid = rejected_tpl["id"]
+    assert db_client.post(f"/api/v1/query-templates/{rid}/submit-review").status_code == 200
+    assert (
+        db_client.post(
+            f"/api/v1/query-templates/{rid}/reject", json={"note": "no"}
+        ).status_code
+        == 200
+    )
+    rejected_enable = db_client.post(f"/api/v1/query-templates/{rid}/enable")
+    assert rejected_enable.status_code == 409
+    assert rejected_enable.json()["detail"]["code"] == QueryTemplateErrorCode.INVALID_TRANSITION
+
 
 def test_enable_rejected_when_incompatible(
     db_session: Session, db_client: TestClient
@@ -430,8 +447,9 @@ def test_enable_rejected_when_incompatible(
         json=_create_body(stable_key="enable_incompat"),
     )
     assert created.status_code == 201
-    template_id = created["id"]
-    assert created.json()["version"]["compatibility"]["pinned_revision_id"] == first.id
+    created_body = created.json()
+    template_id = created_body["id"]
+    assert created_body["version"]["compatibility"]["pinned_revision_id"] == first.id
     assert db_client.post(f"/api/v1/query-templates/{template_id}/submit-review").status_code == 200
     assert db_client.post(f"/api/v1/query-templates/{template_id}/approve", json={}).status_code == 200
 
@@ -452,7 +470,8 @@ def test_enabled_not_auto_rewritten_when_catalog_changes(
         "/api/v1/query-templates",
         json=_create_body(stable_key="enable_keep"),
     )
-    template_id = created["id"]
+    assert created.status_code == 201
+    template_id = created.json()["id"]
     assert db_client.post(f"/api/v1/query-templates/{template_id}/submit-review").status_code == 200
     assert db_client.post(f"/api/v1/query-templates/{template_id}/approve", json={}).status_code == 200
     assert db_client.post(f"/api/v1/query-templates/{template_id}/enable").status_code == 200
