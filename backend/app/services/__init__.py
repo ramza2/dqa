@@ -23,12 +23,22 @@ from app.services.catalog_query import (
     list_relations,
     list_tables,
 )
+from app.services.query_template import (
+    create_query_template,
+    delete_query_template,
+    get_query_template,
+    list_query_templates,
+    update_query_template,
+)
 
 __all__ = [
     "ValidatedCatalogPackage",
     "activate_catalog_revision",
+    "create_query_template",
+    "delete_query_template",
     "get_active_catalog",
     "get_catalog_import",
+    "get_query_template",
     "get_table",
     "import_catalog_package_bytes",
     "list_activation_events",
@@ -37,7 +47,9 @@ __all__ = [
     "list_categories",
     "list_columns",
     "list_indexes",
+    "list_query_templates",
     "list_relations",
     "list_tables",
+    "update_query_template",
     "validate_catalog_package_bytes",
 ]
