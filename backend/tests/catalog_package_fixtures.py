@@ -142,6 +142,7 @@ def build_manifest(
             ("relations", "relations.json", "relations"),
             ("indexes", "indexes.json", "indexes"),
             ("categories", "categories.json", "categories"),
+            ("category_assignments", "categories.json", "table_assignments"),
         ):
             raw = files.get(filename)
             if not raw:
@@ -159,6 +160,7 @@ def build_manifest(
         "package_readiness": package_readiness,
         "source": source,
         "schema_fingerprint": fingerprint,
+        "generated_at": "2026-09-21T08:15:30+00:00",
         "counts": counts,
         "files": managed,
     }

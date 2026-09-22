@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
 from app.adapters.catalog.errors import CatalogPackageErrorCode, CatalogPackageValidationError
+from app.adapters.catalog.secret_fields import find_forbidden_secret_key
 from app.adapters.catalog.limits import (
     DEFAULT_ZIP_LIMITS,
     MANIFEST_FILENAME,
@@ -59,8 +61,8 @@ _REQUIRED_DOCUMENT_MODELS: dict[str, type[BaseModel]] = {
 class ValidatedCatalogPackage:
     """Service-level validation result reusable by future import persistence.
 
-    This object is intentionally richer than the HTTP response so PR 4 can
-    persist digests/parsed core JSON without re-validating the archive.
+    This object is intentionally richer than the HTTP response so import
+    persistence can store digests/parsed core JSON without re-validating.
     """
 
     archive_sha256: str
@@ -73,9 +75,11 @@ class ValidatedCatalogPackage:
     schema_fingerprint: str
     counts: dict[str, Any]
     files_validated: int
+    generated_at: datetime
     warnings: tuple[str, ...] = ()
     managed_file_digests: dict[str, str] = field(default_factory=dict)
     parsed_documents: dict[str, Any] = field(default_factory=dict)
+    manifest_document: dict[str, Any] = field(default_factory=dict)
 
 
 def validate_catalog_package_bytes(
@@ -101,7 +105,7 @@ def validate_safe_package_archive(
             path=MANIFEST_FILENAME,
         )
 
-    manifest = _parse_manifest(manifest_entry.data)
+    manifest_document, manifest = _parse_manifest(manifest_entry.data)
     _validate_package_identity(manifest)
     _validate_manifest_files(archive, manifest)
 
@@ -134,6 +138,7 @@ def validate_safe_package_archive(
 
     parsed_documents = _parse_required_json_documents(archive)
     warnings = _cross_check_consistency(manifest, parsed_documents)
+    _reject_forbidden_secret_fields(manifest_document, parsed_documents)
 
     readiness = manifest.package_readiness
     activation_eligible = readiness == "READY"
@@ -158,10 +163,31 @@ def validate_safe_package_archive(
         warnings=tuple(warnings),
         managed_file_digests=digests,
         parsed_documents=parsed_documents,
+        manifest_document=manifest_document,
+        generated_at=manifest.generated_at,
     )
 
 
-def _parse_manifest(data: bytes) -> CatalogPackageManifest:
+def _reject_forbidden_secret_fields(
+    manifest_document: dict[str, Any],
+    parsed_documents: dict[str, Any],
+) -> None:
+    if find_forbidden_secret_key(manifest_document):
+        raise CatalogPackageValidationError(
+            CatalogPackageErrorCode.FORBIDDEN_SECRET_FIELD,
+            "package JSON contains a forbidden secret field name",
+            path=MANIFEST_FILENAME,
+        )
+    for relative_path, document in parsed_documents.items():
+        if find_forbidden_secret_key(document):
+            raise CatalogPackageValidationError(
+                CatalogPackageErrorCode.FORBIDDEN_SECRET_FIELD,
+                "package JSON contains a forbidden secret field name",
+                path=relative_path,
+            )
+
+
+def _parse_manifest(data: bytes) -> tuple[dict[str, Any], CatalogPackageManifest]:
     try:
         payload = json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -171,8 +197,15 @@ def _parse_manifest(data: bytes) -> CatalogPackageManifest:
             path=MANIFEST_FILENAME,
         ) from exc
 
+    if not isinstance(payload, dict):
+        raise CatalogPackageValidationError(
+            CatalogPackageErrorCode.MALFORMED_MANIFEST,
+            "manifest.json must be a JSON object",
+            path=MANIFEST_FILENAME,
+        )
+
     try:
-        return CatalogPackageManifest.model_validate(payload)
+        return payload, CatalogPackageManifest.model_validate(payload)
     except ValidationError as exc:
         # Do not echo raw field values (may include secret-like strings).
         raise CatalogPackageValidationError(
@@ -392,6 +425,7 @@ def _assert_counts(counts: dict[str, Any], parsed: dict[str, Any]) -> None:
         "relations": ("relations.json", ("relations",)),
         "indexes": ("indexes.json", ("indexes",)),
         "categories": ("categories.json", ("categories",)),
+        "category_assignments": ("categories.json", ("table_assignments",)),
     }
     for count_key, (file_name, list_keys) in mapping.items():
         if count_key not in counts:
