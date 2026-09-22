@@ -10,6 +10,7 @@ from app.adapters.db.deps import get_db_session
 from app.api.uploads import read_upload_bounded
 from app.models.catalog_import import CatalogImportRevision
 from app.schemas.catalog_package import (
+    CatalogImportResult,
     CatalogImportRevisionDetail,
     CatalogImportRevisionSummary,
     CatalogPackageErrorBody,
@@ -58,7 +59,7 @@ async def validate_catalog_package(
 
 @router.post(
     "/import",
-    response_model=CatalogImportRevisionSummary,
+    response_model=CatalogImportResult,
     responses={
         status.HTTP_400_BAD_REQUEST: {"model": CatalogPackageErrorBody},
         status.HTTP_413_CONTENT_TOO_LARGE: {"model": CatalogPackageErrorBody},
@@ -67,14 +68,14 @@ async def validate_catalog_package(
 async def import_catalog_package(
     file: UploadFile = File(..., description="Catalog Package v2 ZIP archive"),
     session: Session = Depends(get_db_session),
-) -> CatalogImportRevisionSummary:
+) -> CatalogImportResult:
     """Validate and persist an immutable Catalog Package import revision."""
     archive_bytes = await read_upload_bounded(file)
     try:
         revision, created = import_catalog_package_bytes(archive_bytes, session)
     except CatalogPackageValidationError as exc:
         raise _validation_http_error(exc) from exc
-    return _to_summary(revision, created=created)
+    return to_import_result(revision, created=created)
 
 
 def _validation_http_error(exc: CatalogPackageValidationError) -> HTTPException:
@@ -95,11 +96,7 @@ def _validation_http_error(exc: CatalogPackageValidationError) -> HTTPException:
     )
 
 
-def _to_summary(
-    revision: CatalogImportRevision,
-    *,
-    created: bool | None = None,
-) -> CatalogImportRevisionSummary:
+def to_summary(revision: CatalogImportRevision) -> CatalogImportRevisionSummary:
     return CatalogImportRevisionSummary(
         id=revision.id,
         source_name=revision.source_name,
@@ -123,13 +120,15 @@ def _to_summary(
         category_count=revision.category_count,
         category_assignment_count=revision.category_assignment_count,
         managed_file_count=revision.managed_file_count,
-        created=created,
     )
 
 
+def to_import_result(revision: CatalogImportRevision, *, created: bool) -> CatalogImportResult:
+    return CatalogImportResult(**to_summary(revision).model_dump(), created=created)
+
+
 def to_detail(revision: CatalogImportRevision) -> CatalogImportRevisionDetail:
-    summary = _to_summary(revision, created=None)
     return CatalogImportRevisionDetail(
-        **summary.model_dump(exclude={"created"}),
+        **to_summary(revision).model_dump(),
         created_at=revision.created_at,
     )

@@ -159,6 +159,7 @@ def build_manifest(
         "package_readiness": package_readiness,
         "source": source,
         "schema_fingerprint": fingerprint,
+        "generated_at": "2026-09-21T08:15:30+00:00",
         "counts": counts,
         "files": managed,
     }

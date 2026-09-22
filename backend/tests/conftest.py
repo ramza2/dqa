@@ -36,11 +36,23 @@ def test_settings_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
 
 @pytest.fixture()
 def client(test_settings_env: dict[str, str]) -> TestClient:
-    """HTTP client bound to the FastAPI app with deterministic settings."""
+    """HTTP client for validation/health tests (no DB schema bootstrap)."""
     from app.main import create_app
 
     _clear_db_caches()
-    application = create_app()
+    application = create_app(init_db_on_startup=False)
+    with TestClient(application) as test_client:
+        yield test_client
+    _clear_db_caches()
+
+
+@pytest.fixture()
+def db_client(test_settings_env: dict[str, str]) -> TestClient:
+    """HTTP client for import/history integration tests (bootstraps DB schema)."""
+    from app.main import create_app
+
+    _clear_db_caches()
+    application = create_app(init_db_on_startup=True)
     with TestClient(application) as test_client:
         yield test_client
     _clear_db_caches()

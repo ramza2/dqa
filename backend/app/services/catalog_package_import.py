@@ -99,7 +99,7 @@ def _build_revision(validated: ValidatedCatalogPackage) -> CatalogImportRevision
         schema_fingerprint=validated.schema_fingerprint,
         archive_sha256=validated.archive_sha256,
         manifest_sha256=validated.manifest_sha256,
-        generated_at=_parse_generated_at(validated.manifest_document),
+        generated_at=validated.generated_at,
         imported_at=datetime.now(timezone.utc),
         validation_status="VALID",
         table_count=table_count,
@@ -149,18 +149,3 @@ def _assignment_count(categories_doc: Any) -> int:
         return len(assignments)
     return 0
 
-
-def _parse_generated_at(manifest_document: dict[str, Any]) -> datetime | None:
-    raw = manifest_document.get("generated_at")
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    text = raw.strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed

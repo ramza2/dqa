@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -22,6 +24,8 @@ from tests.catalog_package_fixtures import (
     build_manifest,
     build_package_zip,
 )
+
+pytestmark = pytest.mark.integration
 
 
 def _count_rows(session: Session) -> int:
@@ -59,7 +63,7 @@ def test_import_warning_package_succeeds(db_session: Session) -> None:
 
 
 def test_import_blocked_package_succeeds_not_activation_eligible(
-    db_session: Session, client: TestClient
+    db_session: Session, db_client: TestClient
 ) -> None:
     archive = build_package_zip(package_readiness="BLOCKED")
     revision, created = import_catalog_package_bytes(archive, db_session)
@@ -67,7 +71,7 @@ def test_import_blocked_package_succeeds_not_activation_eligible(
     assert revision.package_readiness == "BLOCKED"
     db_session.commit()
 
-    response = client.post(
+    response = db_client.post(
         "/api/v1/catalog/packages/import",
         files={"file": ("pkg.zip", archive, "application/zip")},
     )
@@ -157,15 +161,15 @@ def test_import_history_source_name_filter(db_session: Session) -> None:
     assert empty == []
 
 
-def test_unknown_import_id_returns_404(client: TestClient, db_session: Session) -> None:
-    response = client.get("/api/v1/catalog/imports/999999")
+def test_unknown_import_id_returns_404(db_client: TestClient, db_session: Session) -> None:
+    response = db_client.get("/api/v1/catalog/imports/999999")
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "CATALOG_IMPORT_NOT_FOUND"
 
 
-def test_import_api_persists_and_lists(client: TestClient, db_session: Session) -> None:
+def test_import_api_persists_and_lists(db_client: TestClient, db_session: Session) -> None:
     archive = build_package_zip(package_readiness="READY")
-    response = client.post(
+    response = db_client.post(
         "/api/v1/catalog/packages/import",
         files={"file": ("pkg.zip", archive, "application/zip")},
     )
@@ -176,22 +180,49 @@ def test_import_api_persists_and_lists(client: TestClient, db_session: Session) 
     assert "database_json" not in payload
     assert "manifest_json" not in payload
 
-    listed = client.get("/api/v1/catalog/imports")
+    listed = db_client.get("/api/v1/catalog/imports")
     assert listed.status_code == 200
     assert len(listed.json()) >= 1
     assert listed.json()[0]["id"] == payload["id"]
+    assert "created" not in listed.json()[0]
 
-    detail = client.get(f"/api/v1/catalog/imports/{payload['id']}")
+    detail = db_client.get(f"/api/v1/catalog/imports/{payload['id']}")
     assert detail.status_code == 200
     body = detail.json()
     assert body["archive_sha256"] == payload["archive_sha256"]
     assert "tables_json" not in body
+    assert "created" not in body
 
 
-def test_no_update_or_delete_import_routes(client: TestClient) -> None:
-    assert client.put("/api/v1/catalog/imports/1").status_code in {405, 404}
-    assert client.patch("/api/v1/catalog/imports/1").status_code in {405, 404}
-    assert client.delete("/api/v1/catalog/imports/1").status_code in {405, 404}
+def test_no_update_or_delete_import_routes(db_client: TestClient) -> None:
+    assert db_client.put("/api/v1/catalog/imports/1").status_code in {405, 404}
+    assert db_client.patch("/api/v1/catalog/imports/1").status_code in {405, 404}
+    assert db_client.delete("/api/v1/catalog/imports/1").status_code in {405, 404}
+
+
+def test_readiness_filter_invalid_returns_422(db_client: TestClient) -> None:
+    response = db_client.get("/api/v1/catalog/imports?package_readiness=INVALID")
+    assert response.status_code == 422
+
+
+def test_secret_field_import_does_not_create_row(db_session: Session) -> None:
+    files = build_core_documents()
+    database = json.loads(files["database.json"])
+    database["password"] = "nope"
+    files["database.json"] = json.dumps(database, separators=(",", ":")).encode("utf-8")
+    archive = build_package_zip(files=files)
+    before = _count_rows(db_session)
+    with pytest.raises(CatalogPackageValidationError) as exc_info:
+        import_catalog_package_bytes(archive, db_session)
+    assert exc_info.value.code == CatalogPackageErrorCode.FORBIDDEN_SECRET_FIELD
+    assert _count_rows(db_session) == before
+
+
+def test_persisted_generated_at_matches_validated(db_session: Session) -> None:
+    archive = build_package_zip()
+    validated = validate_catalog_package_bytes(archive)
+    revision, _ = import_catalog_package_bytes(archive, db_session)
+    assert revision.generated_at == validated.generated_at
 
 
 def test_stored_json_documents_match_validation(db_session: Session) -> None:

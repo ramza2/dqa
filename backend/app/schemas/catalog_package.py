@@ -77,6 +77,7 @@ class CatalogPackageManifest(BaseModel):
     package_readiness: PackageReadiness
     source: PackageSourceIdentity
     schema_fingerprint: str
+    generated_at: datetime
     files: list[ManifestFileEntry]
     counts: dict[str, Any] = Field(default_factory=dict)
 
@@ -132,7 +133,7 @@ class CatalogImportRevisionSummary(BaseModel):
     archive_sha256: str
     manifest_sha256: str
     validation_status: str
-    generated_at: datetime | None = None
+    generated_at: datetime
     imported_at: datetime
     table_count: int
     column_count: int
@@ -141,7 +142,12 @@ class CatalogImportRevisionSummary(BaseModel):
     category_count: int
     category_assignment_count: int
     managed_file_count: int
-    created: bool | None = None
+
+
+class CatalogImportResult(CatalogImportRevisionSummary):
+    """POST /import operation result (includes whether a new revision was created)."""
+
+    created: bool
 
 
 class CatalogImportRevisionDetail(CatalogImportRevisionSummary):

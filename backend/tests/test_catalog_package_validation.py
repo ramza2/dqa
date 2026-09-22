@@ -400,3 +400,74 @@ def test_manifest_default_schema_missing_in_database_json_rejected() -> None:
     files["database.json"] = json.dumps(database, separators=(",", ":")).encode("utf-8")
     archive = build_package_zip(files=files)
     _expect_error(archive, CatalogPackageErrorCode.SOURCE_MISMATCH)
+
+
+def test_database_json_password_key_rejected() -> None:
+    files = build_core_documents()
+    database = json.loads(files["database.json"])
+    database["password"] = "must-not-be-stored"
+    files["database.json"] = json.dumps(database, separators=(",", ":")).encode("utf-8")
+    archive = build_package_zip(files=files)
+    exc = _expect_error(archive, CatalogPackageErrorCode.FORBIDDEN_SECRET_FIELD)
+    assert exc.path == "database.json"
+    assert "must-not-be-stored" not in exc.issue.message
+
+
+def test_manifest_api_key_rejected() -> None:
+    files = build_core_documents()
+    manifest = json.loads(build_manifest(files))
+    manifest["api_key"] = "secret"
+    archive = build_package_zip(files=files, manifest_override=json.dumps(manifest).encode("utf-8"))
+    exc = _expect_error(archive, CatalogPackageErrorCode.FORBIDDEN_SECRET_FIELD)
+    assert exc.path == "manifest.json"
+
+
+def test_nested_access_token_rejected() -> None:
+    files = build_core_documents()
+    database = json.loads(files["database.json"])
+    database["latest_analysis"] = {
+        "schema_fingerprint": DEFAULT_FINGERPRINT,
+        "access_token": "nested-secret",
+    }
+    files["database.json"] = json.dumps(database, separators=(",", ":")).encode("utf-8")
+    archive = build_package_zip(files=files)
+    _expect_error(archive, CatalogPackageErrorCode.FORBIDDEN_SECRET_FIELD)
+
+
+def test_producer_security_export_flags_allowed() -> None:
+    files = build_core_documents()
+    database = json.loads(files["database.json"])
+    database["source"] = {
+        **DEFAULT_SOURCE,
+        "password_exported": False,
+        "credentials_exported": False,
+        "encrypted_credential_exported": False,
+        "username_exported": False,
+        "connection_host_exported": False,
+    }
+    files["database.json"] = json.dumps(database, separators=(",", ":")).encode("utf-8")
+    archive = build_package_zip(files=files)
+    result = _validate(archive)
+    assert result.schema_fingerprint == DEFAULT_FINGERPRINT
+
+
+def test_generated_at_missing_rejected() -> None:
+    files = build_core_documents()
+    manifest = json.loads(build_manifest(files))
+    manifest.pop("generated_at", None)
+    archive = build_package_zip(files=files, manifest_override=json.dumps(manifest).encode("utf-8"))
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_MANIFEST)
+
+
+def test_generated_at_malformed_rejected() -> None:
+    files = build_core_documents()
+    manifest = json.loads(build_manifest(files))
+    manifest["generated_at"] = "not-a-datetime"
+    archive = build_package_zip(files=files, manifest_override=json.dumps(manifest).encode("utf-8"))
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_MANIFEST)
+
+
+def test_valid_producer_generated_at_parsed() -> None:
+    archive = build_package_zip()
+    result = _validate(archive)
+    assert result.generated_at.isoformat().startswith("2026-09-21T08:15:30")

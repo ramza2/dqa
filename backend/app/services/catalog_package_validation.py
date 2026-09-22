@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
 from app.adapters.catalog.errors import CatalogPackageErrorCode, CatalogPackageValidationError
+from app.adapters.catalog.secret_fields import find_forbidden_secret_key
 from app.adapters.catalog.limits import (
     DEFAULT_ZIP_LIMITS,
     MANIFEST_FILENAME,
@@ -73,6 +75,7 @@ class ValidatedCatalogPackage:
     schema_fingerprint: str
     counts: dict[str, Any]
     files_validated: int
+    generated_at: datetime
     warnings: tuple[str, ...] = ()
     managed_file_digests: dict[str, str] = field(default_factory=dict)
     parsed_documents: dict[str, Any] = field(default_factory=dict)
@@ -135,6 +138,7 @@ def validate_safe_package_archive(
 
     parsed_documents = _parse_required_json_documents(archive)
     warnings = _cross_check_consistency(manifest, parsed_documents)
+    _reject_forbidden_secret_fields(manifest_document, parsed_documents)
 
     readiness = manifest.package_readiness
     activation_eligible = readiness == "READY"
@@ -160,7 +164,27 @@ def validate_safe_package_archive(
         managed_file_digests=digests,
         parsed_documents=parsed_documents,
         manifest_document=manifest_document,
+        generated_at=manifest.generated_at,
     )
+
+
+def _reject_forbidden_secret_fields(
+    manifest_document: dict[str, Any],
+    parsed_documents: dict[str, Any],
+) -> None:
+    if find_forbidden_secret_key(manifest_document):
+        raise CatalogPackageValidationError(
+            CatalogPackageErrorCode.FORBIDDEN_SECRET_FIELD,
+            "package JSON contains a forbidden secret field name",
+            path=MANIFEST_FILENAME,
+        )
+    for relative_path, document in parsed_documents.items():
+        if find_forbidden_secret_key(document):
+            raise CatalogPackageValidationError(
+                CatalogPackageErrorCode.FORBIDDEN_SECRET_FIELD,
+                "package JSON contains a forbidden secret field name",
+                path=relative_path,
+            )
 
 
 def _parse_manifest(data: bytes) -> tuple[dict[str, Any], CatalogPackageManifest]:

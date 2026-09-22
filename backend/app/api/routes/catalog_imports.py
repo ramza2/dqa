@@ -6,8 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.adapters.db.deps import get_db_session
-from app.api.routes.catalog_packages import to_detail
-from app.schemas.catalog_package import CatalogImportRevisionDetail, CatalogImportRevisionSummary
+from app.api.routes.catalog_packages import to_detail, to_summary
+from app.schemas.catalog_package import (
+    CatalogImportRevisionDetail,
+    CatalogImportRevisionSummary,
+    PackageReadiness,
+)
 from app.services.catalog_package_import import get_catalog_import, list_catalog_imports
 
 router = APIRouter(prefix="/api/v1/catalog/imports", tags=["catalog-imports"])
@@ -16,7 +20,7 @@ router = APIRouter(prefix="/api/v1/catalog/imports", tags=["catalog-imports"])
 @router.get("", response_model=list[CatalogImportRevisionSummary])
 def list_imports(
     source_name: str | None = Query(default=None),
-    package_readiness: str | None = Query(default=None),
+    package_readiness: PackageReadiness | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_db_session),
@@ -29,34 +33,7 @@ def list_imports(
         limit=limit,
         offset=offset,
     )
-    return [
-        CatalogImportRevisionSummary(
-            id=row.id,
-            source_name=row.source_name,
-            db_type=row.db_type,
-            database_name=row.database_name,
-            default_schema=row.default_schema,
-            package_format=row.package_format,
-            package_version=row.package_version,
-            package_readiness=row.package_readiness,  # type: ignore[arg-type]
-            activation_eligible=row.package_readiness == "READY",
-            schema_fingerprint=row.schema_fingerprint,
-            archive_sha256=row.archive_sha256,
-            manifest_sha256=row.manifest_sha256,
-            validation_status=row.validation_status,
-            generated_at=row.generated_at,
-            imported_at=row.imported_at,
-            table_count=row.table_count,
-            column_count=row.column_count,
-            relation_count=row.relation_count,
-            index_count=row.index_count,
-            category_count=row.category_count,
-            category_assignment_count=row.category_assignment_count,
-            managed_file_count=row.managed_file_count,
-            created=None,
-        )
-        for row in revisions
-    ]
+    return [to_summary(row) for row in revisions]
 
 
 @router.get("/{revision_id}", response_model=CatalogImportRevisionDetail)
