@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -111,6 +112,42 @@ class CatalogPackageValidateResponse(BaseModel):
     files_validated: int
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+
+
+class CatalogImportRevisionSummary(BaseModel):
+    """Metadata-only import revision representation (no stored JSON bodies)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    source_name: str
+    db_type: str
+    database_name: str | None = None
+    default_schema: str | None = None
+    package_format: str
+    package_version: str
+    package_readiness: PackageReadiness
+    activation_eligible: bool
+    schema_fingerprint: str
+    archive_sha256: str
+    manifest_sha256: str
+    validation_status: str
+    generated_at: datetime | None = None
+    imported_at: datetime
+    table_count: int
+    column_count: int
+    relation_count: int
+    index_count: int
+    category_count: int
+    category_assignment_count: int
+    managed_file_count: int
+    created: bool | None = None
+
+
+class CatalogImportRevisionDetail(CatalogImportRevisionSummary):
+    """Detail metadata for one import revision (still excludes raw JSON documents)."""
+
+    created_at: datetime
 
 
 # --- Producer-aligned minimal JSON document shapes (extra fields allowed) ---

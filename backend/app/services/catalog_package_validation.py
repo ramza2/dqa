@@ -59,8 +59,8 @@ _REQUIRED_DOCUMENT_MODELS: dict[str, type[BaseModel]] = {
 class ValidatedCatalogPackage:
     """Service-level validation result reusable by future import persistence.
 
-    This object is intentionally richer than the HTTP response so PR 4 can
-    persist digests/parsed core JSON without re-validating the archive.
+    This object is intentionally richer than the HTTP response so import
+    persistence can store digests/parsed core JSON without re-validating.
     """
 
     archive_sha256: str
@@ -76,6 +76,7 @@ class ValidatedCatalogPackage:
     warnings: tuple[str, ...] = ()
     managed_file_digests: dict[str, str] = field(default_factory=dict)
     parsed_documents: dict[str, Any] = field(default_factory=dict)
+    manifest_document: dict[str, Any] = field(default_factory=dict)
 
 
 def validate_catalog_package_bytes(
@@ -101,7 +102,7 @@ def validate_safe_package_archive(
             path=MANIFEST_FILENAME,
         )
 
-    manifest = _parse_manifest(manifest_entry.data)
+    manifest_document, manifest = _parse_manifest(manifest_entry.data)
     _validate_package_identity(manifest)
     _validate_manifest_files(archive, manifest)
 
@@ -158,10 +159,11 @@ def validate_safe_package_archive(
         warnings=tuple(warnings),
         managed_file_digests=digests,
         parsed_documents=parsed_documents,
+        manifest_document=manifest_document,
     )
 
 
-def _parse_manifest(data: bytes) -> CatalogPackageManifest:
+def _parse_manifest(data: bytes) -> tuple[dict[str, Any], CatalogPackageManifest]:
     try:
         payload = json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -171,8 +173,15 @@ def _parse_manifest(data: bytes) -> CatalogPackageManifest:
             path=MANIFEST_FILENAME,
         ) from exc
 
+    if not isinstance(payload, dict):
+        raise CatalogPackageValidationError(
+            CatalogPackageErrorCode.MALFORMED_MANIFEST,
+            "manifest.json must be a JSON object",
+            path=MANIFEST_FILENAME,
+        )
+
     try:
-        return CatalogPackageManifest.model_validate(payload)
+        return payload, CatalogPackageManifest.model_validate(payload)
     except ValidationError as exc:
         # Do not echo raw field values (may include secret-like strings).
         raise CatalogPackageValidationError(

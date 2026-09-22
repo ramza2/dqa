@@ -1,10 +1,20 @@
 """FastAPI application entrypoint for DEMIS Query Assistant."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from app import __version__
+from app.adapters.db.deps import init_db_schema
 from app.api.routes import api_router
 from app.core.config import get_settings
+
+
+@asynccontextmanager
+async def lifespan(_application: FastAPI):
+    """Initialize application schema on startup (no Alembic yet)."""
+    init_db_schema()
+    yield
 
 
 def create_app() -> FastAPI:
@@ -16,8 +26,9 @@ def create_app() -> FastAPI:
         description=(
             "DEMIS Query Assistant backend. "
             "Provides settings, DQA PostgreSQL connectivity, health endpoints, "
-            "and Catalog Package v2 validation (no import persistence yet)."
+            "Catalog Package v2 validation, and immutable catalog import persistence."
         ),
+        lifespan=lifespan,
     )
     application.include_router(api_router)
     return application
