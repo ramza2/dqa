@@ -471,3 +471,28 @@ def test_valid_producer_generated_at_parsed() -> None:
     archive = build_package_zip()
     result = _validate(archive)
     assert result.generated_at.isoformat().startswith("2026-09-21T08:15:30")
+
+
+def test_generated_at_naive_datetime_rejected() -> None:
+    files = build_core_documents()
+    manifest = json.loads(build_manifest(files))
+    manifest["generated_at"] = "2026-09-21T08:15:30"
+    archive = build_package_zip(files=files, manifest_override=json.dumps(manifest).encode("utf-8"))
+    _expect_error(archive, CatalogPackageErrorCode.MALFORMED_MANIFEST)
+
+
+def test_generated_at_timezone_aware_success() -> None:
+    files = build_core_documents()
+    manifest = json.loads(build_manifest(files))
+    manifest["generated_at"] = "2026-09-21T08:15:30+00:00"
+    archive = build_package_zip(files=files, manifest_override=json.dumps(manifest).encode("utf-8"))
+    result = _validate(archive)
+    assert result.generated_at.tzinfo is not None
+
+
+def test_category_assignments_count_mismatch_rejected() -> None:
+    files = build_core_documents()
+    manifest = json.loads(build_manifest(files))
+    manifest["counts"]["category_assignments"] = 1
+    archive = build_package_zip(files=files, manifest_override=json.dumps(manifest).encode("utf-8"))
+    _expect_error(archive, CatalogPackageErrorCode.COUNTS_MISMATCH)

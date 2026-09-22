@@ -425,6 +425,7 @@ def _assert_counts(counts: dict[str, Any], parsed: dict[str, Any]) -> None:
         "relations": ("relations.json", ("relations",)),
         "indexes": ("indexes.json", ("indexes",)),
         "categories": ("categories.json", ("categories",)),
+        "category_assignments": ("categories.json", ("table_assignments",)),
     }
     for count_key, (file_name, list_keys) in mapping.items():
         if count_key not in counts:

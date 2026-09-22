@@ -142,6 +142,7 @@ def build_manifest(
             ("relations", "relations.json", "relations"),
             ("indexes", "indexes.json", "indexes"),
             ("categories", "categories.json", "categories"),
+            ("category_assignments", "categories.json", "table_assignments"),
         ):
             raw = files.get(filename)
             if not raw:

@@ -88,6 +88,13 @@ class CatalogPackageManifest(BaseModel):
             raise ValueError("schema_fingerprint must be non-empty")
         return value
 
+    @field_validator("generated_at")
+    @classmethod
+    def generated_at_timezone_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("generated_at must be a timezone-aware datetime")
+        return value
+
 
 class CatalogPackageErrorBody(BaseModel):
     """Structured API error for package validation failures."""
