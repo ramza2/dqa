@@ -342,6 +342,15 @@ describe("CatalogExplorer", () => {
           return null;
         }
         activeFetches += 1;
+        // Delay the guarded refresh response so the stale warning is observable
+        // before tables/categories converge on the fresh revision.
+        if (activeFetches > 1) {
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              resolve(jsonResponse(activeRev2));
+            }, 40);
+          });
+        }
         return jsonResponse(activeRev2);
       },
       (url) => {
