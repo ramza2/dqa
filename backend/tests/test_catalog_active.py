@@ -294,11 +294,11 @@ def test_warning_blocked_still_visible_in_history(
 def test_concurrent_activation_single_pointer(
     db_session: Session, test_settings_env: dict[str, str]
 ) -> None:
-    """Two READY revisions racing activate for the same source leave one pointer."""
+    """Two READY revisions racing first activate leave one pointer and a 2-event chain."""
     rev1 = _import_ready(db_session, fingerprint="fp-race-1")
     rev2 = _import_ready(db_session, fingerprint="fp-race-2")
     db_session.commit()
-    ids = (rev1.id, rev2.id)
+    ids = {rev1.id, rev2.id}
 
     errors: list[BaseException] = []
     results: list[bool] = []
@@ -324,23 +324,91 @@ def test_concurrent_activation_single_pointer(
 
     assert not errors
     assert len(results) == 2
+    assert all(results)
 
     db_session.expire_all()
     pointers = list(db_session.scalars(select(CatalogActiveRevision)).all())
     assert len(pointers) == 1
     assert pointers[0].source_name == SOURCE_A["source_name"]
-    assert pointers[0].catalog_import_revision_id in ids
 
     events = list(
         db_session.scalars(
-            select(CatalogActivationEvent).where(
-                CatalogActivationEvent.source_name == SOURCE_A["source_name"]
-            )
+            select(CatalogActivationEvent)
+            .where(CatalogActivationEvent.source_name == SOURCE_A["source_name"])
+            .order_by(CatalogActivationEvent.id.asc())
         ).all()
     )
-    # At least one real change; idempotent path may skip a second event.
-    assert 1 <= len(events) <= 2
-    assert all(e.activated_revision_id in ids for e in events)
+    assert len(events) == 2
+    first, second = events
+    assert first.previous_revision_id is None
+    assert second.previous_revision_id == first.activated_revision_id
+    assert {first.activated_revision_id, second.activated_revision_id} == ids
+    assert pointers[0].catalog_import_revision_id == second.activated_revision_id
+    # Pointer and last event share the same activation timestamp.
+    assert pointers[0].activated_at == second.activated_at
+
+
+def test_concurrent_switch_with_existing_pointer(
+    db_session: Session, test_settings_env: dict[str, str]
+) -> None:
+    """Concurrent switches against an existing pointer serialize via FOR UPDATE."""
+    rev1 = _import_ready(db_session, fingerprint="fp-lock-1")
+    db_session.commit()
+    first = activate_catalog_revision(db_session, rev1.id)
+    db_session.commit()
+    assert first.changed is True
+
+    rev2 = _import_ready(db_session, fingerprint="fp-lock-2")
+    rev3 = _import_ready(db_session, fingerprint="fp-lock-3")
+    db_session.commit()
+    switch_ids = {rev2.id, rev3.id}
+
+    errors: list[BaseException] = []
+    results: list[bool] = []
+    barrier = threading.Barrier(2)
+
+    def _worker(revision_id: int) -> None:
+        session = get_session_factory()()
+        try:
+            barrier.wait(timeout=5)
+            result = activate_catalog_revision(session, revision_id)
+            session.commit()
+            results.append(result.changed)
+        except BaseException as exc:  # noqa: BLE001 - collect for assertion
+            session.rollback()
+            errors.append(exc)
+        finally:
+            session.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(_worker, rid) for rid in switch_ids]
+        for future in futures:
+            future.result(timeout=10)
+
+    assert not errors
+    assert len(results) == 2
+    assert all(results)
+
+    db_session.expire_all()
+    pointers = list(db_session.scalars(select(CatalogActiveRevision)).all())
+    assert len(pointers) == 1
+
+    events = list(
+        db_session.scalars(
+            select(CatalogActivationEvent)
+            .where(CatalogActivationEvent.source_name == SOURCE_A["source_name"])
+            .order_by(CatalogActivationEvent.id.asc())
+        ).all()
+    )
+    assert len(events) == 3
+    initial, switch_a, switch_b = events
+    assert initial.previous_revision_id is None
+    assert initial.activated_revision_id == rev1.id
+    assert switch_a.previous_revision_id == initial.activated_revision_id
+    assert switch_b.previous_revision_id == switch_a.activated_revision_id
+    assert {switch_a.activated_revision_id, switch_b.activated_revision_id} == switch_ids
+    assert pointers[0].catalog_import_revision_id == switch_b.activated_revision_id
+    assert pointers[0].activated_at == switch_b.activated_at
 
 
 def test_invalid_validation_status_not_activatable(db_session: Session) -> None:

@@ -69,7 +69,6 @@ def activate_catalog_revision(
     _assert_activatable(revision)
 
     source_name = revision.source_name
-    now = datetime.now(timezone.utc)
 
     pointer = active_repo.get_active_by_source_name(source_name, for_update=True)
     if pointer is not None and pointer.catalog_import_revision_id == revision.id:
@@ -83,6 +82,10 @@ def activate_catalog_revision(
             activated_at=pointer.activated_at,
             changed=False,
         )
+
+    # Timestamp only after lock acquisition when a real pointer change is required.
+    # UNIQUE-race retries re-enter this function and generate a fresh timestamp.
+    now = datetime.now(timezone.utc)
 
     previous_id: int | None
     if pointer is None:
