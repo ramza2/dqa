@@ -499,3 +499,63 @@ def test_lifecycle_uses_for_update_path(db_session: Session) -> None:
     repo = QueryTemplateRepository(db_session)
     assert hasattr(repo, "get_by_id_for_update")
     assert callable(repo.get_by_id_for_update)
+
+
+def test_patch_and_delete_use_for_update_lock(
+    db_session: Session, db_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PATCH/DELETE must lock via get_by_id_for_update, not unlocked get_by_id."""
+    created = _create_template(db_session, db_client, stable_key="lock_patch_delete")
+    template_id = created["id"]
+
+    lock_calls: list[int] = []
+    unlocked_calls: list[int] = []
+    original_for_update = QueryTemplateRepository.get_by_id_for_update
+    original_get = QueryTemplateRepository.get_by_id
+
+    def tracking_for_update(self: QueryTemplateRepository, tid: int) -> QueryTemplate | None:
+        lock_calls.append(tid)
+        return original_for_update(self, tid)
+
+    def tracking_get(self: QueryTemplateRepository, tid: int) -> QueryTemplate | None:
+        unlocked_calls.append(tid)
+        return original_get(self, tid)
+
+    monkeypatch.setattr(QueryTemplateRepository, "get_by_id_for_update", tracking_for_update)
+    monkeypatch.setattr(QueryTemplateRepository, "get_by_id", tracking_get)
+
+    from app.schemas.query_template import QueryTemplateUpdateRequest
+    from app.services import query_template as qt_service
+
+    qt_service.update_query_template(
+        db_session,
+        template_id,
+        QueryTemplateUpdateRequest(sql_text="SELECT 42 FROM dual"),
+    )
+    assert lock_calls == [template_id]
+    assert unlocked_calls == []
+
+    lock_calls.clear()
+    unlocked_calls.clear()
+    qt_service.delete_query_template(db_session, template_id)
+    assert lock_calls == [template_id]
+    assert unlocked_calls == []
+
+
+def test_new_version_persists_created_by_actor(
+    db_session: Session, db_client: TestClient
+) -> None:
+    created = _create_template(db_session, db_client, stable_key="created_by_actor")
+    template_id = created["id"]
+    assert db_client.post(f"/api/v1/query-templates/{template_id}/submit-review").status_code == 200
+    assert db_client.post(f"/api/v1/query-templates/{template_id}/approve", json={}).status_code == 200
+
+    from app.services import query_template as qt_service
+
+    detail = qt_service.create_query_template_version(
+        db_session, template_id, actor="operator-a"
+    )
+    assert detail.version.created_by == "operator-a"
+    version = db_session.get(QueryTemplateVersion, detail.version.id)
+    assert version is not None
+    assert version.created_by == "operator-a"

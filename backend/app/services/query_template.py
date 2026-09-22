@@ -151,7 +151,8 @@ def update_query_template(
     template_id: int,
     request: QueryTemplateUpdateRequest,
 ) -> QueryTemplateDetail:
-    template, version = _require_template_with_current(session, template_id)
+    # Lock first, then evaluate DRAFT / frozen metadata against the latest state.
+    template, version = _require_template_with_current_for_update(session, template_id)
     _assert_draft_mutable(template, version)
 
     stable_requested = (
@@ -192,7 +193,8 @@ def update_query_template(
 
 
 def delete_query_template(session: Session, template_id: int) -> None:
-    template, version = _require_template_with_current(session, template_id)
+    # Lock first so concurrent submit-review cannot race past a stale DRAFT check.
+    template, version = _require_template_with_current_for_update(session, template_id)
     _assert_draft_deletable(template, version)
     QueryTemplateRepository(session).delete_template(template)
 
@@ -253,7 +255,6 @@ def create_query_template_version(
     actor: str | None = None,
 ) -> QueryTemplateDetail:
     """Create a new DRAFT version from APPROVED/REJECTED current; re-pin Active Catalog."""
-    del actor  # Reserved for future auth; HTTP currently passes None.
     request = request or QueryTemplateNewVersionRequest()
     repo = QueryTemplateRepository(session)
     template = repo.get_by_id_for_update(template_id)
@@ -305,7 +306,7 @@ def create_query_template_version(
         catalog_revision_id=snapshot.revision_id,
         catalog_fingerprint_constraint=snapshot.schema_fingerprint,
         approval_status=APPROVAL_DRAFT,
-        created_by=None,
+        created_by=actor,
         created_at=now,
         approved_by=None,
         approved_at=None,
@@ -564,6 +565,25 @@ def _require_template_with_current(
     if version is None:
         raise QueryTemplateError(
             QueryTemplateErrorCode.TEMPLATE_NOT_FOUND,
+            "query template current version not found",
+        )
+    return template, version
+
+
+def _require_template_with_current_for_update(
+    session: Session, template_id: int
+) -> tuple[QueryTemplate, QueryTemplateVersion]:
+    """Lock stable template row before DRAFT/deletable checks (PATCH/DELETE)."""
+    template = QueryTemplateRepository(session).get_by_id_for_update(template_id)
+    if template is None:
+        raise QueryTemplateError(
+            QueryTemplateErrorCode.TEMPLATE_NOT_FOUND,
+            "query template not found",
+        )
+    version = _current_version(template)
+    if version is None:
+        raise QueryTemplateError(
+            QueryTemplateErrorCode.VERSION_NOT_FOUND,
             "query template current version not found",
         )
     return template, version
