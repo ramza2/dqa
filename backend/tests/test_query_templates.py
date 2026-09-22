@@ -332,3 +332,241 @@ def test_blank_sql_rejected(db_session: Session, db_client: TestClient) -> None:
         json=_create_body(sql_text="   "),
     )
     assert response.status_code == 422
+
+
+def test_patch_target_schemas_rejects_schema_only_in_current_active(
+    db_session: Session, db_client: TestClient
+) -> None:
+    first = _import_and_activate(
+        db_session,
+        fingerprint="fp-tpl-pin-a",
+        tables=[
+            {"schema": "DEMIS_OWNER", "name": "T1"},
+            {"schema": "OTHER_OWNER", "name": "T2"},
+        ],
+    )
+    db_session.commit()
+
+    created = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(stable_key="pin_schema_guard", target_schemas=["DEMIS_OWNER"]),
+    )
+    assert created.status_code == 201
+    template_id = created.json()["id"]
+    assert created.json()["version"]["compatibility"]["pinned_revision_id"] == first.id
+
+    _import_and_activate(
+        db_session,
+        fingerprint="fp-tpl-pin-b",
+        tables=[
+            {"schema": "DEMIS_OWNER", "name": "T1"},
+            {"schema": "B_ONLY_SCHEMA", "name": "T_B"},
+        ],
+    )
+    db_session.commit()
+
+    rejected = db_client.patch(
+        f"/api/v1/query-templates/{template_id}",
+        json={"target_schemas": ["B_ONLY_SCHEMA"]},
+    )
+    assert rejected.status_code == 422
+    assert rejected.json()["detail"]["code"] == QueryTemplateErrorCode.INVALID_TARGET_SCHEMA
+
+
+def test_patch_target_schemas_allows_schema_in_pinned_revision(
+    db_session: Session, db_client: TestClient
+) -> None:
+    first = _import_and_activate(
+        db_session,
+        fingerprint="fp-tpl-pin-a2",
+        tables=[
+            {"schema": "DEMIS_OWNER", "name": "T1"},
+            {"schema": "OTHER_OWNER", "name": "T2"},
+        ],
+    )
+    db_session.commit()
+
+    created = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(stable_key="pin_schema_ok", target_schemas=["DEMIS_OWNER"]),
+    )
+    assert created.status_code == 201
+    template_id = created.json()["id"]
+
+    second = _import_and_activate(
+        db_session,
+        fingerprint="fp-tpl-pin-b2",
+        tables=[
+            {"schema": "DEMIS_OWNER", "name": "T1"},
+            {"schema": "B_ONLY_SCHEMA", "name": "T_B"},
+        ],
+    )
+    db_session.commit()
+
+    patched = db_client.patch(
+        f"/api/v1/query-templates/{template_id}",
+        json={"target_schemas": ["OTHER_OWNER"]},
+    )
+    assert patched.status_code == 200, patched.text
+    payload = patched.json()
+    assert payload["target_schemas"] == ["OTHER_OWNER"]
+    assert payload["version"]["compatibility"]["compatible"] is False
+    assert payload["version"]["compatibility"]["pinned_revision_id"] == first.id
+    assert payload["version"]["compatibility"]["pinned_schema_fingerprint"] == "fp-tpl-pin-a2"
+    assert payload["version"]["compatibility"]["current_revision_id"] == second.id
+    assert payload["version"]["compatibility"]["current_schema_fingerprint"] == "fp-tpl-pin-b2"
+
+    version = db_session.get(QueryTemplateVersion, payload["version"]["id"])
+    assert version is not None
+    assert version.catalog_revision_id == first.id
+    assert version.catalog_fingerprint_constraint == "fp-tpl-pin-a2"
+
+
+@pytest.mark.parametrize(
+    "parameter_schema",
+    [
+        [{"name": "s", "type": "string", "min": 1}],
+        [{"name": "n", "type": "integer", "pattern": "^[0-9]+$"}],
+        [{"name": "s", "type": "string", "pattern": "("}],
+        [{"name": "s", "type": "string", "allowed_values": ["a"]}],
+        [
+            {
+                "name": "status",
+                "type": "enum",
+                "allowed_values": ["OPEN", "OPEN"],
+            }
+        ],
+        [
+            {
+                "name": "status",
+                "type": "enum",
+                "allowed_values": ["OPEN", "CLOSED"],
+                "default": "MISSING",
+            }
+        ],
+        [{"name": "n", "type": "integer", "default": "1"}],
+        [{"name": "ids", "type": "integer_list", "default": ["1"]}],
+    ],
+)
+def test_parameter_type_structural_rules_rejected(
+    db_session: Session,
+    db_client: TestClient,
+    parameter_schema: list[dict[str, Any]],
+) -> None:
+    _import_and_activate(
+        db_session,
+        fingerprint=f"fp-tpl-struct-{hash(str(parameter_schema)) % 10_000}",
+    )
+    db_session.commit()
+    response = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(
+            stable_key=f"struct_{hash(str(parameter_schema)) % 10_000}",
+            parameter_schema=parameter_schema,
+        ),
+    )
+    assert response.status_code == 422
+
+
+def test_parameter_default_round_trip(db_session: Session, db_client: TestClient) -> None:
+    _import_and_activate(db_session, fingerprint="fp-tpl-default-ok")
+    db_session.commit()
+
+    params = [
+        {
+            "name": "status",
+            "type": "enum",
+            "required": False,
+            "allowed_values": ["OPEN", "CLOSED"],
+            "default": "OPEN",
+        },
+        {
+            "name": "limit_n",
+            "type": "integer",
+            "required": False,
+            "min": 1,
+            "max": 100,
+            "default": 10,
+        },
+        {
+            "name": "codes",
+            "type": "string_list",
+            "required": False,
+            "default": ["A", "B"],
+            "min_items": 0,
+            "max_items": 10,
+        },
+        {
+            "name": "when",
+            "type": "date",
+            "required": False,
+            "default": "2026-01-15",
+        },
+    ]
+    response = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(stable_key="default_ok", parameter_schema=params),
+    )
+    assert response.status_code == 201, response.text
+    stored = response.json()["version"]["parameter_schema"]
+    assert stored[0]["default"] == "OPEN"
+    assert stored[1]["default"] == 10
+    assert stored[2]["default"] == ["A", "B"]
+    assert stored[3]["default"] == "2026-01-15"
+
+
+def test_non_draft_patch_and_delete_rejected(
+    db_session: Session, db_client: TestClient
+) -> None:
+    _import_and_activate(db_session, fingerprint="fp-tpl-guard")
+    db_session.commit()
+
+    created = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(stable_key="guard_status"),
+    )
+    assert created.status_code == 201
+    template_id = created.json()["id"]
+    version_id = created.json()["version"]["id"]
+
+    version = db_session.get(QueryTemplateVersion, version_id)
+    assert version is not None
+    version.approval_status = "APPROVED"
+    db_session.commit()
+
+    patched = db_client.patch(
+        f"/api/v1/query-templates/{template_id}",
+        json={"name": "should fail"},
+    )
+    assert patched.status_code == 409
+    assert patched.json()["detail"]["code"] == QueryTemplateErrorCode.NOT_DRAFT
+
+    deleted = db_client.delete(f"/api/v1/query-templates/{template_id}")
+    assert deleted.status_code == 409
+    assert deleted.json()["detail"]["code"] == QueryTemplateErrorCode.NOT_DRAFT
+
+
+def test_enabled_template_patch_rejected(
+    db_session: Session, db_client: TestClient
+) -> None:
+    _import_and_activate(db_session, fingerprint="fp-tpl-enabled")
+    db_session.commit()
+
+    created = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(stable_key="guard_enabled"),
+    )
+    assert created.status_code == 201
+    template_id = created.json()["id"]
+
+    template = db_session.get(QueryTemplate, template_id)
+    assert template is not None
+    template.enabled = True
+    db_session.commit()
+
+    patched = db_client.patch(
+        f"/api/v1/query-templates/{template_id}",
+        json={"name": "should fail"},
+    )
+    assert patched.status_code == 409
+    assert patched.json()["detail"]["code"] == QueryTemplateErrorCode.NOT_DRAFT

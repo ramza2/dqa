@@ -9,16 +9,15 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.adapters.catalog.activation_errors import (
-    CatalogActivationError,
-    CatalogActivationErrorCode,
-)
+from app.adapters.catalog.activation_errors import CatalogActivationError
 from app.adapters.catalog.query_errors import CatalogQueryError
 from app.adapters.catalog.query_template_errors import (
     QueryTemplateError,
     QueryTemplateErrorCode,
 )
+from app.models.catalog_import import CatalogImportRevision
 from app.models.query_template import QueryTemplate, QueryTemplateVersion
+from app.repositories.catalog_import import CatalogImportRepository
 from app.repositories.query_template import QueryTemplateRepository
 from app.schemas.query_template import (
     QueryTemplateCompatibilityView,
@@ -30,8 +29,8 @@ from app.schemas.query_template import (
     QueryTemplateUpdateRequest,
     QueryTemplateVersionView,
 )
-from app.services.catalog_active import ActiveCatalogView, get_active_catalog
-from app.services.catalog_query import resolve_active_revision
+from app.services.catalog_active import get_active_catalog
+from app.services.catalog_query import ResolvedActiveRevision, resolve_active_revision
 
 APPROVAL_DRAFT = "DRAFT"
 COMPATIBILITY_EXACT = "EXACT_FINGERPRINT"
@@ -47,9 +46,9 @@ def create_query_template(
     session: Session,
     request: QueryTemplateCreateRequest,
 ) -> QueryTemplateDetail:
-    """Create a template + version 1 DRAFT pinned to the current Active Catalog."""
-    active = _require_active_catalog(session, request.source_name)
-    _assert_target_schemas(session, request.source_name, request.target_schemas)
+    """Create a template + version 1 DRAFT pinned to one Active Catalog snapshot."""
+    snapshot = _require_active_snapshot(session, request.source_name)
+    _assert_target_schemas_for_revision(snapshot.revision, request.target_schemas)
 
     repo = QueryTemplateRepository(session)
     if repo.get_by_source_and_stable_key(request.source_name, request.stable_key) is not None:
@@ -86,8 +85,8 @@ def create_query_template(
         row_limit=request.row_limit,
         timeout_seconds=request.timeout_seconds,
         compatibility_mode=COMPATIBILITY_EXACT,
-        catalog_revision_id=active.revision_id,
-        catalog_fingerprint_constraint=active.schema_fingerprint,
+        catalog_revision_id=snapshot.revision_id,
+        catalog_fingerprint_constraint=snapshot.schema_fingerprint,
         approval_status=APPROVAL_DRAFT,
         created_by=None,
         created_at=now,
@@ -136,7 +135,8 @@ def update_query_template(
     _assert_draft_mutable(template, version)
 
     if request.target_schemas is not None:
-        _assert_target_schemas(session, template.source_name, request.target_schemas)
+        pinned = _require_pinned_revision(session, version)
+        _assert_target_schemas_for_revision(pinned, request.target_schemas)
         template.target_schemas = list(request.target_schemas)
 
     if request.name is not None:
@@ -166,48 +166,47 @@ def delete_query_template(session: Session, template_id: int) -> None:
     QueryTemplateRepository(session).delete_template(template)
 
 
-def _require_active_catalog(session: Session, source_name: str) -> ActiveCatalogView:
+def _require_active_snapshot(session: Session, source_name: str) -> ResolvedActiveRevision:
+    """Resolve Active Catalog once; reuse for pin + target_schemas validation."""
     try:
-        return get_active_catalog(session, source_name)
-    except CatalogActivationError as exc:
-        if exc.code == CatalogActivationErrorCode.ACTIVE_REVISION_NOT_FOUND:
-            raise QueryTemplateError(
-                QueryTemplateErrorCode.ACTIVE_CATALOG_NOT_FOUND,
-                "active catalog revision not found for source",
-            ) from exc
-        raise QueryTemplateError(
-            QueryTemplateErrorCode.ACTIVE_CATALOG_NOT_FOUND,
-            "active catalog revision not found for source",
-        ) from exc
-
-
-def _assert_target_schemas(
-    session: Session,
-    source_name: str,
-    target_schemas: list[str],
-) -> None:
-    try:
-        resolved = resolve_active_revision(session, source_name)
+        return resolve_active_revision(session, source_name)
     except CatalogQueryError as exc:
         raise QueryTemplateError(
             QueryTemplateErrorCode.ACTIVE_CATALOG_NOT_FOUND,
             "active catalog revision not found for source",
         ) from exc
-    available = _schema_names_from_revision(resolved.revision.tables_json)
-    # Also accept the catalog default_schema when tables are empty / sparse.
-    if resolved.revision.default_schema:
-        available.add(resolved.revision.default_schema)
+
+
+def _require_pinned_revision(
+    session: Session, version: QueryTemplateVersion
+) -> CatalogImportRevision:
+    revision = CatalogImportRepository(session).get_by_id(version.catalog_revision_id)
+    if revision is None:
+        raise QueryTemplateError(
+            QueryTemplateErrorCode.INVALID_REQUEST,
+            "pinned catalog revision not found for template version",
+        )
+    return revision
+
+
+def _assert_target_schemas_for_revision(
+    revision: CatalogImportRevision,
+    target_schemas: list[str],
+) -> None:
+    available = _schema_names_from_revision(revision.tables_json)
+    if revision.default_schema:
+        available.add(revision.default_schema)
 
     missing = [name for name in target_schemas if name not in available]
     if missing:
         raise QueryTemplateError(
             QueryTemplateErrorCode.INVALID_TARGET_SCHEMA,
-            f"target schema(s) not present in active catalog: {', '.join(missing)}",
+            f"target schema(s) not present in catalog revision: {', '.join(missing)}",
         )
 
 
 def _schema_names_from_revision(tables_json: dict[str, Any] | list[Any] | Any) -> set[str]:
-    """Reuse stored Active Catalog tables JSON; do not invent schema names."""
+    """Reuse stored Catalog tables JSON; do not invent schema names."""
     raw_list: list[Any]
     if isinstance(tables_json, dict):
         maybe = tables_json.get("tables")

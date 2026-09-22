@@ -56,28 +56,122 @@ class QueryTemplateParameter(BaseModel):
 
     @model_validator(mode="after")
     def validate_type_constraints(self) -> QueryTemplateParameter:
-        if self.min is not None and self.max is not None and self.min > self.max:
-            raise ValueError("parameter min must not be greater than max")
-        if (
-            self.min_items is not None
-            and self.max_items is not None
-            and self.min_items > self.max_items
-        ):
-            raise ValueError("parameter min_items must not be greater than max_items")
-        if self.min_items is not None and self.min_items < 0:
-            raise ValueError("parameter min_items must be >= 0")
-        if self.max_items is not None and self.max_items < 0:
-            raise ValueError("parameter max_items must be >= 0")
-        if self.type == "enum":
+        if self.min is not None or self.max is not None:
+            if self.type not in {"integer", "decimal"}:
+                raise ValueError("min/max apply only to integer or decimal parameters")
+            if self.min is not None and self.max is not None and self.min > self.max:
+                raise ValueError("parameter min must not be greater than max")
+
+        if self.min_items is not None or self.max_items is not None:
+            if self.type not in {"string_list", "integer_list"}:
+                raise ValueError("min_items/max_items apply only to list parameter types")
+            if self.min_items is not None and self.min_items < 0:
+                raise ValueError("parameter min_items must be >= 0")
+            if self.max_items is not None and self.max_items < 0:
+                raise ValueError("parameter max_items must be >= 0")
+            if (
+                self.min_items is not None
+                and self.max_items is not None
+                and self.min_items > self.max_items
+            ):
+                raise ValueError("parameter min_items must not be greater than max_items")
+
+        if self.pattern is not None:
+            if self.type != "string":
+                raise ValueError("pattern applies only to string parameters")
+            try:
+                re.compile(self.pattern)
+            except re.error as exc:
+                raise ValueError(f"parameter pattern is not a valid regex: {exc}") from exc
+
+        if self.allowed_values is not None:
+            if self.type != "enum":
+                raise ValueError("allowed_values applies only to enum parameters")
             if not self.allowed_values:
                 raise ValueError("enum parameters require a non-empty allowed_values list")
-        if self.type in {"string_list", "integer_list"}:
-            pass
-        elif self.min_items is not None or self.max_items is not None:
-            raise ValueError("min_items/max_items apply only to list parameter types")
-        if self.pattern is not None and self.type not in {"string", "enum"}:
-            raise ValueError("pattern applies only to string or enum parameters")
+            seen: list[Any] = []
+            for value in self.allowed_values:
+                if any(_values_equal(value, prior) for prior in seen):
+                    raise ValueError("enum allowed_values must not contain duplicates")
+                seen.append(value)
+        elif self.type == "enum":
+            raise ValueError("enum parameters require a non-empty allowed_values list")
+
+        if self.default is not None:
+            _assert_default_matches_type(self)
+
         return self
+
+
+def _values_equal(left: Any, right: Any) -> bool:
+    return left == right and type(left) is type(right)
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    return isinstance(value, (int, float, Decimal))
+
+
+def _assert_default_matches_type(param: QueryTemplateParameter) -> None:
+    value = param.default
+    param_type = param.type
+
+    if param_type == "string":
+        if not isinstance(value, str):
+            raise ValueError("string default must be a string")
+        return
+    if param_type == "integer":
+        if not _is_int(value):
+            raise ValueError("integer default must be an integer")
+        return
+    if param_type == "decimal":
+        if not _is_number(value):
+            raise ValueError("decimal default must be a number")
+        return
+    if param_type == "boolean":
+        if not isinstance(value, bool):
+            raise ValueError("boolean default must be a boolean")
+        return
+    if param_type == "date":
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return
+        if isinstance(value, str):
+            try:
+                date.fromisoformat(value)
+            except ValueError as exc:
+                raise ValueError("date default must be an ISO date string") from exc
+            return
+        raise ValueError("date default must be an ISO date string")
+    if param_type == "datetime":
+        if isinstance(value, datetime):
+            return
+        if isinstance(value, str):
+            try:
+                datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("datetime default must be an ISO datetime string") from exc
+            return
+        raise ValueError("datetime default must be an ISO datetime string")
+    if param_type == "enum":
+        allowed = param.allowed_values or []
+        if not any(_values_equal(value, item) for item in allowed):
+            raise ValueError("enum default must be one of allowed_values")
+        return
+    if param_type == "string_list":
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError("string_list default must be a list of strings")
+        return
+    if param_type == "integer_list":
+        if not isinstance(value, list) or not all(_is_int(item) for item in value):
+            raise ValueError("integer_list default must be a list of integers")
+        return
+
+    raise ValueError(f"unsupported parameter type for default: {param_type}")
 
 
 class QueryTemplateCompatibilityView(BaseModel):
@@ -289,7 +383,3 @@ class QueryTemplateUpdateRequest(BaseModel):
         if not self.model_fields_set:
             raise ValueError("at least one field must be provided")
         return self
-
-
-# Keep date/datetime/Decimal imported for OpenAPI examples / future default coercion hooks.
-_ = (date, datetime, Decimal)
