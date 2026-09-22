@@ -1,8 +1,9 @@
-"""Active Catalog query API integration tests."""
+"""Active Catalog query API integration tests (Schema Analyzer v2 producer shapes)."""
 
 from __future__ import annotations
 
 import copy
+import json
 from typing import Any
 
 import pytest
@@ -10,9 +11,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.adapters.catalog.query_errors import CatalogQueryErrorCode
+from app.models.catalog_import import CatalogImportRevision
 from app.services.catalog_active import activate_catalog_revision
 from app.services.catalog_package_import import import_catalog_package_bytes
-from tests.catalog_package_fixtures import DEFAULT_SOURCE
+from tests.catalog_package_fixtures import DEFAULT_SOURCE, build_core_documents, build_package_zip
 
 pytestmark = pytest.mark.integration
 
@@ -26,124 +28,200 @@ SOURCE_B = {
 
 
 def _query_catalog_docs(*, fingerprint: str = "fp-query-a") -> dict[str, Any]:
-    """Producer-style metadata used by Catalog Query API tests."""
+    """Canonical Schema Analyzer Catalog Package v2 producer metadata."""
     tables = [
         {
-            "schema": "DEMIS_OWNER",
-            "name": "TB_ADM_HIST",
-            "comment": "환자 입원 이력",
-            "type": "TABLE",
+            "table_key": "DEMIS_OWNER.TB_ADM_HIST",
+            "schema_name": "DEMIS_OWNER",
+            "table_name": "TB_ADM_HIST",
+            "table_type": "TABLE",
+            "table_comment": "환자 입원 이력",
+            "comment_provenance": "DB_COMMENT",
+            "object_fingerprint": "fp-tbl-adm",
+            "key_constraints": [],
+            "categories": ["admission"],
         },
         {
-            "schema": "DEMIS_OWNER",
-            "name": "TB_WARD",
-            "comment": "병동 마스터",
-            "type": "TABLE",
+            "table_key": "DEMIS_OWNER.TB_WARD",
+            "schema_name": "DEMIS_OWNER",
+            "table_name": "TB_WARD",
+            "table_type": "TABLE",
+            "table_comment": "병동 마스터",
+            "comment_provenance": "DB_COMMENT",
+            "object_fingerprint": "fp-tbl-ward",
+            "key_constraints": [],
+            "categories": ["ward"],
         },
         {
-            "schema": "OTHER_OWNER",
-            "name": "TB_ADM_HIST",
-            "comment": "other schema admission",
-            "type": "TABLE",
+            "table_key": "OTHER_OWNER.TB_ADM_HIST",
+            "schema_name": "OTHER_OWNER",
+            "table_name": "TB_ADM_HIST",
+            "table_type": "TABLE",
+            "table_comment": "other schema admission",
+            "comment_provenance": "DB_COMMENT",
+            "object_fingerprint": "fp-tbl-other",
+            "key_constraints": [],
+            "categories": [],
         },
     ]
     columns = [
         {
-            "schema": "DEMIS_OWNER",
-            "table": "TB_ADM_HIST",
-            "name": "ADM_ID",
-            "ordinal": 1,
+            "column_key": "DEMIS_OWNER.TB_ADM_HIST.ADM_ID",
+            "table_key": "DEMIS_OWNER.TB_ADM_HIST",
+            "ordinal_position": 1,
+            "column_name": "ADM_ID",
             "data_type": "NUMBER",
             "nullable": False,
-            "is_primary_key": True,
-            "is_unique": True,
-            "comment": "입원 ID",
+            "default_value": None,
+            "column_comment": "입원 ID",
+            "primary_key": True,
+            "unique": True,
+            "object_fingerprint": "fp-col-adm-id",
         },
         {
-            "schema": "DEMIS_OWNER",
-            "table": "TB_ADM_HIST",
-            "name": "WARD_CD",
-            "ordinal": 2,
+            "column_key": "DEMIS_OWNER.TB_ADM_HIST.WARD_CD",
+            "table_key": "DEMIS_OWNER.TB_ADM_HIST",
+            "ordinal_position": 2,
+            "column_name": "WARD_CD",
             "data_type": "VARCHAR2",
             "nullable": True,
-            "is_primary_key": False,
-            "is_unique": False,
-            "comment": "입원 병동 코드",
+            "default_value": None,
+            "column_comment": "입원 병동 코드",
+            "primary_key": False,
+            "unique": False,
+            "object_fingerprint": "fp-col-ward-cd",
         },
         {
-            "schema": "DEMIS_OWNER",
-            "table": "TB_WARD",
-            "name": "WARD_CD",
-            "ordinal": 1,
+            "column_key": "DEMIS_OWNER.TB_WARD.WARD_CD",
+            "table_key": "DEMIS_OWNER.TB_WARD",
+            "ordinal_position": 1,
+            "column_name": "WARD_CD",
             "data_type": "VARCHAR2",
             "nullable": False,
-            "is_primary_key": True,
-            "is_unique": True,
-            "comment": "병동 코드",
+            "default_value": None,
+            "column_comment": "병동 코드",
+            "primary_key": True,
+            "unique": True,
+            "object_fingerprint": "fp-col-ward-pk",
         },
         {
-            "schema": "OTHER_OWNER",
-            "table": "TB_ADM_HIST",
-            "name": "ADM_ID",
-            "ordinal": 1,
+            "column_key": "OTHER_OWNER.TB_ADM_HIST.ADM_ID",
+            "table_key": "OTHER_OWNER.TB_ADM_HIST",
+            "ordinal_position": 1,
+            "column_name": "ADM_ID",
             "data_type": "NUMBER",
             "nullable": False,
-            "is_primary_key": True,
-            "comment": "other adm id",
+            "default_value": None,
+            "column_comment": "other adm id",
+            "primary_key": True,
+            "unique": True,
+            "object_fingerprint": "fp-col-other",
         },
     ]
     relations = [
         {
-            "name": "FK_ADM_WARD",
-            "schema": "DEMIS_OWNER",
-            "table": "TB_ADM_HIST",
-            "referenced_schema": "DEMIS_OWNER",
-            "referenced_table": "TB_WARD",
-            "columns": [{"column": "WARD_CD", "referenced_column": "WARD_CD"}],
+            "relation_key": "DEMIS_OWNER.TB_ADM_HIST::FK_ADM_WARD",
+            "constraint_name": "FK_ADM_WARD",
+            "relation_type": "FOREIGN_KEY",
+            "source_table_key": "DEMIS_OWNER.TB_ADM_HIST",
+            "target_table_key": "DEMIS_OWNER.TB_WARD",
+            "column_mapping": [
+                {
+                    "ordinal_position": 1,
+                    "source_column": "WARD_CD",
+                    "target_column": "WARD_CD",
+                }
+            ],
+            "object_fingerprint": "fp-rel-adm-ward",
         },
         {
-            "name": "FK_OTHER",
-            "schema": "OTHER_OWNER",
-            "table": "TB_ADM_HIST",
-            "referenced_schema": "OTHER_OWNER",
-            "referenced_table": "TB_OTHER",
-            "columns": [{"column": "ADM_ID", "referenced_column": "ID"}],
+            "relation_key": "OTHER_OWNER.TB_ADM_HIST::FK_OTHER",
+            "constraint_name": "FK_OTHER",
+            "relation_type": "FOREIGN_KEY",
+            "source_table_key": "OTHER_OWNER.TB_ADM_HIST",
+            "target_table_key": "OTHER_OWNER.TB_OTHER",
+            "column_mapping": [
+                {
+                    "ordinal_position": 1,
+                    "source_column": "ADM_ID",
+                    "target_column": "ID",
+                }
+            ],
+            "object_fingerprint": "fp-rel-other",
         },
     ]
     indexes = [
         {
-            "name": "PK_ADM",
-            "schema": "DEMIS_OWNER",
-            "table": "TB_ADM_HIST",
+            "index_key": "DEMIS_OWNER.TB_ADM_HIST::PK_ADM",
+            "table_key": "DEMIS_OWNER.TB_ADM_HIST",
+            "index_name": "PK_ADM",
             "unique": True,
+            "index_method": "BTREE",
             "columns": ["ADM_ID"],
+            "object_fingerprint": "fp-ix-pk-adm",
         },
         {
-            "name": "IX_ADM_WARD",
-            "schema": "DEMIS_OWNER",
-            "table": "TB_ADM_HIST",
+            "index_key": "DEMIS_OWNER.TB_ADM_HIST::IX_ADM_WARD",
+            "table_key": "DEMIS_OWNER.TB_ADM_HIST",
+            "index_name": "IX_ADM_WARD",
             "unique": False,
+            "index_method": "BTREE",
             "columns": ["WARD_CD"],
+            "object_fingerprint": "fp-ix-adm-ward",
         },
         {
-            "name": "PK_WARD",
-            "schema": "DEMIS_OWNER",
-            "table": "TB_WARD",
+            "index_key": "DEMIS_OWNER.TB_WARD::PK_WARD",
+            "table_key": "DEMIS_OWNER.TB_WARD",
+            "index_name": "PK_WARD",
             "unique": True,
+            "index_method": "BTREE",
             "columns": ["WARD_CD"],
+            "object_fingerprint": "fp-ix-pk-ward",
         },
     ]
     categories = [
-        {"id": "admission", "name": "Admission", "description": "입원 관련"},
-        {"id": "ward", "name": "Ward", "description": "병동 관련"},
+        {
+            "category_key": "admission",
+            "category_name": "Admission",
+            "description": "입원 관련",
+            "sort_order": 10,
+            "active": True,
+            "definition_provenance": "CATALOG_CATEGORY",
+        },
+        {
+            "category_key": "ward",
+            "category_name": "Ward",
+            "description": "병동 관련",
+            "sort_order": 20,
+            "active": True,
+            "definition_provenance": "CATALOG_CATEGORY",
+        },
     ]
-    # categories.json assignments are injected via mutate after build_package_zip files.
+    assignments = [
+        {
+            "table_key": "DEMIS_OWNER.TB_ADM_HIST",
+            "category_key": "admission",
+            "is_primary": True,
+            "assignment_source": "MANUAL",
+            "confidence": None,
+            "note": "primary admission table",
+        },
+        {
+            "table_key": "DEMIS_OWNER.TB_WARD",
+            "category_key": "ward",
+            "is_primary": True,
+            "assignment_source": "AUTO",
+            "confidence": 0.9,
+            "note": None,
+        },
+    ]
     return {
         "tables": tables,
         "columns": columns,
         "relations": relations,
         "indexes": indexes,
         "categories": categories,
+        "assignments": assignments,
         "fingerprint": fingerprint,
     }
 
@@ -154,11 +232,7 @@ def _import_and_activate(
     source: dict[str, Any] | None = None,
     fingerprint: str = "fp-query-a",
     activate: bool = True,
-) -> Any:
-    import json
-
-    from tests.catalog_package_fixtures import build_core_documents, build_package_zip as _build
-
+) -> CatalogImportRevision:
     meta = _query_catalog_docs(fingerprint=fingerprint)
     files = build_core_documents(
         source=source or SOURCE_A,
@@ -170,25 +244,12 @@ def _import_and_activate(
         categories=meta["categories"],
     )
     categories_payload = json.loads(files["categories.json"])
-    categories_payload["table_assignments"] = [
-        {
-            "category_id": "admission",
-            "schema": "DEMIS_OWNER",
-            "table": "TB_ADM_HIST",
-            "provenance": "MANUAL",
-        },
-        {
-            "category_id": "ward",
-            "schema": "DEMIS_OWNER",
-            "table": "TB_WARD",
-            "provenance": "AUTO",
-        },
-    ]
+    categories_payload["table_assignments"] = meta["assignments"]
     files["categories.json"] = json.dumps(
         categories_payload, ensure_ascii=False, separators=(",", ":")
     ).encode("utf-8")
 
-    archive = _build(
+    archive = build_package_zip(
         package_readiness="READY",
         source=source or SOURCE_A,
         fingerprint=fingerprint,
@@ -203,7 +264,9 @@ def _import_and_activate(
     return revision
 
 
-def _assert_envelope(payload: dict[str, Any], *, source_name: str, revision_id: int, fingerprint: str) -> None:
+def _assert_envelope(
+    payload: dict[str, Any], *, source_name: str, revision_id: int, fingerprint: str
+) -> None:
     assert payload["source_name"] == source_name
     assert payload["revision_id"] == revision_id
     assert payload["schema_fingerprint"] == fingerprint
@@ -214,9 +277,7 @@ def _assert_envelope(payload: dict[str, Any], *, source_name: str, revision_id: 
     assert "managed_file_digests_json" not in payload
 
 
-def test_active_catalog_entity_lists(
-    db_session: Session, db_client: TestClient
-) -> None:
+def test_active_catalog_entity_lists(db_session: Session, db_client: TestClient) -> None:
     revision = _import_and_activate(db_session, fingerprint="fp-query-list")
     db_session.commit()
     source = SOURCE_A["source_name"]
@@ -235,7 +296,10 @@ def test_active_catalog_entity_lists(
     relations = db_client.get(f"/api/v1/catalog/active/{source}/relations")
     assert relations.status_code == 200
     assert relations.json()["total"] == 2
-    assert relations.json()["items"][0]["columns"][0]["column"] == "WARD_CD"
+    adm_rel = next(
+        item for item in relations.json()["items"] if item["name"] == "FK_ADM_WARD"
+    )
+    assert adm_rel["columns"] == [{"column": "WARD_CD", "referenced_column": "WARD_CD"}]
 
     indexes = db_client.get(f"/api/v1/catalog/active/{source}/indexes")
     assert indexes.status_code == 200
@@ -245,7 +309,9 @@ def test_active_catalog_entity_lists(
     categories = db_client.get(f"/api/v1/catalog/active/{source}/categories")
     assert categories.status_code == 200
     assert categories.json()["total"] == 2
-    assert categories.json()["items"][0]["assignments"]
+    assignment = categories.json()["items"][0]["assignments"][0]
+    assert assignment["provenance"] in {"MANUAL", "AUTO"}
+    assert "is_primary" in assignment
 
 
 def test_active_missing_and_inactive_revision(
@@ -260,33 +326,37 @@ def test_active_missing_and_inactive_revision(
     response = db_client.get(f"/api/v1/catalog/active/{SOURCE_A['source_name']}/tables")
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == CatalogQueryErrorCode.ACTIVE_REVISION_NOT_FOUND
-    # Import history still works for inactive revision.
     detail = db_client.get(f"/api/v1/catalog/imports/{revision.id}")
     assert detail.status_code == 200
 
 
-def test_tables_and_columns_q_search(db_session: Session, db_client: TestClient) -> None:
+def test_producer_comment_q_search_regressions(
+    db_session: Session, db_client: TestClient
+) -> None:
     revision = _import_and_activate(db_session, fingerprint="fp-search")
     db_session.commit()
     source = SOURCE_A["source_name"]
 
+    by_table_comment = db_client.get(
+        f"/api/v1/catalog/active/{source}/tables",
+        params={"q": "환자 입원 이력"},
+    )
+    assert by_table_comment.status_code == 200
+    assert by_table_comment.json()["total"] == 1
+    assert by_table_comment.json()["items"][0]["name"] == "TB_ADM_HIST"
+
     by_name = db_client.get(f"/api/v1/catalog/active/{source}/tables", params={"q": "ward"})
-    assert by_name.status_code == 200
     assert by_name.json()["total"] == 1
     assert by_name.json()["items"][0]["name"] == "TB_WARD"
 
-    by_comment = db_client.get(
-        f"/api/v1/catalog/active/{source}/tables", params={"q": "입원 이력"}
-    )
-    assert by_comment.json()["total"] == 1
-    assert by_comment.json()["items"][0]["name"] == "TB_ADM_HIST"
-
     col_q = db_client.get(
-        f"/api/v1/catalog/active/{source}/columns", params={"q": "병동 코드"}
+        f"/api/v1/catalog/active/{source}/columns",
+        params={"q": "입원 병동 코드"},
     )
     assert col_q.status_code == 200
-    names = {item["name"] for item in col_q.json()["items"]}
-    assert "WARD_CD" in names
+    assert col_q.json()["total"] == 1
+    assert col_q.json()["items"][0]["name"] == "WARD_CD"
+    assert col_q.json()["items"][0]["table_name"] == "TB_ADM_HIST"
     _assert_envelope(
         col_q.json(), source_name=source, revision_id=revision.id, fingerprint="fp-search"
     )
@@ -318,12 +388,18 @@ def test_filters_pagination_sort_and_detail(
     )
     assert cols.json()["total"] == 2
     assert [c["name"] for c in cols.json()["items"]] == ["ADM_ID", "WARD_CD"]
+    assert cols.json()["items"][1]["ordinal"] == 2
+    assert cols.json()["items"][1]["is_primary_key"] is False
 
     rel_src = db_client.get(
         f"/api/v1/catalog/active/{source}/relations",
         params={"table_name": "TB_ADM_HIST", "schema_name": "DEMIS_OWNER"},
     )
     assert rel_src.json()["total"] == 1
+    assert rel_src.json()["items"][0]["name"] == "FK_ADM_WARD"
+    assert rel_src.json()["items"][0]["columns"] == [
+        {"column": "WARD_CD", "referenced_column": "WARD_CD"}
+    ]
 
     rel_tgt = db_client.get(
         f"/api/v1/catalog/active/{source}/relations",
@@ -333,10 +409,11 @@ def test_filters_pagination_sort_and_detail(
 
     idx = db_client.get(
         f"/api/v1/catalog/active/{source}/indexes",
-        params={"table_name": "TB_ADM_HIST", "unique": True},
+        params={"schema_name": "DEMIS_OWNER", "table_name": "TB_ADM_HIST", "unique": True},
     )
     assert idx.json()["total"] == 1
     assert idx.json()["items"][0]["name"] == "PK_ADM"
+    assert idx.json()["items"][0]["method"] == "BTREE"
 
     cat_q = db_client.get(
         f"/api/v1/catalog/active/{source}/categories",
@@ -344,6 +421,9 @@ def test_filters_pagination_sort_and_detail(
     )
     assert cat_q.json()["total"] == 1
     assert cat_q.json()["items"][0]["id"] == "admission"
+    assert cat_q.json()["items"][0]["name"] == "Admission"
+    assert cat_q.json()["items"][0]["assignments"][0]["table_name"] == "TB_ADM_HIST"
+    assert cat_q.json()["items"][0]["assignments"][0]["provenance"] == "MANUAL"
 
     page = db_client.get(
         f"/api/v1/catalog/active/{source}/tables",
@@ -355,7 +435,6 @@ def test_filters_pagination_sort_and_detail(
     assert page.json()["offset"] == 1
     assert len(page.json()["items"]) == 1
 
-    # Deterministic sort: OTHER_OWNER before DEMIS? casefold schema then name.
     all_tables = db_client.get(f"/api/v1/catalog/active/{source}/tables").json()["items"]
     keys = [(t["schema_name"], t["name"]) for t in all_tables]
     assert keys == sorted(keys, key=lambda x: (x[0].casefold(), x[1].casefold()))
@@ -365,6 +444,7 @@ def test_filters_pagination_sort_and_detail(
     )
     assert detail.status_code == 200
     assert detail.json()["item"]["name"] == "TB_ADM_HIST"
+    assert detail.json()["item"]["comment"] == "환자 입원 이력"
     assert detail.json()["revision_id"] == revision.id
 
     missing = db_client.get(
@@ -386,15 +466,32 @@ def test_revision_switch_updates_query_results(
     assert before["total"] == 3
     old_tables_json = copy.deepcopy(rev1.tables_json)
 
-    # Second revision with a single table.
-    from tests.catalog_package_fixtures import build_core_documents, build_package_zip
-    import json
-
     files = build_core_documents(
         source=SOURCE_A,
         fingerprint="fp-sw-q2",
-        tables=[{"schema": "DEMIS_OWNER", "name": "ONLY_ONE", "comment": "solo"}],
-        columns=[{"schema": "DEMIS_OWNER", "table": "ONLY_ONE", "name": "ID", "ordinal": 1}],
+        tables=[
+            {
+                "table_key": "DEMIS_OWNER.ONLY_ONE",
+                "schema_name": "DEMIS_OWNER",
+                "table_name": "ONLY_ONE",
+                "table_type": "TABLE",
+                "table_comment": "solo",
+                "categories": [],
+            }
+        ],
+        columns=[
+            {
+                "column_key": "DEMIS_OWNER.ONLY_ONE.ID",
+                "table_key": "DEMIS_OWNER.ONLY_ONE",
+                "ordinal_position": 1,
+                "column_name": "ID",
+                "data_type": "NUMBER",
+                "nullable": False,
+                "primary_key": True,
+                "unique": True,
+                "column_comment": None,
+            }
+        ],
         relations=[],
         indexes=[],
         categories=[],
@@ -417,8 +514,6 @@ def test_revision_switch_updates_query_results(
     assert after["items"][0]["name"] == "ONLY_ONE"
 
     db_session.expire_all()
-    from app.models.catalog_import import CatalogImportRevision
-
     still_old = db_session.get(CatalogImportRevision, rev1.id)
     assert still_old is not None
     assert still_old.tables_json == old_tables_json
@@ -426,13 +521,19 @@ def test_revision_switch_updates_query_results(
 
 def test_cross_source_isolation(db_session: Session, db_client: TestClient) -> None:
     rev_a = _import_and_activate(db_session, source=SOURCE_A, fingerprint="fp-iso-qa")
-    # Source B with different table set.
-    from tests.catalog_package_fixtures import build_core_documents, build_package_zip
-
     files_b = build_core_documents(
         source=SOURCE_B,
         fingerprint="fp-iso-qb",
-        tables=[{"schema": "DEMIS_OTHER", "name": "TB_B_ONLY", "comment": "b only"}],
+        tables=[
+            {
+                "table_key": "DEMIS_OTHER.TB_B_ONLY",
+                "schema_name": "DEMIS_OTHER",
+                "table_name": "TB_B_ONLY",
+                "table_type": "TABLE",
+                "table_comment": "b only",
+                "categories": [],
+            }
+        ],
         columns=[],
         relations=[],
         indexes=[],

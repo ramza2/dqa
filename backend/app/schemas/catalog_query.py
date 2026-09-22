@@ -87,6 +87,9 @@ class CatalogCategoryAssignment(BaseModel):
     schema_name: str | None = None
     table_name: str
     provenance: str | None = None
+    is_primary: bool | None = None
+    confidence: float | int | str | None = None
+    note: str | None = None
 
 
 class CatalogCategoryItem(BaseModel):

@@ -266,8 +266,23 @@ def _text(value: Any) -> str | None:
     return str(value)
 
 
+def _split_table_key(value: Any) -> tuple[str | None, str | None]:
+    """Parse producer `SCHEMA.TABLE` keys (Oracle-style). Invalid values → (None, None)."""
+    if not isinstance(value, str):
+        return None, None
+    text = value.strip()
+    if "." not in text:
+        return None, None
+    schema, table = text.rsplit(".", 1)
+    schema = schema.strip()
+    table = table.strip()
+    if not schema or not table:
+        return None, None
+    return schema, table
+
+
 def _comment_from(raw: dict[str, Any]) -> str | None:
-    for key in ("comment", "description", "db_comment"):
+    for key in ("table_comment", "column_comment", "comment", "description", "db_comment"):
         if key in raw and raw[key] is not None:
             return _text(raw[key])
     return None
@@ -307,6 +322,15 @@ def _int_from(raw: dict[str, Any], *keys: str) -> int | None:
     return None
 
 
+def _confidence_from(raw: dict[str, Any]) -> float | int | str | None:
+    if "confidence" not in raw:
+        return None
+    value = raw.get("confidence")
+    if value is None or isinstance(value, (int, float, str)):
+        return value
+    return None
+
+
 def _matches_q(q: str, *candidates: str | None) -> bool:
     needle = q.casefold()
     for candidate in candidates:
@@ -315,8 +339,26 @@ def _matches_q(q: str, *candidates: str | None) -> bool:
     return False
 
 
-def _table_key(schema: str | None, table: str) -> tuple[str, str]:
+def _lookup_key(schema: str | None, table: str) -> tuple[str, str]:
     return ((schema or "").casefold(), table.casefold())
+
+
+def _assignment_schema_table(raw: dict[str, Any]) -> tuple[str | None, str | None]:
+    schema, table = _split_table_key(raw.get("table_key"))
+    if table:
+        return schema, table
+    table = _text(raw.get("table") or raw.get("table_name"))
+    schema = _text(raw.get("schema") or raw.get("schema_name"))
+    return schema, table
+
+
+def _assignment_category_id(raw: dict[str, Any]) -> str | None:
+    return _text(
+        raw.get("category_key")
+        or raw.get("category_id")
+        or raw.get("category")
+        or raw.get("id")
+    )
 
 
 def _table_category_index(categories_doc: Any) -> dict[tuple[str, str], list[str]]:
@@ -329,12 +371,11 @@ def _table_category_index(categories_doc: Any) -> dict[tuple[str, str], list[str
     for raw in assignments:
         if not isinstance(raw, dict):
             continue
-        table = _text(raw.get("table") or raw.get("table_name"))
-        category_id = _text(raw.get("category_id") or raw.get("category") or raw.get("id"))
+        schema, table = _assignment_schema_table(raw)
+        category_id = _assignment_category_id(raw)
         if not table or not category_id:
             continue
-        schema = _text(raw.get("schema") or raw.get("schema_name"))
-        key = _table_key(schema, table)
+        key = _lookup_key(schema, table)
         index.setdefault(key, []).append(category_id)
     return index
 
@@ -351,15 +392,22 @@ def _assignments_by_category(
     for raw in assignments:
         if not isinstance(raw, dict):
             continue
-        table = _text(raw.get("table") or raw.get("table_name"))
-        category_id = _text(raw.get("category_id") or raw.get("category") or raw.get("id"))
+        schema, table = _assignment_schema_table(raw)
+        category_id = _assignment_category_id(raw)
         if not table or not category_id:
             continue
         result.setdefault(category_id, []).append(
             CatalogCategoryAssignment(
-                schema_name=_text(raw.get("schema") or raw.get("schema_name")),
+                schema_name=schema,
                 table_name=table,
-                provenance=_text(raw.get("provenance") or raw.get("source")),
+                provenance=_text(
+                    raw.get("assignment_source")
+                    or raw.get("provenance")
+                    or raw.get("source")
+                ),
+                is_primary=_bool_from(raw, "is_primary"),
+                confidence=_confidence_from(raw),
+                note=_text(raw.get("note")),
             )
         )
     return result
@@ -369,14 +417,18 @@ def _map_table(
     raw: dict[str, Any],
     assignments: dict[tuple[str, str], list[str]],
 ) -> CatalogTableItem:
-    schema = _text(raw.get("schema") or raw.get("schema_name")) or ""
-    name = _text(raw.get("name") or raw.get("table") or raw.get("table_name")) or ""
+    schema_from_key, table_from_key = _split_table_key(raw.get("table_key"))
+    schema = _text(raw.get("schema_name") or raw.get("schema")) or schema_from_key or ""
+    name = (
+        _text(raw.get("table_name") or raw.get("name") or raw.get("table"))
+        or table_from_key
+        or ""
+    )
     category_ids: list[str] = []
     raw_categories = raw.get("categories") or raw.get("category_ids")
     if isinstance(raw_categories, list):
         category_ids.extend(_text(c) for c in raw_categories if _text(c))
-    category_ids.extend(assignments.get(_table_key(schema, name), []))
-    # Preserve order, drop duplicates.
+    category_ids.extend(assignments.get(_lookup_key(schema, name), []))
     seen: set[str] = set()
     unique_ids: list[str] = []
     for cid in category_ids:
@@ -393,60 +445,87 @@ def _map_table(
 
 
 def _map_column(raw: dict[str, Any]) -> CatalogColumnItem:
+    schema_from_key, table_from_key = _split_table_key(raw.get("table_key"))
     return CatalogColumnItem(
-        schema_name=_text(raw.get("schema") or raw.get("schema_name")),
-        table_name=_text(raw.get("table") or raw.get("table_name")) or "",
-        name=_text(raw.get("name") or raw.get("column") or raw.get("column_name")) or "",
-        ordinal=_int_from(raw, "ordinal", "ordinal_position", "position"),
+        schema_name=_text(raw.get("schema_name") or raw.get("schema")) or schema_from_key,
+        table_name=_text(raw.get("table_name") or raw.get("table")) or table_from_key or "",
+        name=_text(raw.get("column_name") or raw.get("name") or raw.get("column")) or "",
+        ordinal=_int_from(raw, "ordinal_position", "ordinal", "position"),
         data_type=_text(raw.get("data_type") or raw.get("type")),
         comment=_comment_from(raw),
         nullable=_bool_from(raw, "nullable", "is_nullable"),
-        is_primary_key=_bool_from(raw, "is_primary_key", "primary_key", "pk"),
-        is_unique=_bool_from(raw, "is_unique", "unique"),
-        default=_text(raw.get("default") or raw.get("default_value")),
+        is_primary_key=_bool_from(raw, "primary_key", "is_primary_key", "pk"),
+        is_unique=_bool_from(raw, "unique", "is_unique"),
+        default=_text(raw.get("default_value") or raw.get("default")),
     )
 
 
 def _map_relation(raw: dict[str, Any]) -> CatalogRelationItem:
+    source_schema, source_table = _split_table_key(raw.get("source_table_key"))
+    target_schema, target_table = _split_table_key(raw.get("target_table_key"))
+
     columns: list[CatalogRelationColumnMapping] = []
-    raw_columns = raw.get("columns") or raw.get("column_mappings") or raw.get("mappings")
+    raw_columns = (
+        raw.get("column_mapping")
+        or raw.get("columns")
+        or raw.get("column_mappings")
+        or raw.get("mappings")
+    )
+    mapping_entries: list[tuple[int, CatalogRelationColumnMapping]] = []
     if isinstance(raw_columns, list):
-        for entry in raw_columns:
-            if isinstance(entry, dict):
-                col = _text(entry.get("column") or entry.get("source_column") or entry.get("from"))
-                ref = _text(
-                    entry.get("referenced_column")
-                    or entry.get("target_column")
-                    or entry.get("to")
-                )
-                if col and ref:
-                    columns.append(
-                        CatalogRelationColumnMapping(column=col, referenced_column=ref)
-                    )
-            elif isinstance(entry, str):
-                # Single-name entries are not enough for FK mapping; skip.
+        for index, entry in enumerate(raw_columns):
+            if not isinstance(entry, dict):
                 continue
+            col = _text(
+                entry.get("source_column")
+                or entry.get("column")
+                or entry.get("from")
+            )
+            ref = _text(
+                entry.get("target_column")
+                or entry.get("referenced_column")
+                or entry.get("to")
+            )
+            if not col or not ref:
+                continue
+            ordinal = _int_from(entry, "ordinal_position", "ordinal", "position")
+            mapping_entries.append(
+                (
+                    ordinal if ordinal is not None else index,
+                    CatalogRelationColumnMapping(column=col, referenced_column=ref),
+                )
+            )
+    mapping_entries.sort(key=lambda item: item[0])
+    columns = [item[1] for item in mapping_entries]
+
     return CatalogRelationItem(
-        name=_text(raw.get("name") or raw.get("constraint_name")),
-        schema_name=_text(raw.get("schema") or raw.get("schema_name") or raw.get("source_schema")),
-        table_name=_text(raw.get("table") or raw.get("table_name") or raw.get("source_table"))
+        name=_text(raw.get("constraint_name") or raw.get("name")),
+        schema_name=_text(
+            raw.get("schema_name") or raw.get("schema") or raw.get("source_schema")
+        )
+        or source_schema,
+        table_name=_text(raw.get("table_name") or raw.get("table") or raw.get("source_table"))
+        or source_table
         or "",
         referenced_schema_name=_text(
             raw.get("referenced_schema")
             or raw.get("referenced_schema_name")
             or raw.get("target_schema")
-        ),
+        )
+        or target_schema,
         referenced_table_name=_text(
             raw.get("referenced_table")
             or raw.get("referenced_table_name")
             or raw.get("target_table")
         )
+        or target_table
         or "",
         columns=columns,
     )
 
 
 def _map_index(raw: dict[str, Any]) -> CatalogIndexItem:
+    schema_from_key, table_from_key = _split_table_key(raw.get("table_key"))
     columns: list[str] = []
     raw_columns = raw.get("columns") or raw.get("column_names")
     if isinstance(raw_columns, list):
@@ -458,12 +537,12 @@ def _map_index(raw: dict[str, Any]) -> CatalogIndexItem:
                 if name:
                     columns.append(name)
     return CatalogIndexItem(
-        name=_text(raw.get("name") or raw.get("index_name")) or "",
-        schema_name=_text(raw.get("schema") or raw.get("schema_name")),
-        table_name=_text(raw.get("table") or raw.get("table_name")) or "",
+        name=_text(raw.get("index_name") or raw.get("name")) or "",
+        schema_name=_text(raw.get("schema_name") or raw.get("schema")) or schema_from_key,
+        table_name=_text(raw.get("table_name") or raw.get("table")) or table_from_key or "",
         unique=_bool_from(raw, "unique", "is_unique"),
         columns=columns,
-        method=_text(raw.get("method") or raw.get("index_type") or raw.get("type")),
+        method=_text(raw.get("index_method") or raw.get("method") or raw.get("index_type") or raw.get("type")),
     )
 
 
@@ -471,10 +550,10 @@ def _map_category(
     raw: dict[str, Any],
     assignments_by_category: dict[str, list[CatalogCategoryAssignment]],
 ) -> CatalogCategoryItem:
-    category_id = _text(raw.get("id") or raw.get("category_id")) or ""
+    category_id = _text(raw.get("category_key") or raw.get("id") or raw.get("category_id")) or ""
     return CatalogCategoryItem(
         id=category_id,
-        name=_text(raw.get("name") or raw.get("label")),
+        name=_text(raw.get("category_name") or raw.get("name") or raw.get("label")),
         description=_comment_from(raw),
         assignments=list(assignments_by_category.get(category_id, [])),
     )
