@@ -3,6 +3,11 @@ import * as catalogApi from "../api/catalog";
 import { useDebouncedValue } from "./useDebouncedValue";
 import { mergeDirectedRelations } from "../utils/relations";
 import {
+  assertSameSnapshot,
+  matchesActive,
+  type QueryMeta,
+} from "../utils/revision";
+import {
   CatalogApiError,
   type CatalogActiveSummary,
   type CatalogCategoryItem,
@@ -20,10 +25,7 @@ export interface LoadState {
   httpStatus: number | null;
 }
 
-interface QueryMeta {
-  revision_id: number;
-  schema_fingerprint: string;
-}
+const STALE_MESSAGE = "Catalog revision changed. Refreshing metadata…";
 
 function errorState(err: unknown): LoadState {
   if (err instanceof CatalogApiError) {
@@ -40,6 +42,10 @@ function errorState(err: unknown): LoadState {
     code: null,
     httpStatus: null,
   };
+}
+
+function tableKey(schemaName: string, tableName: string): string {
+  return `${schemaName}.${tableName}`;
 }
 
 export function useCatalogExplorer() {
@@ -84,38 +90,50 @@ export function useCatalogExplorer() {
 
   const [staleWarning, setStaleWarning] = useState<string | null>(null);
   const refreshGuard = useRef(false);
+  const refreshedForActiveRevision = useRef<number | null>(null);
+  const convergedLoads = useRef({ tables: false, categories: false });
+  const selectedSourceRef = useRef(selectedSource);
+  selectedSourceRef.current = selectedSource;
 
   const selectedTable = useMemo(() => {
     if (!selectedTableKey) {
       return null;
     }
-    return tables.find((t) => `${t.schema_name}.${t.name}` === selectedTableKey) ?? null;
+    return tables.find((t) => tableKey(t.schema_name, t.name) === selectedTableKey) ?? null;
   }, [selectedTableKey, tables]);
 
   const refreshActive = useCallback(async (sourceName: string) => {
     const summary = await catalogApi.getActiveCatalog(sourceName);
+    if (selectedSourceRef.current !== sourceName) {
+      return summary;
+    }
     setActive(summary);
     return summary;
   }, []);
 
-  const checkRevisionConsistency = useCallback(
-    async (meta: QueryMeta, sourceName: string, current: CatalogActiveSummary | null) => {
-      if (!current || current.source_name !== sourceName) {
-        return;
-      }
-      if (
-        meta.revision_id === current.revision_id &&
-        meta.schema_fingerprint === current.schema_fingerprint
-      ) {
-        setStaleWarning(null);
-        return;
-      }
+  const clearWarningIfConverged = useCallback(() => {
+    if (convergedLoads.current.tables && convergedLoads.current.categories) {
+      setStaleWarning(null);
+    }
+  }, []);
+
+  const handleStaleSnapshot = useCallback(
+    async (sourceName: string, currentActiveRevision: number) => {
+      convergedLoads.current = { tables: false, categories: false };
+      setStaleWarning(STALE_MESSAGE);
       if (refreshGuard.current) {
-        setStaleWarning("Catalog revision changed. Refreshing metadata…");
+        return;
+      }
+      if (selectedSourceRef.current !== sourceName) {
+        return;
+      }
+      // One guarded refresh per observed active revision to avoid infinite loops
+      // when query responses remain stale after refresh.
+      if (refreshedForActiveRevision.current === currentActiveRevision) {
         return;
       }
       refreshGuard.current = true;
-      setStaleWarning("Catalog revision changed. Refreshing metadata…");
+      refreshedForActiveRevision.current = currentActiveRevision;
       try {
         await refreshActive(sourceName);
       } finally {
@@ -123,6 +141,25 @@ export function useCatalogExplorer() {
       }
     },
     [refreshActive],
+  );
+
+  const acceptSnapshot = useCallback(
+    async (
+      meta: QueryMeta,
+      sourceName: string,
+      current: CatalogActiveSummary,
+    ): Promise<boolean> => {
+      if (selectedSourceRef.current !== sourceName) {
+        return false;
+      }
+      if (!matchesActive(meta, current, sourceName)) {
+        await handleStaleSnapshot(sourceName, current.revision_id);
+        return false;
+      }
+      refreshedForActiveRevision.current = null;
+      return true;
+    },
+    [handleStaleSnapshot],
   );
 
   const loadSources = useCallback(async () => {
@@ -160,6 +197,7 @@ export function useCatalogExplorer() {
     void loadSources();
   }, [loadSources]);
 
+  // Source change: reset selection and resolve the active pointer for that source only.
   useEffect(() => {
     if (!selectedSource) {
       setActive(null);
@@ -170,6 +208,7 @@ export function useCatalogExplorer() {
       setRelations([]);
       setIndexes([]);
       setCategories([]);
+      setStaleWarning(null);
       return;
     }
 
@@ -179,40 +218,24 @@ export function useCatalogExplorer() {
     setColumns([]);
     setRelations([]);
     setIndexes([]);
+    setCategories([]);
     setTableQuery("");
+    setStaleWarning(null);
+    setActive(null);
+    refreshedForActiveRevision.current = null;
+    convergedLoads.current = { tables: false, categories: false };
 
     (async () => {
       try {
         const summary = await catalogApi.getActiveCatalog(selectedSource);
-        if (!cancelled) {
-          setActive(summary);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setActive(null);
-          setSourcesState(errorState(err));
-        }
-      }
-
-      try {
-        if (!cancelled) {
-          setCategoriesState({ status: "loading", message: null, code: null, httpStatus: null });
-        }
-        const response = await catalogApi.listCategories(selectedSource, { limit: 500 });
-        if (cancelled) {
+        if (cancelled || selectedSourceRef.current !== selectedSource) {
           return;
         }
-        setCategories(response.items);
-        setCategoriesState(
-          response.items.length === 0
-            ? { status: "empty", message: "No categories in this Catalog", code: null, httpStatus: null }
-            : { status: "ready", message: null, code: null, httpStatus: null },
-        );
-        await checkRevisionConsistency(response, selectedSource, null);
+        setActive(summary);
       } catch (err) {
-        if (!cancelled) {
-          setCategories([]);
-          setCategoriesState(errorState(err));
+        if (!cancelled && selectedSourceRef.current === selectedSource) {
+          setActive(null);
+          setSourcesState(errorState(err));
         }
       }
     })();
@@ -220,33 +243,55 @@ export function useCatalogExplorer() {
     return () => {
       cancelled = true;
     };
-  }, [selectedSource, checkRevisionConsistency]);
+  }, [selectedSource]);
 
+  // Tables: reload whenever active revision (or search) changes.
   useEffect(() => {
-    if (!selectedSource) {
+    if (!selectedSource || !active || active.source_name !== selectedSource) {
       return;
     }
     let cancelled = false;
+    const expectedSource = selectedSource;
+    const expectedActive = active;
     setTablesState({ status: "loading", message: null, code: null, httpStatus: null });
 
     (async () => {
       try {
-        const response = await catalogApi.listTables(selectedSource, {
+        const response = await catalogApi.listTables(expectedSource, {
           q: debouncedQuery || undefined,
           limit: 500,
         });
-        if (cancelled) {
+        if (cancelled || selectedSourceRef.current !== expectedSource) {
+          return;
+        }
+        const accepted = await acceptSnapshot(response, expectedSource, expectedActive);
+        if (!accepted || cancelled || selectedSourceRef.current !== expectedSource) {
           return;
         }
         setTables(response.items);
+        convergedLoads.current.tables = true;
+        clearWarningIfConverged();
         setTablesState(
           response.items.length === 0
-            ? { status: "empty", message: "No tables match this search", code: null, httpStatus: null }
+            ? {
+                status: "empty",
+                message: "No tables match this search",
+                code: null,
+                httpStatus: null,
+              }
             : { status: "ready", message: null, code: null, httpStatus: null },
         );
-        await checkRevisionConsistency(response, selectedSource, active);
+        setSelectedTableKey((prev) => {
+          if (!prev) {
+            return null;
+          }
+          const stillThere = response.items.some(
+            (item) => tableKey(item.schema_name, item.name) === prev,
+          );
+          return stillThere ? prev : null;
+        });
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && selectedSourceRef.current === expectedSource) {
           setTables([]);
           setTablesState(errorState(err));
         }
@@ -256,10 +301,58 @@ export function useCatalogExplorer() {
     return () => {
       cancelled = true;
     };
-  }, [selectedSource, debouncedQuery, active, checkRevisionConsistency]);
+  }, [selectedSource, debouncedQuery, active, acceptSnapshot, clearWarningIfConverged]);
 
+  // Categories: same active revision dependency as tables.
   useEffect(() => {
-    if (!selectedSource || !selectedTable) {
+    if (!selectedSource || !active || active.source_name !== selectedSource) {
+      return;
+    }
+    let cancelled = false;
+    const expectedSource = selectedSource;
+    const expectedActive = active;
+    setCategoriesState({ status: "loading", message: null, code: null, httpStatus: null });
+
+    (async () => {
+      try {
+        const response = await catalogApi.listCategories(expectedSource, { limit: 500 });
+        if (cancelled || selectedSourceRef.current !== expectedSource) {
+          return;
+        }
+        const accepted = await acceptSnapshot(response, expectedSource, expectedActive);
+        if (!accepted || cancelled || selectedSourceRef.current !== expectedSource) {
+          // Do not commit stale category rows.
+          return;
+        }
+        setCategories(response.items);
+        convergedLoads.current.categories = true;
+        clearWarningIfConverged();
+        setCategoriesState(
+          response.items.length === 0
+            ? {
+                status: "empty",
+                message: "No categories in this Catalog",
+                code: null,
+                httpStatus: null,
+              }
+            : { status: "ready", message: null, code: null, httpStatus: null },
+        );
+      } catch (err) {
+        if (!cancelled && selectedSourceRef.current === expectedSource) {
+          setCategories([]);
+          setCategoriesState(errorState(err));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSource, active, acceptSnapshot, clearWarningIfConverged]);
+
+  // Detail batch: all responses must share one snapshot, then match active.
+  useEffect(() => {
+    if (!selectedSource || !active || active.source_name !== selectedSource || !selectedTable) {
       setDetail(null);
       setColumns([]);
       setRelations([]);
@@ -269,6 +362,9 @@ export function useCatalogExplorer() {
     }
 
     let cancelled = false;
+    const expectedSource = selectedSource;
+    const expectedActive = active;
+    const expectedTable = selectedTable;
     setDetailState({ status: "loading", message: null, code: null, httpStatus: null });
 
     (async () => {
@@ -276,47 +372,66 @@ export function useCatalogExplorer() {
         const [detailResponse, columnsResponse, outgoing, incoming, indexesResponse] =
           await Promise.all([
             catalogApi.getTableDetail(
-              selectedSource,
-              selectedTable.schema_name,
-              selectedTable.name,
+              expectedSource,
+              expectedTable.schema_name,
+              expectedTable.name,
             ),
-            catalogApi.listColumns(selectedSource, {
-              schema_name: selectedTable.schema_name,
-              table_name: selectedTable.name,
+            catalogApi.listColumns(expectedSource, {
+              schema_name: expectedTable.schema_name,
+              table_name: expectedTable.name,
               limit: 500,
             }),
-            catalogApi.listRelations(selectedSource, {
-              schema_name: selectedTable.schema_name,
-              table_name: selectedTable.name,
+            catalogApi.listRelations(expectedSource, {
+              schema_name: expectedTable.schema_name,
+              table_name: expectedTable.name,
               limit: 500,
             }),
-            catalogApi.listRelations(selectedSource, {
-              referenced_table_name: selectedTable.name,
+            catalogApi.listRelations(expectedSource, {
+              referenced_table_name: expectedTable.name,
               limit: 500,
             }),
-            catalogApi.listIndexes(selectedSource, {
-              schema_name: selectedTable.schema_name,
-              table_name: selectedTable.name,
+            catalogApi.listIndexes(expectedSource, {
+              schema_name: expectedTable.schema_name,
+              table_name: expectedTable.name,
               limit: 500,
             }),
           ]);
-        if (cancelled) {
+
+        if (cancelled || selectedSourceRef.current !== expectedSource) {
           return;
         }
+
+        const batchMeta = assertSameSnapshot([
+          detailResponse,
+          columnsResponse,
+          outgoing,
+          incoming,
+          indexesResponse,
+        ]);
+        if (!batchMeta) {
+          await handleStaleSnapshot(expectedSource, expectedActive.revision_id);
+          return;
+        }
+
+        const accepted = await acceptSnapshot(batchMeta, expectedSource, expectedActive);
+        if (!accepted || cancelled || selectedSourceRef.current !== expectedSource) {
+          return;
+        }
+
         setDetail(detailResponse.item);
         setColumns(columnsResponse.items);
         setRelations(
           mergeDirectedRelations(
             outgoing.items,
             incoming.items,
-            selectedTable.schema_name,
+            expectedTable.schema_name,
           ),
         );
         setIndexes(indexesResponse.items);
         setDetailState({ status: "ready", message: null, code: null, httpStatus: null });
-        await checkRevisionConsistency(detailResponse, selectedSource, active);
+        clearWarningIfConverged();
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && selectedSourceRef.current === expectedSource) {
           setDetail(null);
           setColumns([]);
           setRelations([]);
@@ -329,14 +444,14 @@ export function useCatalogExplorer() {
     return () => {
       cancelled = true;
     };
-  }, [selectedSource, selectedTable, active, checkRevisionConsistency]);
+  }, [selectedSource, selectedTable, active, acceptSnapshot, handleStaleSnapshot, clearWarningIfConverged]);
 
   const selectSource = (sourceName: string) => {
     setSelectedSource(sourceName);
   };
 
   const selectTable = (schemaName: string, tableName: string) => {
-    setSelectedTableKey(`${schemaName}.${tableName}`);
+    setSelectedTableKey(tableKey(schemaName, tableName));
   };
 
   return {
