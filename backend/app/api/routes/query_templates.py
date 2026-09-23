@@ -22,6 +22,7 @@ from app.schemas.query_template import (
     QueryTemplateUpdateRequest,
     QueryTemplateVersionListResponse,
 )
+from app.schemas.sql_safety import QueryTemplateSqlSafetyResponse
 from app.services.query_template import (
     approve_query_template,
     create_query_template,
@@ -30,6 +31,7 @@ from app.services.query_template import (
     disable_query_template,
     enable_query_template,
     get_query_template,
+    get_query_template_sql_safety,
     list_query_template_review_events,
     list_query_template_versions,
     list_query_templates,
@@ -187,6 +189,17 @@ def list_review_events(
 ) -> QueryTemplateReviewEventListResponse:
     try:
         return list_query_template_review_events(session, template_id)
+    except QueryTemplateError as exc:
+        raise _template_http_error(exc) from exc
+
+
+@router.get("/{template_id}/sql-safety", response_model=QueryTemplateSqlSafetyResponse)
+def get_sql_safety(
+    template_id: int,
+    session: Session = Depends(get_db_session),
+) -> QueryTemplateSqlSafetyResponse:
+    try:
+        return get_query_template_sql_safety(session, template_id)
     except QueryTemplateError as exc:
         raise _template_http_error(exc) from exc
 

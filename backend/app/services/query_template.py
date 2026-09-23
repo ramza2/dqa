@@ -37,8 +37,10 @@ from app.schemas.query_template import (
     QueryTemplateVersionListResponse,
     QueryTemplateVersionView,
 )
+from app.schemas.sql_safety import QueryTemplateSqlSafetyResponse
 from app.services.catalog_active import get_active_catalog
 from app.services.catalog_query import ResolvedActiveRevision, resolve_active_revision
+from app.services.sql_safety import validate_sql_safety
 
 APPROVAL_DRAFT = "DRAFT"
 APPROVAL_IN_REVIEW = "IN_REVIEW"
@@ -144,6 +146,24 @@ def list_query_templates(
 def get_query_template(session: Session, template_id: int) -> QueryTemplateDetail:
     template, version = _require_template_with_current(session, template_id)
     return _to_detail(session, template, version)
+
+
+def get_query_template_sql_safety(
+    session: Session, template_id: int
+) -> QueryTemplateSqlSafetyResponse:
+    """Validate the current version SQL deterministically (not persisted)."""
+    template, version = _require_template_with_current(session, template_id)
+    report = validate_sql_safety(version.sql_text, version.parameter_schema)
+    return QueryTemplateSqlSafetyResponse(
+        template_id=template.id,
+        version_id=version.id,
+        version=version.version,
+        safe=report.safe,
+        statement_count=report.statement_count,
+        referenced_parameters=report.referenced_parameters,
+        declared_parameters=report.declared_parameters,
+        issues=report.issues,
+    )
 
 
 def update_query_template(

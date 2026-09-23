@@ -53,6 +53,16 @@ Validator must reject at least:
 Do not rely on naive substring checks alone in the final validator.
 Use a parser/tokenizer appropriate to the supported SQL dialect plus explicit allow rules.
 
+Application-side SQL Safety Validator is defense in depth only. It does not
+replace the read-only DEMIS account, least-privilege EXECUTE grants, Connection
+Profile enablement, RBAC, or audit. A syntactically safe SELECT can still invoke
+side-effecting functions/packages when privileges allow; those controls remain
+outside the SQL Safety Validator scope.
+
+SQL Safety PASS is independent of Query Template approval/enable flags.
+Future execution must require APPROVED + enabled + Active Catalog compatibility
++ SQL Safety PASS + Connection Profile + RBAC + read-only session + audit.
+
 ## 5. LLM controls
 
 LLM output is untrusted input.
