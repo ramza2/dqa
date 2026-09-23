@@ -132,3 +132,37 @@ class QueryTemplateVersion(Base):
         back_populates="versions",
         foreign_keys=[template_id],
     )
+
+
+class QueryTemplateReviewEvent(Base):
+    """Append-only approval lifecycle audit row (no update/delete API)."""
+
+    __tablename__ = "query_template_review_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    template_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("query_templates.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("query_template_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    from_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    actor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )

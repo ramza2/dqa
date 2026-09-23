@@ -383,3 +383,83 @@ class QueryTemplateUpdateRequest(BaseModel):
         if not self.model_fields_set:
             raise ValueError("at least one field must be provided")
         return self
+
+
+class QueryTemplateNoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    note: str | None = None
+
+
+class QueryTemplateRejectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    note: str
+
+    @field_validator("note")
+    @classmethod
+    def note_required(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("reject note must not be blank")
+        return cleaned
+
+
+class QueryTemplateNewVersionRequest(BaseModel):
+    """Optional authoring overrides when creating a new DRAFT version."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sql_text: str | None = None
+    parameter_schema: list[QueryTemplateParameter] | None = None
+    row_limit: int | None = Field(default=None, gt=0)
+    timeout_seconds: int | None = Field(default=None, gt=0)
+
+    @field_validator("sql_text")
+    @classmethod
+    def sql_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if not value.strip():
+            raise ValueError("sql_text must not be blank")
+        return value
+
+    @field_validator("parameter_schema")
+    @classmethod
+    def unique_parameter_names(
+        cls, value: list[QueryTemplateParameter] | None
+    ) -> list[QueryTemplateParameter] | None:
+        if value is None:
+            return value
+        seen: set[str] = set()
+        for param in value:
+            key = param.name.casefold()
+            if key in seen:
+                raise ValueError(f"duplicate parameter name: {param.name}")
+            seen.add(key)
+        return value
+
+
+class QueryTemplateReviewEventView(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    template_id: int
+    version_id: int
+    from_status: ApprovalStatus
+    to_status: ApprovalStatus
+    actor: str | None = None
+    note: str | None = None
+    created_at: datetime
+
+
+class QueryTemplateReviewEventListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[QueryTemplateReviewEventView]
+
+
+class QueryTemplateVersionListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[QueryTemplateVersionView]
