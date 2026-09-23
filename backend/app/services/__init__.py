@@ -31,6 +31,7 @@ from app.services.query_template import (
     disable_query_template,
     enable_query_template,
     get_query_template,
+    get_query_template_sql_safety,
     list_query_template_review_events,
     list_query_template_versions,
     list_query_templates,
@@ -38,9 +39,15 @@ from app.services.query_template import (
     submit_query_template_for_review,
     update_query_template,
 )
+from app.services.sql_safety import (
+    SqlSafetyValidationError,
+    require_sql_safe,
+    validate_sql_safety,
+)
 
 __all__ = [
     "ValidatedCatalogPackage",
+    "SqlSafetyValidationError",
     "activate_catalog_revision",
     "approve_query_template",
     "create_query_template",
@@ -51,6 +58,7 @@ __all__ = [
     "get_active_catalog",
     "get_catalog_import",
     "get_query_template",
+    "get_query_template_sql_safety",
     "get_table",
     "import_catalog_package_bytes",
     "list_activation_events",
@@ -65,7 +73,9 @@ __all__ = [
     "list_relations",
     "list_tables",
     "reject_query_template",
+    "require_sql_safe",
     "submit_query_template_for_review",
     "update_query_template",
     "validate_catalog_package_bytes",
+    "validate_sql_safety",
 ]

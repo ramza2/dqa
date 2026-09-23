@@ -134,6 +134,42 @@ Templates must:
 
 If multiple query shapes are required, create multiple approved template versions/templates rather than constructing dynamic SQL freely.
 
+### 4.1 SQL Safety Validator
+
+DQA validates template SQL with a deterministic parser/tokenizer + AST allowlist
+(`sqlglot`, Oracle dialect isolated for current Oracle-style `:named` binds).
+
+Policy highlights:
+- fail-closed on parse/tokenize errors and unsupported top-level commands
+- exactly one statement; leading/intermediate empty statements and repeated
+  trailing terminators are rejected (tokenizer-based; at most one trailing `;`)
+- read-only `SELECT` / `WITH ... SELECT` only (CTE bodies must also be SELECT)
+- reject `FOR UPDATE`, `SELECT INTO`, nested DML/DDL, procedural/admin commands
+- named bound parameters only (`:name`); reject `?`, `$1`, `:1`, `%s`, `%(name)s`,
+  `{{name}}`, `${name}`
+- declared `parameter_schema` names must match referenced binds exactly
+  (case-insensitive; report uses declared canonical names)
+- reject binds used as dynamic schema/table/column identifiers
+
+`validate_sql_safety()` always returns a report (`safe=false` when unsafe).
+`require_sql_safe()` is the future execution-gate helper: it returns the report
+only when safe, otherwise raises `SqlSafetyValidationError` with the typed
+report attached (no full SQL text in the exception message).
+
+`GET /api/v1/query-templates/{id}/sql-safety` uses `validate_sql_safety()` and
+returns a fresh report (`safe`, `issues[]` with typed codes), including
+HTTP 200 + `safe=false` for unsafe SQL. Results are not persisted.
+
+SQL Safety PASS is independent of approval/enable:
+- `APPROVED` ≠ executable
+- `enabled=true` ≠ executable
+- SQL Safety PASS alone is not an execution permission
+
+Application-side SQL safety is defense-in-depth and does **not** replace a
+read-only DEMIS account or least-privilege EXECUTE grants. Syntactic SELECT
+may still call DB functions/packages with side effects when privileges allow;
+function allowlisting is out of scope for this validator.
+
 ## 5. Catalog compatibility
 
 Template validation should resolve referenced tables/columns against the active Catalog where feasible.

@@ -166,13 +166,16 @@ Parameters are bound variables, never string-concatenated into SQL.
 Central deterministic component.
 
 Minimum checks:
-- single statement
+- single statement (no empty/leading/repeated terminators; ≤1 trailing `;`)
 - SELECT-only
 - no DML/DDL/TCL/DCL
 - no procedural block
 - no unapproved template
 - row/timeout limits
 - parameters match declared definitions
+
+`require_sql_safe()` enforces fail-closed (raises on unsafe). Inspection APIs
+may call `validate_sql_safety()` and still return `safe=false` without raising.
 
 The safety gate runs even for approved templates.
 
