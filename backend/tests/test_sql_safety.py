@@ -12,7 +12,11 @@ from app.adapters.catalog.sql_safety_codes import SqlSafetyIssueCode
 from app.schemas.query_template import QueryTemplateParameter
 from app.services.catalog_active import activate_catalog_revision
 from app.services.catalog_package_import import import_catalog_package_bytes
-from app.services.sql_safety import require_sql_safe, validate_sql_safety
+from app.services.sql_safety import (
+    SqlSafetyValidationError,
+    require_sql_safe,
+    validate_sql_safety,
+)
 from tests.catalog_package_fixtures import (
     DEFAULT_SOURCE,
     build_core_documents,
@@ -38,11 +42,25 @@ def _assert_unsafe(
     params: list[QueryTemplateParameter] | None = None,
     codes: set[str] | None = None,
 ) -> None:
+    """Reject SQL and require every expected issue code to be present (subset)."""
     report = validate_sql_safety(sql, params or [])
     assert report.safe is False, report.model_dump()
     if codes is not None:
         found = {issue.code for issue in report.issues}
-        assert codes & found, (codes, found, report.model_dump())
+        assert codes <= found, (codes, found, report.model_dump())
+
+
+def _assert_unsafe_any_of(
+    sql: str,
+    *,
+    params: list[QueryTemplateParameter] | None = None,
+    codes: set[str],
+) -> None:
+    """Reject SQL when parser yield is dialect-dependent (any expected code)."""
+    report = validate_sql_safety(sql, params or [])
+    assert report.safe is False, report.model_dump()
+    found = {issue.code for issue in report.issues}
+    assert codes & found, (codes, found, report.model_dump())
 
 
 @pytest.mark.parametrize(
@@ -87,6 +105,8 @@ def _assert_unsafe(
         ),
         ("SELECT 1 FROM dual;", []),
         ("SELECT '; DELETE FROM X' AS TXT FROM DUAL", []),
+        ("SELECT ';' AS TXT FROM dual", []),
+        ("SELECT 1 FROM dual -- ;", []),
         ("SELECT 1 FROM DUAL -- DELETE FROM T", []),
         ("SELECT /* DROP TABLE X */ 1 FROM DUAL", []),
         (
@@ -116,8 +136,13 @@ def test_allowed_sql(sql: str, params: list[QueryTemplateParameter]) -> None:
         ),
         (
             "SELECT * FROM T; DELETE FROM T2",
-            {SqlSafetyIssueCode.MULTIPLE_STATEMENTS, SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED},
+            {SqlSafetyIssueCode.MULTIPLE_STATEMENTS},
         ),
+        ("; SELECT 1 FROM dual", {SqlSafetyIssueCode.MULTIPLE_STATEMENTS}),
+        ("SELECT 1 FROM dual;;", {SqlSafetyIssueCode.MULTIPLE_STATEMENTS}),
+        ("SELECT 1 FROM dual; ;", {SqlSafetyIssueCode.MULTIPLE_STATEMENTS}),
+        ("; ;", {SqlSafetyIssueCode.MULTIPLE_STATEMENTS}),
+        ("SELECT 1 FROM dual;;;", {SqlSafetyIssueCode.MULTIPLE_STATEMENTS}),
         ("INSERT INTO T (A) VALUES (1)", {SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
         ("UPDATE T SET A = 1", {SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
         ("DELETE FROM T", {SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
@@ -127,12 +152,8 @@ def test_allowed_sql(sql: str, params: list[QueryTemplateParameter]) -> None:
         ("DROP TABLE T", {SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
         ("TRUNCATE TABLE T", {SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
         ("GRANT SELECT ON T TO U", {SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
-        ("REVOKE SELECT ON T FROM U", {SqlSafetyIssueCode.PARSE_ERROR, SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
         ("COMMIT", {SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
-        ("ROLLBACK", {SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
-        ("BEGIN NULL; END;", {SqlSafetyIssueCode.PARSE_ERROR, SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
         ("CALL foo()", {SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
-        ("EXEC foo", {SqlSafetyIssueCode.PARSE_ERROR, SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
         ("EXECUTE IMMEDIATE 'x'", {SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
         (
             "WITH x AS (SELECT 1 AS a FROM dual) UPDATE t SET a = 1",
@@ -146,9 +167,6 @@ def test_allowed_sql(sql: str, params: list[QueryTemplateParameter]) -> None:
         ("SELECT a INTO b FROM T", {SqlSafetyIssueCode.SELECT_INTO_FORBIDDEN}),
         ("SELECT * FROM T WHERE id = ?", {SqlSafetyIssueCode.POSITIONAL_PARAMETER_FORBIDDEN}),
         ("SELECT * FROM T WHERE id = $1", {SqlSafetyIssueCode.POSITIONAL_PARAMETER_FORBIDDEN}),
-        ("SELECT * FROM T WHERE id = :1", {SqlSafetyIssueCode.POSITIONAL_PARAMETER_FORBIDDEN, SqlSafetyIssueCode.PARSE_ERROR}),
-        ("SELECT * FROM T WHERE id = %s", {SqlSafetyIssueCode.POSITIONAL_PARAMETER_FORBIDDEN, SqlSafetyIssueCode.PARSE_ERROR}),
-        ("SELECT * FROM T WHERE id = %(name)s", {SqlSafetyIssueCode.POSITIONAL_PARAMETER_FORBIDDEN, SqlSafetyIssueCode.PARSE_ERROR}),
         ("SELECT * FROM T WHERE id = {{name}}", {SqlSafetyIssueCode.POSITIONAL_PARAMETER_FORBIDDEN}),
         ("SELECT * FROM T WHERE id = ${name}", {SqlSafetyIssueCode.POSITIONAL_PARAMETER_FORBIDDEN}),
         (
@@ -165,6 +183,22 @@ def test_rejected_sql(sql: str, codes: set[str]) -> None:
     _assert_unsafe(sql, codes=codes)
 
 
+@pytest.mark.parametrize(
+    "sql,codes",
+    [
+        # Dialect-dependent: may surface as parse failure or as forbidden statement.
+        ("REVOKE SELECT ON T FROM U", {SqlSafetyIssueCode.PARSE_ERROR, SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
+        ("BEGIN NULL; END;", {SqlSafetyIssueCode.PARSE_ERROR, SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
+        ("EXEC foo", {SqlSafetyIssueCode.PARSE_ERROR, SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED}),
+        ("SELECT * FROM T WHERE id = :1", {SqlSafetyIssueCode.POSITIONAL_PARAMETER_FORBIDDEN, SqlSafetyIssueCode.PARSE_ERROR}),
+        ("SELECT * FROM T WHERE id = %s", {SqlSafetyIssueCode.POSITIONAL_PARAMETER_FORBIDDEN, SqlSafetyIssueCode.PARSE_ERROR}),
+        ("SELECT * FROM T WHERE id = %(name)s", {SqlSafetyIssueCode.POSITIONAL_PARAMETER_FORBIDDEN, SqlSafetyIssueCode.PARSE_ERROR}),
+    ],
+)
+def test_rejected_sql_parser_alternatives(sql: str, codes: set[str]) -> None:
+    _assert_unsafe_any_of(sql, codes=codes)
+
+
 def test_undeclared_and_unused_parameters() -> None:
     _assert_unsafe(
         "SELECT * FROM T WHERE ENC_ID = :enc_id",
@@ -174,6 +208,33 @@ def test_undeclared_and_unused_parameters() -> None:
             SqlSafetyIssueCode.UNUSED_DECLARED_PARAMETER,
         },
     )
+
+
+def test_referenced_parameters_use_declared_canonical_spelling() -> None:
+    report = validate_sql_safety(
+        "SELECT * FROM T WHERE Name = :Name",
+        [QueryTemplateParameter(name="name", type="string")],
+    )
+    assert report.safe is True
+    assert report.referenced_parameters == ["name"]
+    assert report.declared_parameters == ["name"]
+
+
+def test_require_sql_safe_returns_report_when_safe() -> None:
+    report = require_sql_safe("SELECT 1 FROM dual", [])
+    assert report.safe is True
+    assert report.issues == []
+
+
+def test_require_sql_safe_raises_when_unsafe() -> None:
+    with pytest.raises(SqlSafetyValidationError) as exc_info:
+        require_sql_safe("DELETE FROM T", [])
+    error = exc_info.value
+    assert error.report.safe is False
+    found = {issue.code for issue in error.report.issues}
+    assert SqlSafetyIssueCode.STATEMENT_NOT_ALLOWED in found
+    # Fail-closed helper must not embed the full original SQL in the message.
+    assert "DELETE FROM T" not in str(error)
 
 
 def test_issue_order_is_deterministic() -> None:

@@ -22,6 +22,16 @@ from app.schemas.sql_safety import SqlSafetyIssue, SqlSafetyReport
 # Isolated dialect for current Oracle-style templates. Not a global DEMIS commitment.
 _SQL_DIALECT = "oracle"
 
+
+class SqlSafetyValidationError(Exception):
+    """Raised by require_sql_safe() when validation fails (execution-gate fail-closed)."""
+
+    def __init__(self, report: SqlSafetyReport) -> None:
+        self.report = report
+        super().__init__(
+            f"SQL safety validation failed with {len(report.issues)} issue(s)"
+        )
+
 _FORBIDDEN_ROOT_TYPES: tuple[type[exp.Expression], ...] = (
     exp.Insert,
     exp.Update,
@@ -165,6 +175,7 @@ def validate_sql_safety(
         )
 
     issues.extend(_scan_forbidden_placeholder_tokens(sql_text))
+    issues.extend(_scan_statement_terminators(sql_text))
 
     try:
         expressions = parse(sql_text, read=_SQL_DIALECT)
@@ -183,9 +194,21 @@ def validate_sql_safety(
             issues=_dedupe_issues(issues),
         )
 
-    # Drop empty trailing None entries sqlglot may emit for whitespace-only tails.
-    statements = [node for node in expressions if node is not None]
-    statement_count = len(statements)
+    # Keep empty (None) slots: they represent empty statements and must not be
+    # collapsed away. Trailing sqlglot Semicolon nodes are terminator artifacts.
+    logical_slots = [
+        node for node in expressions if not isinstance(node, exp.Semicolon)
+    ]
+    real_statements = [node for node in logical_slots if node is not None]
+    statement_count = len(logical_slots)
+
+    if any(node is None for node in logical_slots):
+        issues.append(
+            SqlSafetyIssue(
+                code=SqlSafetyIssueCode.MULTIPLE_STATEMENTS,
+                message="empty SQL statements are not allowed",
+            )
+        )
 
     if statement_count == 0:
         issues.append(
@@ -202,20 +225,29 @@ def validate_sql_safety(
             issues=_dedupe_issues(issues),
         )
 
-    if statement_count != 1:
-        issues.append(
-            SqlSafetyIssue(
-                code=SqlSafetyIssueCode.MULTIPLE_STATEMENTS,
-                message=f"exactly one SQL statement is allowed; found {statement_count}",
+    if len(real_statements) != 1 or statement_count != 1:
+        # statement_count != 1 covers empty slots; real_statements != 1 covers
+        # multiple concrete statements.
+        if not any(
+            issue.code == SqlSafetyIssueCode.MULTIPLE_STATEMENTS for issue in issues
+        ):
+            issues.append(
+                SqlSafetyIssue(
+                    code=SqlSafetyIssueCode.MULTIPLE_STATEMENTS,
+                    message=(
+                        "exactly one SQL statement is allowed; "
+                        f"found {len(real_statements)} non-empty "
+                        f"and {statement_count} logical statement slot(s)"
+                    ),
+                )
             )
-        )
 
     referenced: list[str] = []
-    for node in statements:
+    for node in real_statements:
         issues.extend(_validate_statement(node))
         referenced.extend(_named_placeholders(node))
 
-    referenced_unique = _unique_preserve_order(referenced)
+    referenced_unique = _canonicalize_referenced(declared, referenced)
     issues.extend(_match_parameters(declared, referenced_unique))
 
     ordered_issues = _dedupe_issues(issues)
@@ -232,8 +264,11 @@ def require_sql_safe(
     sql_text: str,
     parameter_schema: Sequence[QueryTemplateParameter] | Sequence[dict[str, Any]] | None = None,
 ) -> SqlSafetyReport:
-    """Return the safety report; intended as the future execution-gate helper."""
-    return validate_sql_safety(sql_text, parameter_schema)
+    """Execution-gate helper: return the report only when safe; otherwise raise."""
+    report = validate_sql_safety(sql_text, parameter_schema)
+    if not report.safe:
+        raise SqlSafetyValidationError(report)
+    return report
 
 
 def _validate_statement(node: exp.Expression) -> list[SqlSafetyIssue]:
@@ -449,6 +484,53 @@ def _match_parameters(
                 )
             )
     return issues
+
+
+def _canonicalize_referenced(
+    declared: Sequence[str], referenced: Sequence[str]
+) -> list[str]:
+    """Map referenced binds to declared canonical spelling when matched."""
+    declared_map = {name.casefold(): name for name in declared}
+    canonical: list[str] = []
+    for name in referenced:
+        key = name.casefold()
+        canonical.append(declared_map.get(key, name))
+    return _unique_preserve_order(canonical)
+
+
+def _scan_statement_terminators(sql_text: str) -> list[SqlSafetyIssue]:
+    """Allow at most one trailing semicolon; reject empty/leading/repeated terminators.
+
+    Uses the dialect tokenizer so quoted literals / comments are not treated as
+    statement separators.
+    """
+    try:
+        tokens = list(Oracle.Tokenizer().tokenize(sql_text))
+    except TokenError:
+        return []
+
+    semi_indexes = [
+        index
+        for index, token in enumerate(tokens)
+        if token.token_type == TokenType.SEMICOLON
+    ]
+    if not semi_indexes:
+        return []
+    if len(semi_indexes) > 1:
+        return [
+            SqlSafetyIssue(
+                code=SqlSafetyIssueCode.MULTIPLE_STATEMENTS,
+                message="only one trailing statement terminator is allowed",
+            )
+        ]
+    if semi_indexes[0] != len(tokens) - 1:
+        return [
+            SqlSafetyIssue(
+                code=SqlSafetyIssueCode.MULTIPLE_STATEMENTS,
+                message="leading or intermediate statement terminators are not allowed",
+            )
+        ]
+    return []
 
 
 def _scan_forbidden_placeholder_tokens(sql_text: str) -> list[SqlSafetyIssue]:

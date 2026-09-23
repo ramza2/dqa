@@ -52,6 +52,13 @@ Validator must reject at least:
 
 Do not rely on naive substring checks alone in the final validator.
 Use a parser/tokenizer appropriate to the supported SQL dialect plus explicit allow rules.
+Do not split on raw `";"` — quoted literals and comments must not count as
+statement separators. Reject empty/leading/intermediate statements and more
+than one trailing terminator.
+
+Execution-path helpers (`require_sql_safe`) must fail closed by raising a typed
+error that carries the safety report, not by returning `safe=false` for the
+caller to optionally ignore.
 
 Application-side SQL Safety Validator is defense in depth only. It does not
 replace the read-only DEMIS account, least-privilege EXECUTE grants, Connection

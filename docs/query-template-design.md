@@ -141,7 +141,8 @@ DQA validates template SQL with a deterministic parser/tokenizer + AST allowlist
 
 Policy highlights:
 - fail-closed on parse/tokenize errors and unsupported top-level commands
-- exactly one statement
+- exactly one statement; leading/intermediate empty statements and repeated
+  trailing terminators are rejected (tokenizer-based; at most one trailing `;`)
 - read-only `SELECT` / `WITH ... SELECT` only (CTE bodies must also be SELECT)
 - reject `FOR UPDATE`, `SELECT INTO`, nested DML/DDL, procedural/admin commands
 - named bound parameters only (`:name`); reject `?`, `$1`, `:1`, `%s`, `%(name)s`,
@@ -150,8 +151,14 @@ Policy highlights:
   (case-insensitive; report uses declared canonical names)
 - reject binds used as dynamic schema/table/column identifiers
 
-`GET /api/v1/query-templates/{id}/sql-safety` returns a fresh report
-(`safe`, `issues[]` with typed codes). Results are not persisted.
+`validate_sql_safety()` always returns a report (`safe=false` when unsafe).
+`require_sql_safe()` is the future execution-gate helper: it returns the report
+only when safe, otherwise raises `SqlSafetyValidationError` with the typed
+report attached (no full SQL text in the exception message).
+
+`GET /api/v1/query-templates/{id}/sql-safety` uses `validate_sql_safety()` and
+returns a fresh report (`safe`, `issues[]` with typed codes), including
+HTTP 200 + `safe=false` for unsafe SQL. Results are not persisted.
 
 SQL Safety PASS is independent of approval/enable:
 - `APPROVED` ≠ executable

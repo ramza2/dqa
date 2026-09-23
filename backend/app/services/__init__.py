@@ -39,10 +39,15 @@ from app.services.query_template import (
     submit_query_template_for_review,
     update_query_template,
 )
-from app.services.sql_safety import require_sql_safe, validate_sql_safety
+from app.services.sql_safety import (
+    SqlSafetyValidationError,
+    require_sql_safe,
+    validate_sql_safety,
+)
 
 __all__ = [
     "ValidatedCatalogPackage",
+    "SqlSafetyValidationError",
     "activate_catalog_revision",
     "approve_query_template",
     "create_query_template",
