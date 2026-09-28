@@ -118,6 +118,30 @@ class QueryTemplateRepository:
         )
         return list(self._session.scalars(stmt).all())
 
+    def list_approved_enabled_current_versions(
+        self, *, source_name: str
+    ) -> list[tuple[QueryTemplate, QueryTemplateVersion]]:
+        """Return (template, current_version) for APPROVED + enabled templates.
+
+        Active Catalog compatibility and SQL Safety are enforced by the
+        recommendation service, not here.
+        """
+        stmt = (
+            select(QueryTemplate, QueryTemplateVersion)
+            .join(
+                QueryTemplateVersion,
+                QueryTemplate.current_version_id == QueryTemplateVersion.id,
+            )
+            .where(
+                QueryTemplate.source_name == source_name,
+                QueryTemplate.enabled.is_(True),
+                QueryTemplateVersion.approval_status == "APPROVED",
+            )
+            .order_by(QueryTemplate.stable_key.asc(), QueryTemplate.id.asc())
+        )
+        rows = self._session.execute(stmt).all()
+        return [(template, version) for template, version in rows]
+
     def delete_template(self, template: QueryTemplate) -> None:
         # Clear circular current_version_id before cascading version deletes.
         template.current_version_id = None

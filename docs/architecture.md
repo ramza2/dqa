@@ -136,20 +136,41 @@ Templates must be versioned rather than overwritten in place after approval.
 
 ### 3.6 Intent / Recommendation
 
-Input:
-- natural-language user request
-- active Catalog metadata
-- approved Query Templates
+Flow:
 
-Output:
-- recommended template IDs
-- confidence/reason
-- extracted candidate parameters
-- clarification requirement when information is insufficient
+```text
+Raw NL request (local only)
+  -> deterministic eligible-template retrieval
+  -> metadata-derived safe intent terms
+  -> eligible candidate metadata
+  -> LLM ranking (advisory)
+  -> deterministic validation
+  -> recommendation / clarification
+```
 
-The LLM is advisory. The backend performs final deterministic validation.
+Candidate eligibility (before any LLM call) requires the current version to be:
+- matching `source_name`
+- `enabled=true`
+- `approval_status=APPROVED`
+- exact Active Catalog revision + fingerprint compatibility
+- SQL Safety Validator PASS
 
-LLM access is mediated by a provider abstraction (transport boundary only):
+Recommendation is **not** execution permission. Future execution still requires
+RBAC, Connection Profile, read-only DEMIS access, audit, and runtime parameter
+validation.
+
+Privacy projection:
+- raw `request_text` is never sent to the LLM
+- only metadata-derived matched terms + candidate metadata egress
+- SQL text, parameter values, and query result rows are never sent
+
+LLM ranking output is untrusted: candidate IDs outside the deterministic set
+fail closed. Low routing confidence (`RECOMMENDATION_MIN_CONFIDENCE`) or
+`needs_clarification=true` returns clarification without a selected template.
+
+Endpoint: `POST /api/v1/query-recommendations`
+
+LLM access remains mediated by the provider abstraction:
 
 ```text
 Application Service
@@ -177,6 +198,13 @@ chat-template thinking control for clean structured JSON. Optional
 `LLM_ENABLE_THINKING` is included in the wire payload only when set; the default
 is to send no extension. The provider never strips `<think>` tags or repairs
 model output.
+
+Known limitation: initial retrieval is privacy-first lexical matching over
+template metadata. Synonyms / paraphrases / morphology outside metadata may
+yield no-match clarification. Embeddings and raw-NL egress are out of scope.
+Recommendation LLM payloads use a conservative character budget
+(`MAX_PROMPT_USER_JSON_CHARS`); this is a projection cap, not a tokenizer
+guarantee. Oversize prompts fail closed instead of being sent.
 
 
 ### 3.7 Parameter Validation
