@@ -104,6 +104,35 @@ Template recommendation (`POST /api/v1/query-recommendations`):
 - do not log raw request text or full prompts
 - LLM-returned template IDs must be validated against the deterministic candidate set
 
+Parameter extraction (`POST /api/v1/query-parameters/extract`):
+- unlike Recommendation, extraction may need the raw request to recover values
+- raw `request_text` egress is gated by
+  `LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST` (default `false`)
+- when the gate is `false` and the template declares parameters, extraction
+  returns `PARAMETER_EXTRACTION_EGRESS_NOT_ALLOWED` (HTTP 403) and does not
+  call the LLM provider
+- setting the gate to `true` is a technical opt-in only; it does **not**
+  constitute production medical/data-egress approval
+- production use still requires an approved provider, network boundary, and
+  data-egress policy before enabling the gate
+- when enabled, the LLM receives only `request_text`, template/version ids,
+  and declared parameter metadata (name, label, description, type, constraints)
+- never send SQL text, Catalog-wide metadata, DB credentials, or query result
+  rows
+- LLM-returned parameter names must be declared on the template; undeclared
+  names fail closed (`PARAMETER_EXTRACTION_LLM_OUTPUT_INVALID`)
+- do not log `request_text`, resolved values, sensitive values, full prompts,
+  or provider raw responses
+- responses may contain sensitive resolved values: set
+  `Cache-Control: no-store, private` on this endpoint only
+- return `sensitive_parameter_names` for UI/audit handling; do not mask values
+  in the API body in this phase
+- empty parameter schemas skip the LLM even when the egress gate is `false`
+
+Default "do not send patient identifiers to an LLM" remains the standing
+policy. Parameter Extraction capability in production requires a separate
+explicit data-egress approval beyond flipping the settings flag.
+
 API keys use `SecretStr` and empty keys omit the Authorization header.
 
 ## 6. Catalog Package controls
@@ -145,7 +174,16 @@ Default policy:
 - return no-store/private cache controls for sensitive query results
 - do not place result rows or patient identifiers in analytics/telemetry logs
 
-LLM result summarization requires a reviewed data-egress policy covering provider, network boundary, permitted fields, redaction/minimization, retention, and audit.
+Exceptions must be explicit and reviewed:
+- Recommendation never sends raw natural-language request text
+- Parameter Extraction may send raw request text only behind
+  `LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST=true`, and only after provider /
+  network / data-egress policy approval for production
+- LLM result summarization requires a reviewed data-egress policy covering
+  provider, network boundary, permitted fields, redaction/minimization,
+  retention, and audit
+
+Keep Parameter Extraction disabled (`false`) until that approval exists.
 
 ## 9. Audit and privacy
 

@@ -446,6 +446,13 @@ def test_patch_target_schemas_allows_schema_in_pinned_revision(
         ],
         [{"name": "n", "type": "integer", "default": "1"}],
         [{"name": "ids", "type": "integer_list", "default": ["1"]}],
+        [{"name": "s", "type": "string", "pattern": "^[A-Z]{2}$", "default": "ab"}],
+        [{"name": "n", "type": "integer", "min": 1, "default": 0}],
+        [{"name": "n", "type": "integer", "max": 10, "default": 11}],
+        [{"name": "amt", "type": "decimal", "min": 0, "default": -1}],
+        [{"name": "tags", "type": "string_list", "min_items": 1, "default": []}],
+        [{"name": "ids", "type": "integer_list", "max_items": 1, "default": [1, 2]}],
+        [{"name": "ts", "type": "datetime", "default": "2026-09-01"}],
     ],
 )
 def test_parameter_type_structural_rules_rejected(

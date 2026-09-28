@@ -8,6 +8,7 @@ from app.api.routes import (
     catalog_packages,
     catalog_query,
     health,
+    parameter_extraction,
     query_templates,
     recommendations,
 )
@@ -22,3 +23,4 @@ api_router.include_router(catalog_active.active_router)
 api_router.include_router(catalog_active.activations_router)
 api_router.include_router(query_templates.router)
 api_router.include_router(recommendations.router)
+api_router.include_router(parameter_extraction.router)
