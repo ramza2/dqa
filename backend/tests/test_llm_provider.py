@@ -49,6 +49,7 @@ def _settings(**overrides: Any) -> Settings:
         "LLM_MODEL": None,
         "LLM_TIMEOUT_SECONDS": 60.0,
         "LLM_CONNECT_TIMEOUT_SECONDS": 10.0,
+        "LLM_ENABLE_THINKING": None,
     }
     base.update(overrides)
     return Settings(**base)
@@ -83,12 +84,14 @@ def _provider_with_handler(
     base_url: str = "https://llm.example",
     model: str = "demo-model",
     api_key: str | None = SECRET_KEY,
+    enable_thinking: bool | None = None,
 ) -> OpenAICompatibleLLMProvider:
     transport = httpx.MockTransport(handler)
     return OpenAICompatibleLLMProvider(
         base_url=base_url,
         model=model,
         api_key=api_key,
+        enable_thinking=enable_thinking,
         transport=transport,
     )
 
@@ -105,6 +108,7 @@ def test_settings_without_llm_succeeds() -> None:
     assert settings.llm_api_key is None
     assert settings.llm_timeout_seconds == 60.0
     assert settings.llm_connect_timeout_seconds == 10.0
+    assert settings.llm_enable_thinking is None
 
 
 def test_settings_llm_defaults_from_env(test_settings_env: dict[str, str]) -> None:
@@ -301,7 +305,80 @@ def test_max_tokens_omitted_when_none() -> None:
         purpose=LLMRequestPurpose.PARAMETER_EXTRACTION,
     )
     assert "max_tokens" not in captured["body"]
+    assert "chat_template_kwargs" not in captured["body"]
     provider.close()
+
+
+@pytest.mark.parametrize(
+    "enable_thinking,expected_kwargs",
+    [
+        (None, None),
+        (False, {"enable_thinking": False}),
+        (True, {"enable_thinking": True}),
+    ],
+)
+def test_chat_template_kwargs_payload(
+    enable_thinking: bool | None,
+    expected_kwargs: dict[str, bool] | None,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json=_success_body(
+                content='{"selected_template_id": 1, "confidence": 0.5}'
+            ),
+        )
+
+    provider = _provider_with_handler(handler, enable_thinking=enable_thinking)
+    provider.generate_structured(
+        messages=[LLMMessage(role="user", content="x")],
+        response_model=ExampleRecommendation,
+        purpose=LLMRequestPurpose.TEMPLATE_RECOMMENDATION,
+    )
+    body = captured["body"]
+    if expected_kwargs is None:
+        assert "chat_template_kwargs" not in body
+    else:
+        assert body["chat_template_kwargs"] == expected_kwargs
+    provider.close()
+
+
+def test_factory_passes_enable_thinking_to_provider() -> None:
+    provider = create_llm_provider(
+        _settings(
+            LLM_BASE_URL="https://llm.example",
+            LLM_MODEL="demo-model",
+            LLM_ENABLE_THINKING=False,
+        )
+    )
+    assert isinstance(provider, OpenAICompatibleLLMProvider)
+    assert provider._enable_thinking is False
+
+    unset = create_llm_provider(
+        _settings(
+            LLM_BASE_URL="https://llm.example",
+            LLM_MODEL="demo-model",
+        )
+    )
+    assert isinstance(unset, OpenAICompatibleLLMProvider)
+    assert unset._enable_thinking is None
+
+    enabled = create_llm_provider(
+        _settings(
+            LLM_BASE_URL="https://llm.example",
+            LLM_MODEL="demo-model",
+            LLM_ENABLE_THINKING=True,
+        )
+    )
+    assert isinstance(enabled, OpenAICompatibleLLMProvider)
+    assert enabled._enable_thinking is True
+
+    provider.close()
+    unset.close()
+    enabled.close()
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +430,27 @@ def test_prose_wrapped_json_is_rejected() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_success_body(content=prose))
+
+    provider = _provider_with_handler(handler)
+    with pytest.raises(LLMProviderError) as exc_info:
+        provider.generate_structured(
+            messages=[LLMMessage(role="user", content="x")],
+            response_model=ExampleRecommendation,
+            purpose=LLMRequestPurpose.TEMPLATE_RECOMMENDATION,
+        )
+    assert exc_info.value.code == LLMProviderErrorCode.STRUCTURED_OUTPUT_INVALID
+    provider.close()
+
+
+def test_think_tag_prefixed_json_is_rejected_without_stripping() -> None:
+    """Qwen3 thinking wrappers must fail closed; provider must not strip tags."""
+    wrapped = (
+        "<think>\n\n</think>\n"
+        '{"selected_template_id": 10, "confidence": 0.91}'
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_success_body(content=wrapped))
 
     provider = _provider_with_handler(handler)
     with pytest.raises(LLMProviderError) as exc_info:

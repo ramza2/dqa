@@ -83,6 +83,9 @@ Never let model output:
 
 Structured model output must be schema-validated (strict JSON + Pydantic).
 Do not auto-repair markdown fences, surrounding prose, or partial JSON.
+Do not strip model-specific wrappers such as `<think>` tags; disable thinking
+via explicit `LLM_ENABLE_THINKING` when the OpenAI-compatible/vLLM server
+requires it.
 
 Provider boundary (`app/adapters/llm`):
 - do not log request prompts, message content, or raw provider response bodies

@@ -172,6 +172,12 @@ Rules for this boundary:
 LLM settings (`LLM_BASE_URL`, `LLM_MODEL`, optional `LLM_API_KEY`) are optional at
 process start; completeness is validated only when `create_llm_provider` runs.
 
+Some OpenAI-compatible/vLLM models (e.g. Qwen3) may need an explicit
+chat-template thinking control for clean structured JSON. Optional
+`LLM_ENABLE_THINKING` is included in the wire payload only when set; the default
+is to send no extension. The provider never strips `<think>` tags or repairs
+model output.
+
 
 ### 3.7 Parameter Validation
 

@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     llm_connect_timeout_seconds: float = Field(
         default=10.0, alias="LLM_CONNECT_TIMEOUT_SECONDS"
     )
+    # Optional vLLM/Qwen chat-template control. None => omit from wire payload.
+    llm_enable_thinking: bool | None = Field(
+        default=None, alias="LLM_ENABLE_THINKING"
+    )
 
     @property
     def sqlalchemy_database_url(self) -> URL:

@@ -34,4 +34,5 @@ def create_llm_provider(settings: Settings) -> LLMProvider:
         api_key=settings.llm_api_key,
         timeout_seconds=settings.llm_timeout_seconds,
         connect_timeout_seconds=settings.llm_connect_timeout_seconds,
+        enable_thinking=settings.llm_enable_thinking,
     )

@@ -53,6 +53,7 @@ class OpenAICompatibleLLMProvider:
         api_key: SecretStr | str | None = None,
         timeout_seconds: float = 60.0,
         connect_timeout_seconds: float = 10.0,
+        enable_thinking: bool | None = None,
         transport: httpx.BaseTransport | None = None,
         client: httpx.Client | None = None,
     ) -> None:
@@ -65,6 +66,7 @@ class OpenAICompatibleLLMProvider:
         self._endpoint = normalize_chat_completions_url(base_url)
         self._model = model_stripped
         self._api_key = _optional_secret(api_key)
+        self._enable_thinking = enable_thinking
         self._owns_client = client is None
         self._closed = False
         timeout = httpx.Timeout(
@@ -140,6 +142,10 @@ class OpenAICompatibleLLMProvider:
         }
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
+        if self._enable_thinking is not None:
+            payload["chat_template_kwargs"] = {
+                "enable_thinking": self._enable_thinking
+            }
         return payload
 
     def _headers(self) -> dict[str, str]:
