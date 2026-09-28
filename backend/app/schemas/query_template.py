@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -124,14 +125,24 @@ def _assert_default_matches_type(param: QueryTemplateParameter) -> None:
     if param_type == "string":
         if not isinstance(value, str):
             raise ValueError("string default must be a string")
+        if param.pattern is not None and re.fullmatch(param.pattern, value) is None:
+            raise ValueError("string default does not match pattern")
         return
     if param_type == "integer":
         if not _is_int(value):
             raise ValueError("integer default must be an integer")
+        _assert_default_min_max(param, value)
         return
     if param_type == "decimal":
         if not _is_number(value):
             raise ValueError("decimal default must be a number")
+        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+            raise ValueError("decimal default must be a finite number")
+        try:
+            as_decimal = Decimal(str(value))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError("decimal default must be a finite number") from exc
+        _assert_default_min_max(param, as_decimal)
         return
     if param_type == "boolean":
         if not isinstance(value, bool):
@@ -141,6 +152,8 @@ def _assert_default_matches_type(param: QueryTemplateParameter) -> None:
         if isinstance(value, date) and not isinstance(value, datetime):
             return
         if isinstance(value, str):
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                raise ValueError("date default must be an ISO date string")
             try:
                 date.fromisoformat(value)
             except ValueError as exc:
@@ -151,10 +164,8 @@ def _assert_default_matches_type(param: QueryTemplateParameter) -> None:
         if isinstance(value, datetime):
             return
         if isinstance(value, str):
-            try:
-                datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError as exc:
-                raise ValueError("datetime default must be an ISO datetime string") from exc
+            if not _is_iso_datetime_with_time(value):
+                raise ValueError("datetime default must be an ISO datetime string")
             return
         raise ValueError("datetime default must be an ISO datetime string")
     if param_type == "enum":
@@ -165,13 +176,44 @@ def _assert_default_matches_type(param: QueryTemplateParameter) -> None:
     if param_type == "string_list":
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise ValueError("string_list default must be a list of strings")
+        _assert_default_list_bounds(param, value)
         return
     if param_type == "integer_list":
         if not isinstance(value, list) or not all(_is_int(item) for item in value):
             raise ValueError("integer_list default must be a list of integers")
+        _assert_default_list_bounds(param, value)
         return
 
     raise ValueError(f"unsupported parameter type for default: {param_type}")
+
+
+def _assert_default_min_max(param: QueryTemplateParameter, value: Any) -> None:
+    if param.min is not None and value < param.min:
+        raise ValueError("parameter default is below the minimum allowed value")
+    if param.max is not None and value > param.max:
+        raise ValueError("parameter default is above the maximum allowed value")
+
+
+def _assert_default_list_bounds(param: QueryTemplateParameter, value: list[Any]) -> None:
+    length = len(value)
+    if param.min_items is not None and length < param.min_items:
+        raise ValueError("parameter default list has fewer items than allowed")
+    if param.max_items is not None and length > param.max_items:
+        raise ValueError("parameter default list has more items than allowed")
+
+
+def _is_iso_datetime_with_time(value: str) -> bool:
+    """True when value is an ISO datetime with an explicit time component.
+
+    Date-only strings such as YYYY-MM-DD are rejected. No timezone is invented.
+    """
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
 
 
 class QueryTemplateCompatibilityView(BaseModel):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import pytest
+from pydantic import ValidationError
 
 from app.schemas.parameter_extraction import (
     ISSUE_ENUM_NOT_ALLOWED,
@@ -110,9 +111,65 @@ def test_date_and_datetime() -> None:
         ).needs_clarification
         is False
     )
+    assert (
+        validate_parameter_values(
+            [dt_param], {"ts": "2026-09-01T10:00:00+09:00"}, []
+        ).needs_clarification
+        is False
+    )
+    assert ISSUE_TYPE_MISMATCH in _codes(
+        validate_parameter_values([dt_param], {"ts": "2026-09-01"}, [])
+    )
     assert ISSUE_TYPE_MISMATCH in _codes(
         validate_parameter_values([dt_param], {"ts": "bad"}, [])
     )
+
+
+def test_parameter_default_constraints_fail_closed() -> None:
+    with pytest.raises(ValidationError):
+        _p(name="code", type="string", pattern=r"^[A-Z]{2}$", default="ab")
+    with pytest.raises(ValidationError):
+        _p(name="n", type="integer", min=1, max=10, default=0)
+    with pytest.raises(ValidationError):
+        _p(name="n", type="integer", min=1, max=10, default=11)
+    with pytest.raises(ValidationError):
+        _p(name="amt", type="decimal", default=math.nan)
+    with pytest.raises(ValidationError):
+        _p(name="amt", type="decimal", default=math.inf)
+    with pytest.raises(ValidationError):
+        _p(name="amt", type="decimal", min=0, max=10, default=-1)
+    with pytest.raises(ValidationError):
+        _p(name="amt", type="decimal", min=0, max=10, default=11)
+    with pytest.raises(ValidationError):
+        _p(name="tags", type="string_list", min_items=1, default=[])
+    with pytest.raises(ValidationError):
+        _p(name="tags", type="string_list", max_items=1, default=["a", "b"])
+    with pytest.raises(ValidationError):
+        _p(name="ids", type="integer_list", min_items=2, default=[1])
+    with pytest.raises(ValidationError):
+        _p(name="ids", type="integer_list", max_items=1, default=[1, 2])
+    with pytest.raises(ValidationError):
+        _p(name="ts", type="datetime", default="2026-09-01")
+
+
+def test_parameter_valid_defaults_regression() -> None:
+    assert _p(name="code", type="string", pattern=r"^[A-Z]{2}$", default="AB").default == "AB"
+    assert _p(name="n", type="integer", min=1, max=10, default=5).default == 5
+    assert _p(name="amt", type="decimal", min=0, max=10, default=1.5).default == 1.5
+    assert _p(name="amt", type="decimal", default=2).default == 2
+    assert _p(name="tags", type="string_list", min_items=1, max_items=3, default=["a"]).default == [
+        "a"
+    ]
+    assert _p(name="ids", type="integer_list", min_items=1, max_items=3, default=[1, 2]).default == [
+        1,
+        2,
+    ]
+    assert _p(name="ts", type="datetime", default="2026-09-01T10:00:00").default == (
+        "2026-09-01T10:00:00"
+    )
+    assert _p(
+        name="ts", type="datetime", default="2026-09-01T10:00:00+09:00"
+    ).default == "2026-09-01T10:00:00+09:00"
 
 
 def test_enum_strict_type_and_membership() -> None:

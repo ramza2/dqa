@@ -427,6 +427,8 @@ def test_prompt_includes_request_excludes_sql(
     assert "DELETE" not in blob
     assert "ward_cd" in blob
     assert "password" not in blob.casefold()
+    assert "not mentioned in request_text" in blob
+    assert "omit it from both" in blob
     payload = json.loads(stub.calls[0].messages[1].content)
     assert payload["request_text"] == raw
     assert "sql_text" not in payload

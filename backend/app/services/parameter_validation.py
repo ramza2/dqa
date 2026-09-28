@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -25,7 +25,7 @@ from app.schemas.parameter_extraction import (
     ISSUE_UNRESOLVED,
     ParameterExtractionIssueView,
 )
-from app.schemas.query_template import QueryTemplateParameter
+from app.schemas.query_template import QueryTemplateParameter, _is_iso_datetime_with_time
 
 
 @dataclass
@@ -153,15 +153,7 @@ def _validate_one(
         return None
 
     if param_type == "datetime":
-        if not isinstance(value, str):
-            return _issue(
-                param.name,
-                ISSUE_TYPE_MISMATCH,
-                "parameter must be an ISO datetime string",
-            )
-        try:
-            datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
+        if not isinstance(value, str) or not _is_iso_datetime_with_time(value):
             return _issue(
                 param.name,
                 ISSUE_TYPE_MISMATCH,
