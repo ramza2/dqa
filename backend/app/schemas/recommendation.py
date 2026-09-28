@@ -11,6 +11,16 @@ MAX_RANKED_TEMPLATE_IDS = 20
 MAX_REQUEST_TEXT_LENGTH = 2000
 MAX_SOURCE_NAME_LENGTH = 255
 
+# Recommendation-only LLM prompt projection bounds (stored metadata unchanged).
+MAX_PROMPT_DESCRIPTION_CHARS = 500
+MAX_PROMPT_PARAMETERS_PER_CANDIDATE = 30
+MAX_PROMPT_MATCHED_TERMS_PER_CANDIDATE = 30
+MAX_PROMPT_GLOBAL_MATCHED_TERMS = 100
+MAX_PROMPT_TERM_LENGTH = 128
+MAX_PROMPT_USER_JSON_CHARS = 24_000
+RECOMMENDATION_MAX_TOKENS = 512
+MAX_LLM_FREE_TEXT_CHARS = 500
+
 NO_MATCH_CLARIFICATION = (
     "조회하려는 업무나 데이터 범위를 조금 더 구체적으로 입력해주세요."
 )
@@ -71,11 +81,15 @@ class LLMTemplateRanking(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     recommended_template_id: int | None = None
-    ranked_template_ids: list[int] = Field(default_factory=list, max_length=MAX_RANKED_TEMPLATE_IDS)
+    ranked_template_ids: list[int] = Field(
+        default_factory=list, max_length=MAX_RANKED_TEMPLATE_IDS
+    )
     confidence: float = Field(ge=0.0, le=1.0)
     needs_clarification: bool
-    clarification_question: str | None = None
-    reason: str | None = None
+    clarification_question: str | None = Field(
+        default=None, max_length=MAX_LLM_FREE_TEXT_CHARS
+    )
+    reason: str | None = Field(default=None, max_length=MAX_LLM_FREE_TEXT_CHARS)
 
     @field_validator("ranked_template_ids")
     @classmethod

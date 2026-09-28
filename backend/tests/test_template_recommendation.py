@@ -13,8 +13,14 @@ from app.adapters.llm.errors import LLMProviderError, LLMProviderErrorCode
 from app.adapters.recommendation.errors import RecommendationError, RecommendationErrorCode
 from app.models.catalog_import import CatalogImportRevision
 from app.schemas.recommendation import (
+    MAX_LLM_FREE_TEXT_CHARS,
+    MAX_PROMPT_DESCRIPTION_CHARS,
+    MAX_PROMPT_MATCHED_TERMS_PER_CANDIDATE,
+    MAX_PROMPT_PARAMETERS_PER_CANDIDATE,
+    MAX_RECOMMENDATION_CANDIDATES,
     MAX_REQUEST_TEXT_LENGTH,
     NO_MATCH_CLARIFICATION,
+    RECOMMENDATION_MAX_TOKENS,
     RECOMMENDATION_MIN_CONFIDENCE,
     LLMTemplateRanking,
     TemplateRecommendationRequest,
@@ -22,6 +28,8 @@ from app.schemas.recommendation import (
 from app.services.catalog_active import activate_catalog_revision
 from app.services.catalog_package_import import import_catalog_package_bytes
 from app.services.template_recommendation import recommend_query_templates
+from app.repositories.query_template import QueryTemplateRepository
+from pydantic import ValidationError
 from tests.catalog_package_fixtures import (
     DEFAULT_SOURCE,
     build_core_documents,
@@ -405,6 +413,7 @@ def test_privacy_projection_excludes_raw_request_and_secret(
         llm_provider=stub,
     )
     assert len(stub.calls) == 1
+    assert stub.calls[0].max_tokens == RECOMMENDATION_MAX_TOKENS
     blob = "\n".join(message.content for message in stub.calls[0].messages)
     assert SECRET_TOKEN not in blob
     assert raw not in blob
@@ -419,9 +428,92 @@ def test_privacy_projection_excludes_raw_request_and_secret(
     for candidate in user_payload["candidates"]:
         assert "sql_text" not in candidate
         assert "sql" not in candidate
+        assert "retrieval_score" in candidate
+        assert isinstance(candidate["matched_terms"], list)
 
 
-def test_deterministic_ordering_and_name_match(
+def test_candidate_specific_matched_terms_from_parameter_labels(
+    db_session: Session, db_client: TestClient
+) -> None:
+    _import_and_activate(db_session, fingerprint="fp-cand-terms")
+    db_session.commit()
+    ward = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(
+            stable_key="cand.ward",
+            name="조회 A",
+            description="일반 조회",
+            parameter_schema=[
+                {
+                    "name": "ward_id",
+                    "label": "병동",
+                    "description": "병동 코드",
+                    "type": "integer",
+                    "required": True,
+                    "min": 1,
+                }
+            ],
+        ),
+    ).json()
+    dept = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(
+            stable_key="cand.dept",
+            name="조회 B",
+            description="일반 조회",
+            parameter_schema=[
+                {
+                    "name": "dept_id",
+                    "label": "진료과",
+                    "description": "진료과 코드",
+                    "type": "integer",
+                    "required": True,
+                    "min": 1,
+                }
+            ],
+        ),
+    ).json()
+    for template_id in (ward["id"], dept["id"]):
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/submit-review", json={}
+        ).status_code == 200
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/approve", json={}
+        ).status_code == 200
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/enable"
+        ).status_code == 200
+
+    stub = _stub_for(
+        _ranking(
+            recommended_template_id=ward["id"],
+            ranked_template_ids=[ward["id"]],
+            confidence=0.9,
+        )
+    )
+    raw = f"{SECRET_TOKEN} 병동 조회"
+    recommend_query_templates(
+        db_session,
+        TemplateRecommendationRequest(
+            source_name=SOURCE_A["source_name"],
+            request_text=raw,
+        ),
+        llm_provider=stub,
+    )
+    payload = json.loads(stub.calls[0].messages[1].content)
+    blob = stub.calls[0].messages[1].content
+    assert SECRET_TOKEN not in blob
+    assert raw not in blob
+    assert "SELECT 1 FROM dual" not in blob
+    by_id = {item["template_id"]: item for item in payload["candidates"]}
+    assert ward["id"] in by_id
+    assert "병동" in by_id[ward["id"]]["matched_terms"]
+    assert by_id[ward["id"]]["retrieval_score"] > 0
+    if dept["id"] in by_id:
+        assert "병동" not in by_id[dept["id"]]["matched_terms"]
+
+
+def test_deterministic_ordering_score_then_stable_key(
     db_session: Session, db_client: TestClient
 ) -> None:
     _import_and_activate(db_session, fingerprint="fp-order")
@@ -453,26 +545,27 @@ def test_deterministic_ordering_and_name_match(
             f"/api/v1/query-templates/{template_id}/enable"
         ).status_code == 200
 
-    seen_orders: list[list[int]] = []
-    for _ in range(2):
-        stub = _stub_for(
-            _ranking(
-                recommended_template_id=second["id"],
-                ranked_template_ids=[second["id"], first["id"]],
-                confidence=0.9,
-            )
+    stub = _stub_for(
+        _ranking(
+            recommended_template_id=second["id"],
+            ranked_template_ids=[second["id"], first["id"]],
+            confidence=0.9,
         )
-        recommend_query_templates(
-            db_session,
-            TemplateRecommendationRequest(
-                source_name=SOURCE_A["source_name"],
-                request_text="병동 조회",
-            ),
-            llm_provider=stub,
-        )
-        payload = json.loads(stub.calls[0].messages[1].content)
-        seen_orders.append([item["template_id"] for item in payload["candidates"]])
-    assert seen_orders[0] == seen_orders[1]
+    )
+    recommend_query_templates(
+        db_session,
+        TemplateRecommendationRequest(
+            source_name=SOURCE_A["source_name"],
+            request_text="병동 조회",
+        ),
+        llm_provider=stub,
+    )
+    payload = json.loads(stub.calls[0].messages[1].content)
+    order = [item["template_id"] for item in payload["candidates"]]
+    # Equal lexical scores: stable_key asc => aaa.ward before zzz.ward.
+    assert order == [second["id"], first["id"]]
+    assert payload["candidates"][0]["stable_key"] == "aaa.ward"
+    assert payload["candidates"][1]["stable_key"] == "zzz.ward"
 
 
 def test_no_lexical_match_skips_llm(
@@ -623,6 +716,238 @@ def test_hallucinated_candidate_id_fail_closed(
             llm_provider=stub,
         )
     assert exc_info.value.code == RecommendationErrorCode.LLM_OUTPUT_INVALID
+
+
+def test_duplicate_ranked_ids_rejected_by_schema() -> None:
+    with pytest.raises(ValidationError):
+        LLMTemplateRanking(
+            recommended_template_id=1,
+            ranked_template_ids=[1, 1],
+            confidence=0.9,
+            needs_clarification=False,
+        )
+
+
+def test_recommended_id_missing_from_ranked_list_rejected(
+    db_session: Session, db_client: TestClient
+) -> None:
+    detail = _create_approve_enable(db_session, db_client, stable_key="rank_miss")
+    # Construct a ranking that bypasses schema duplicate checks but fails service rule.
+    ranking = LLMTemplateRanking(
+        recommended_template_id=detail["id"],
+        ranked_template_ids=[],
+        confidence=0.95,
+        needs_clarification=False,
+    )
+    stub = StubLLMProvider(result=make_structured_result(ranking))
+    with pytest.raises(RecommendationError) as exc_info:
+        recommend_query_templates(
+            db_session,
+            TemplateRecommendationRequest(
+                source_name=SOURCE_A["source_name"],
+                request_text="환자 입원 병동 이력",
+            ),
+            llm_provider=stub,
+        )
+    assert exc_info.value.code == RecommendationErrorCode.LLM_OUTPUT_INVALID
+
+
+def test_llm_free_text_max_length_enforced() -> None:
+    too_long = "가" * (MAX_LLM_FREE_TEXT_CHARS + 1)
+    with pytest.raises(ValidationError):
+        LLMTemplateRanking(
+            recommended_template_id=1,
+            ranked_template_ids=[1],
+            confidence=0.9,
+            needs_clarification=False,
+            reason=too_long,
+        )
+    with pytest.raises(ValidationError):
+        LLMTemplateRanking(
+            recommended_template_id=None,
+            ranked_template_ids=[1],
+            confidence=0.5,
+            needs_clarification=True,
+            clarification_question=too_long,
+        )
+
+
+def test_prompt_projection_bounds_long_description_and_parameters(
+    db_session: Session, db_client: TestClient
+) -> None:
+    long_description = "설명" * 400  # well over MAX_PROMPT_DESCRIPTION_CHARS
+    many_params = [
+        {
+            "name": f"p{i}",
+            "label": f"라벨{i}",
+            "description": f"파라미터설명{i}",
+            "type": "integer",
+            "required": True,
+            "min": 1,
+        }
+        for i in range(MAX_PROMPT_PARAMETERS_PER_CANDIDATE + 5)
+    ]
+    detail = _create_approve_enable(
+        db_session,
+        db_client,
+        fingerprint="fp-bounds",
+        stable_key="bounds.long",
+        description=long_description,
+        parameter_schema=many_params,
+        name="병동 조회",
+        sql_text=(
+            "SELECT 1 FROM dual WHERE "
+            + " AND ".join(f"c{i} = :p{i}" for i in range(len(many_params)))
+        ),
+    )
+    # Stored metadata remains full length.
+    stored = QueryTemplateRepository(db_session).get_by_id(detail["id"])
+    assert stored is not None
+    assert stored.description is not None
+    assert len(stored.description) > MAX_PROMPT_DESCRIPTION_CHARS
+    assert len(stored.current_version.parameter_schema) > MAX_PROMPT_PARAMETERS_PER_CANDIDATE
+
+    stub = _stub_for(
+        _ranking(
+            recommended_template_id=detail["id"],
+            ranked_template_ids=[detail["id"]],
+            confidence=0.9,
+        )
+    )
+    recommend_query_templates(
+        db_session,
+        TemplateRecommendationRequest(
+            source_name=SOURCE_A["source_name"],
+            request_text="병동 조회",
+        ),
+        llm_provider=stub,
+    )
+    candidate = json.loads(stub.calls[0].messages[1].content)["candidates"][0]
+    assert candidate["description"] is not None
+    assert len(candidate["description"]) <= MAX_PROMPT_DESCRIPTION_CHARS
+    assert len(candidate["parameters"]) <= MAX_PROMPT_PARAMETERS_PER_CANDIDATE
+    assert len(candidate["matched_terms"]) <= MAX_PROMPT_MATCHED_TERMS_PER_CANDIDATE
+    assert stub.calls[0].max_tokens == RECOMMENDATION_MAX_TOKENS
+
+
+def test_candidate_cap_limits_llm_payload(
+    db_session: Session, db_client: TestClient
+) -> None:
+    _import_and_activate(db_session, fingerprint="fp-cap")
+    db_session.commit()
+    ids: list[int] = []
+    total = MAX_RECOMMENDATION_CANDIDATES + 3
+    for i in range(total):
+        created = db_client.post(
+            "/api/v1/query-templates",
+            json=_create_body(
+                stable_key=f"cap.item.{i:02d}",
+                name=f"병동 공통 {i}",
+                description="병동 조회",
+            ),
+        )
+        assert created.status_code == 201, created.text
+        template_id = created.json()["id"]
+        ids.append(template_id)
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/submit-review", json={}
+        ).status_code == 200
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/approve", json={}
+        ).status_code == 200
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/enable"
+        ).status_code == 200
+
+    top_id = ids[0]
+    stub = _stub_for(
+        _ranking(
+            recommended_template_id=top_id,
+            ranked_template_ids=[top_id],
+            confidence=0.9,
+        )
+    )
+    recommend_query_templates(
+        db_session,
+        TemplateRecommendationRequest(
+            source_name=SOURCE_A["source_name"],
+            request_text="병동 조회",
+        ),
+        llm_provider=stub,
+    )
+    payload = json.loads(stub.calls[0].messages[1].content)
+    assert len(payload["candidates"]) <= MAX_RECOMMENDATION_CANDIDATES
+
+
+def test_stable_key_and_description_match(
+    db_session: Session, db_client: TestClient
+) -> None:
+    _import_and_activate(db_session, fingerprint="fp-fields")
+    db_session.commit()
+    key_hit = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(
+            stable_key="unique.tokenkey",
+            name="기타",
+            description="일반",
+        ),
+    ).json()
+    desc_hit = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(
+            stable_key="other.plain",
+            name="기타",
+            description="특수문구알파",
+        ),
+    ).json()
+    for template_id in (key_hit["id"], desc_hit["id"]):
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/submit-review", json={}
+        ).status_code == 200
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/approve", json={}
+        ).status_code == 200
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/enable"
+        ).status_code == 200
+
+    stub_key = _stub_for(
+        _ranking(
+            recommended_template_id=key_hit["id"],
+            ranked_template_ids=[key_hit["id"]],
+            confidence=0.9,
+        )
+    )
+    recommend_query_templates(
+        db_session,
+        TemplateRecommendationRequest(
+            source_name=SOURCE_A["source_name"],
+            request_text="tokenkey 조회",
+        ),
+        llm_provider=stub_key,
+    )
+    key_payload = json.loads(stub_key.calls[0].messages[1].content)
+    key_ids = {item["template_id"] for item in key_payload["candidates"]}
+    assert key_hit["id"] in key_ids
+
+    stub_desc = _stub_for(
+        _ranking(
+            recommended_template_id=desc_hit["id"],
+            ranked_template_ids=[desc_hit["id"]],
+            confidence=0.9,
+        )
+    )
+    recommend_query_templates(
+        db_session,
+        TemplateRecommendationRequest(
+            source_name=SOURCE_A["source_name"],
+            request_text="특수문구알파 조회",
+        ),
+        llm_provider=stub_desc,
+    )
+    desc_payload = json.loads(stub_desc.calls[0].messages[1].content)
+    desc_ids = {item["template_id"] for item in desc_payload["candidates"]}
+    assert desc_hit["id"] in desc_ids
 
 
 # ---------------------------------------------------------------------------
