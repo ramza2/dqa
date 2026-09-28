@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import traceback
 from typing import Any
 
 import httpx
@@ -10,6 +11,7 @@ import pytest
 from pydantic import BaseModel, SecretStr, ValidationError
 
 from app.adapters.llm import (
+    LLMProvider,
     LLMProviderError,
     LLMProviderErrorCode,
     OpenAICompatibleLLMProvider,
@@ -26,7 +28,12 @@ class ExampleRecommendation(BaseModel):
     confidence: float
 
 
+class ExampleFlag(BaseModel):
+    enabled: bool
+
+
 SECRET_KEY = "sk-test-secret-do-not-leak"
+LEAK_MARKER = "DO_NOT_LEAK_12345"
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -391,6 +398,103 @@ def test_schema_mismatch_rejected() -> None:
     provider.close()
 
 
+def test_structured_output_error_does_not_leak_model_content() -> None:
+    content = json.dumps(
+        {"selected_template_id": LEAK_MARKER, "confidence": 0.5}
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_success_body(content=content))
+
+    provider = _provider_with_handler(handler)
+    with pytest.raises(LLMProviderError) as exc_info:
+        provider.generate_structured(
+            messages=[LLMMessage(role="user", content="x")],
+            response_model=ExampleRecommendation,
+            purpose=LLMRequestPurpose.TEMPLATE_RECOMMENDATION,
+        )
+    err = exc_info.value
+    assert err.code == LLMProviderErrorCode.STRUCTURED_OUTPUT_INVALID
+    assert LEAK_MARKER not in str(err)
+    assert LEAK_MARKER not in repr(err)
+    # raise ... from None: no explicit cause; context is suppressed in traceback.
+    assert err.__cause__ is None
+    assert err.__suppress_context__ is True
+    formatted = "".join(traceback.format_exception(type(err), err, err.__traceback__))
+    assert LEAK_MARKER not in formatted
+    assert "ValidationError" not in formatted
+    provider.close()
+
+
+def test_strict_json_types_accept_native_numbers() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_success_body(
+                content='{"selected_template_id": 10, "confidence": 0.91}'
+            ),
+        )
+
+    provider = _provider_with_handler(handler)
+    result = provider.generate_structured(
+        messages=[LLMMessage(role="user", content="x")],
+        response_model=ExampleRecommendation,
+        purpose=LLMRequestPurpose.TEMPLATE_RECOMMENDATION,
+    )
+    assert result.data.selected_template_id == 10
+    assert result.data.confidence == 0.91
+    provider.close()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"selected_template_id": "10", "confidence": 0.91}',
+        '{"selected_template_id": 10, "confidence": "0.91"}',
+    ],
+)
+def test_strict_json_types_reject_coerced_strings(content: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_success_body(content=content))
+
+    provider = _provider_with_handler(handler)
+    with pytest.raises(LLMProviderError) as exc_info:
+        provider.generate_structured(
+            messages=[LLMMessage(role="user", content="x")],
+            response_model=ExampleRecommendation,
+            purpose=LLMRequestPurpose.TEMPLATE_RECOMMENDATION,
+        )
+    assert exc_info.value.code == LLMProviderErrorCode.STRUCTURED_OUTPUT_INVALID
+    provider.close()
+
+
+def test_strict_boolean_accepts_true_rejects_string_true() -> None:
+    def ok_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_success_body(content='{"enabled": true}'))
+
+    provider = _provider_with_handler(ok_handler)
+    result = provider.generate_structured(
+        messages=[LLMMessage(role="user", content="x")],
+        response_model=ExampleFlag,
+        purpose=LLMRequestPurpose.CATALOG_EXPLANATION,
+    )
+    assert result.data.enabled is True
+    provider.close()
+
+    def bad_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_success_body(content='{"enabled": "true"}'))
+
+    provider = _provider_with_handler(bad_handler)
+    with pytest.raises(LLMProviderError) as exc_info:
+        provider.generate_structured(
+            messages=[LLMMessage(role="user", content="x")],
+            response_model=ExampleFlag,
+            purpose=LLMRequestPurpose.CATALOG_EXPLANATION,
+        )
+    assert exc_info.value.code == LLMProviderErrorCode.STRUCTURED_OUTPUT_INVALID
+    provider.close()
+
+
 # ---------------------------------------------------------------------------
 # Transport / HTTP / envelope errors
 # ---------------------------------------------------------------------------
@@ -625,6 +729,46 @@ def test_stub_raises_configured_error() -> None:
         )
     assert exc_info.value.code == LLMProviderErrorCode.TIMEOUT
     assert len(stub.calls) == 1
+
+
+def test_stub_close_records_lifecycle() -> None:
+    stub = StubLLMProvider(
+        result=make_structured_result(
+            ExampleRecommendation(selected_template_id=1, confidence=0.1)
+        )
+    )
+    assert stub.closed is False
+    as_protocol: LLMProvider = stub
+    as_protocol.close()
+    assert stub.closed is True
+    stub.close()
+    assert stub.closed is True
+
+
+def test_concrete_provider_close_is_idempotent() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_success_body(
+                content='{"selected_template_id": 1, "confidence": 0.1}'
+            ),
+        )
+
+    provider: LLMProvider = _provider_with_handler(handler)
+    provider.close()
+    provider.close()
+
+
+def test_factory_created_provider_is_closeable() -> None:
+    provider = create_llm_provider(
+        _settings(
+            LLM_BASE_URL="https://llm.example",
+            LLM_MODEL="demo-model",
+        )
+    )
+    as_protocol: LLMProvider = provider
+    as_protocol.close()
+    as_protocol.close()
 
 
 def test_llm_message_rejects_empty_content() -> None:

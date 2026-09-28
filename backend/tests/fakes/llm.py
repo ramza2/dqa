@@ -37,6 +37,7 @@ class StubLLMProvider:
     result: LLMStructuredResult[Any] | None = None
     error: LLMProviderError | None = None
     calls: list[RecordedLLMCall] = field(default_factory=list)
+    closed: bool = False
 
     def generate_structured(
         self,
@@ -65,6 +66,9 @@ class StubLLMProvider:
             )
         # Caller expects LLMStructuredResult[T]; tests configure a matching data type.
         return self.result  # type: ignore[return-value]
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def make_structured_result(

@@ -34,3 +34,7 @@ class LLMProvider(Protocol):
         public API in this PR.
         """
         ...
+
+    def close(self) -> None:
+        """Release provider-owned resources (e.g. HTTP client). Idempotent."""
+        ...

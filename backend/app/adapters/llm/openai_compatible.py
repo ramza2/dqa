@@ -66,6 +66,7 @@ class OpenAICompatibleLLMProvider:
         self._model = model_stripped
         self._api_key = _optional_secret(api_key)
         self._owns_client = client is None
+        self._closed = False
         timeout = httpx.Timeout(
             timeout_seconds,
             connect=connect_timeout_seconds,
@@ -76,6 +77,9 @@ class OpenAICompatibleLLMProvider:
             self._client = httpx.Client(timeout=timeout, transport=transport)
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         if self._owns_client:
             self._client.close()
 
@@ -154,21 +158,22 @@ class OpenAICompatibleLLMProvider:
                 headers=self._headers(),
                 json=payload,
             )
-        except httpx.TimeoutException as exc:
+        except httpx.TimeoutException:
+            # from None: do not chain transport details into outer traceback.
             raise LLMProviderError(
                 LLMProviderErrorCode.TIMEOUT,
                 "LLM provider request timed out",
-            ) from exc
-        except httpx.NetworkError as exc:
+            ) from None
+        except httpx.NetworkError:
             raise LLMProviderError(
                 LLMProviderErrorCode.CONNECTION_ERROR,
                 "LLM provider connection failed",
-            ) from exc
-        except httpx.HTTPError as exc:
+            ) from None
+        except httpx.HTTPError:
             raise LLMProviderError(
                 LLMProviderErrorCode.CONNECTION_ERROR,
                 "LLM provider transport error",
-            ) from exc
+            ) from None
 
         if response.status_code < 200 or response.status_code >= 300:
             raise LLMProviderError(
@@ -181,11 +186,12 @@ class OpenAICompatibleLLMProvider:
     def _parse_envelope(self, response: httpx.Response) -> dict[str, Any]:
         try:
             body: Any = response.json()
-        except (json.JSONDecodeError, ValueError) as exc:
+        except (json.JSONDecodeError, ValueError):
+            # from None: raw body fragments must not appear in chained causes.
             raise LLMProviderError(
                 LLMProviderErrorCode.INVALID_RESPONSE,
                 "LLM provider returned non-JSON response body",
-            ) from exc
+            ) from None
         if not isinstance(body, dict):
             raise LLMProviderError(
                 LLMProviderErrorCode.INVALID_RESPONSE,
@@ -235,13 +241,15 @@ class OpenAICompatibleLLMProvider:
 
     def _validate_structured(self, content: str, response_model: type[T]) -> T:
         # Fail closed: no markdown-fence stripping, no prose repair, no regex extract.
+        # strict=True rejects JSON type coercion (e.g. "10" -> int).
+        # from None: ValidationError may embed rejected input_value in its repr.
         try:
-            return response_model.model_validate_json(content)
-        except (ValidationError, ValueError, json.JSONDecodeError) as exc:
+            return response_model.model_validate_json(content, strict=True)
+        except (ValidationError, ValueError, json.JSONDecodeError):
             raise LLMProviderError(
                 LLMProviderErrorCode.STRUCTURED_OUTPUT_INVALID,
                 "LLM provider structured output failed schema validation",
-            ) from exc
+            ) from None
 
     def _resolve_model(self, envelope: dict[str, Any]) -> str:
         raw = envelope.get("model")
