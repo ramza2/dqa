@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     llm_enable_thinking: bool | None = Field(
         default=None, alias="LLM_ENABLE_THINKING"
     )
+    # Parameter Extraction may send raw NL request text to the LLM only when true.
+    # Default false: technical opt-in gate, not a production data-egress approval.
+    llm_parameter_extraction_allow_raw_request: bool = Field(
+        default=False,
+        alias="LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST",
+    )
 
     @property
     def sqlalchemy_database_url(self) -> URL:

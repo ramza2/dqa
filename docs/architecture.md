@@ -207,17 +207,54 @@ Recommendation LLM payloads use a conservative character budget
 guarantee. Oversize prompts fail closed instead of being sent.
 
 
-### 3.7 Parameter Validation
+### 3.7 Parameter Extraction / Validation
 
-Validates:
-- required fields
-- data types
-- enum/allowed values
-- date/range rules
-- maximum list sizes
-- source/schema compatibility
+Flow after a selected Query Template version:
 
-Parameters are bound variables, never string-concatenated into SQL.
+```text
+Recommendation
+  -> selected template_id + version_id
+  -> eligibility recheck (APPROVED + enabled + current version
+     + Active Catalog compatibility + SQL Safety PASS)
+  -> raw-request egress policy gate
+  -> structured parameter extraction (LLM, advisory)
+  -> deterministic parameter validation
+  -> resolved parameters / clarification
+  -> [future execution gate]
+```
+
+Endpoint: `POST /api/v1/query-parameters/extract`
+
+Rules:
+- Parameter Extraction is **not** execution permission
+- `version_id` must equal the template's current version (stale recommendations fail)
+- executable SQL is never generated, modified, or run in this step
+- SQL text is never sent to the LLM
+- no DEMIS DB access and no extraction-result persistence
+- LLM may propose values only for declared parameter names
+- undeclared parameter names from the LLM fail closed
+- final validity is decided by deterministic validation, not the model
+
+Deterministic validator (`services/parameter_validation.py`) checks:
+- required / optional / default application
+- types: string, integer, decimal, boolean, date, datetime, enum,
+  string_list, integer_list
+- pattern, min/max, allowed_values, min_items/max_items
+- unresolved names and constraint failures become clarification
+  (`needs_clarification=true`, HTTP 200), not system errors
+
+Raw natural-language request text may reach the LLM only when
+`LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST=true`. Default is `false`
+(403 when parameters exist). Templates with an empty parameter schema skip
+the LLM and succeed without enabling egress.
+
+Extraction prompt payloads use a conservative character budget
+(`MAX_EXTRACTION_PROMPT_USER_JSON_CHARS`); this is not a tokenizer
+guarantee. Oversize prompts fail closed without calling the provider.
+Parameter schemas are not dropped to shrink the prompt.
+
+Parameters are bound variables for future execution, never
+string-concatenated into SQL.
 
 ### 3.8 SQL Safety Gate
 
