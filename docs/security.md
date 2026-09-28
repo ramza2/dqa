@@ -198,17 +198,42 @@ Sensitive parameter values should be masked or hashed according to future operat
 
 ## 10. Authentication and authorization
 
-Authentication/RBAC is not implemented in bootstrap.
+Authentication ("who") and authorization ("may this actor do this") are separated.
 
-Before production use, define roles such as:
-- viewer
-- template_author
-- template_approver
-- query_operator
-- auditor
-- administrator
+Identity:
+- `IdentityProvider` abstraction returns an `AuthenticatedActor`
+- production IdP (OIDC / JWT / SSO) is a future adapter implementing the same interface
+- current `dev_headers` provider is for local development/test only
+- `X-DQA-Dev-Actor` / `X-DQA-Dev-Roles` are identity assertions, not security
+  credentials, and must never be trusted as production headers
 
-Template author and approver separation should be supported where required.
+Config:
+- `DQA_AUTH_PROVIDER` default `disabled` (fail-closed on protected endpoints: 503)
+- `dev_headers` is allowed only when `APP_ENV` is `development` or `test`
+- enabling `dev_headers` under production fails closed (503)
+
+HTTP mapping:
+- unauthenticated / invalid identity → 401
+- authenticated without permission → 403
+- provider disabled / unavailable → 503
+
+Roles: `viewer`, `template_author`, `template_approver`, `query_operator`,
+`auditor`, `administrator`.
+
+Permissions are resolved from roles; routes check permissions only.
+Unknown roles fail closed. LLM output never determines actor, role, or permission.
+
+Protected in this foundation:
+- Query Template registry / approval / review-event read
+- Template Recommendation
+- Parameter Extraction
+
+Not yet covered (follow-up):
+- Catalog Package import / activation
+- Catalog Explorer admin surfaces
+- Connection Profile authorization
+- OIDC/OAuth2/JWT verification, user directory, MFA, sessions
+- full audit persistence
 
 ## 11. Production checklist
 

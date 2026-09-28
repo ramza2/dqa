@@ -1,6 +1,7 @@
 """Application settings loaded from environment variables."""
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -48,6 +49,12 @@ class Settings(BaseSettings):
     llm_parameter_extraction_allow_raw_request: bool = Field(
         default=False,
         alias="LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST",
+    )
+    # Authentication provider. Default disabled = fail-closed on protected routes.
+    # ``dev_headers`` is development/test only and rejected outside those envs.
+    dqa_auth_provider: Literal["disabled", "dev_headers"] = Field(
+        default="disabled",
+        alias="DQA_AUTH_PROVIDER",
     )
 
     @property

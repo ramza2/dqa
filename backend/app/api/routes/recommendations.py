@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.adapters.db.deps import get_db_session
 from app.adapters.recommendation.errors import RecommendationError, RecommendationErrorCode
+from app.auth.dependencies import require_permission
+from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.recommendation import (
     TemplateRecommendationRequest,
     TemplateRecommendationResponse,
@@ -23,6 +25,9 @@ router = APIRouter(prefix="/api/v1", tags=["query-recommendations"])
 def create_query_recommendation(
     body: TemplateRecommendationRequest,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.QUERY_OPERATE)
+    ),
 ) -> TemplateRecommendationResponse:
     """Recommend an eligible Query Template from a natural-language request.
 

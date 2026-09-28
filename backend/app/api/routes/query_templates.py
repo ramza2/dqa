@@ -11,6 +11,8 @@ from app.adapters.catalog.query_template_errors import (
     QueryTemplateErrorCode,
 )
 from app.adapters.db.deps import get_db_session
+from app.auth.dependencies import require_permission
+from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.query_template import (
     QueryTemplateCreateRequest,
     QueryTemplateDetail,
@@ -47,9 +49,12 @@ router = APIRouter(prefix="/api/v1/query-templates", tags=["query-templates"])
 def create_template(
     body: QueryTemplateCreateRequest,
     session: Session = Depends(get_db_session),
+    actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_AUTHOR)
+    ),
 ) -> QueryTemplateDetail:
     try:
-        return create_query_template(session, body)
+        return create_query_template(session, body, actor=actor.actor_id)
     except QueryTemplateError as exc:
         raise _template_http_error(exc) from exc
     except CatalogQueryError as exc:
@@ -62,6 +67,9 @@ def list_templates(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_READ)
+    ),
 ) -> QueryTemplateListResponse:
     return list_query_templates(
         session,
@@ -75,6 +83,9 @@ def list_templates(
 def get_template(
     template_id: int,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_READ)
+    ),
 ) -> QueryTemplateDetail:
     try:
         return get_query_template(session, template_id)
@@ -87,6 +98,9 @@ def patch_template(
     template_id: int,
     body: QueryTemplateUpdateRequest,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_AUTHOR)
+    ),
 ) -> QueryTemplateDetail:
     try:
         return update_query_template(session, template_id, body)
@@ -100,6 +114,9 @@ def patch_template(
 def remove_template(
     template_id: int,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_AUTHOR)
+    ),
 ) -> Response:
     try:
         delete_query_template(session, template_id)
@@ -113,11 +130,14 @@ def submit_review(
     template_id: int,
     body: QueryTemplateNoteRequest | None = None,
     session: Session = Depends(get_db_session),
+    actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_AUTHOR)
+    ),
 ) -> QueryTemplateDetail:
     note = body.note if body is not None else None
     try:
         return submit_query_template_for_review(
-            session, template_id, note=note, actor=None
+            session, template_id, note=note, actor=actor.actor_id
         )
     except QueryTemplateError as exc:
         raise _template_http_error(exc) from exc
@@ -128,10 +148,15 @@ def approve(
     template_id: int,
     body: QueryTemplateNoteRequest | None = None,
     session: Session = Depends(get_db_session),
+    actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_APPROVE)
+    ),
 ) -> QueryTemplateDetail:
     note = body.note if body is not None else None
     try:
-        return approve_query_template(session, template_id, note=note, actor=None)
+        return approve_query_template(
+            session, template_id, note=note, actor=actor.actor_id
+        )
     except QueryTemplateError as exc:
         raise _template_http_error(exc) from exc
 
@@ -141,10 +166,13 @@ def reject(
     template_id: int,
     body: QueryTemplateRejectRequest,
     session: Session = Depends(get_db_session),
+    actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_APPROVE)
+    ),
 ) -> QueryTemplateDetail:
     try:
         return reject_query_template(
-            session, template_id, note=body.note, actor=None
+            session, template_id, note=body.note, actor=actor.actor_id
         )
     except QueryTemplateError as exc:
         raise _template_http_error(exc) from exc
@@ -159,10 +187,13 @@ def create_version(
     template_id: int,
     body: QueryTemplateNewVersionRequest | None = None,
     session: Session = Depends(get_db_session),
+    actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_AUTHOR)
+    ),
 ) -> QueryTemplateDetail:
     try:
         return create_query_template_version(
-            session, template_id, body, actor=None
+            session, template_id, body, actor=actor.actor_id
         )
     except QueryTemplateError as exc:
         raise _template_http_error(exc) from exc
@@ -172,6 +203,9 @@ def create_version(
 def list_versions(
     template_id: int,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_READ)
+    ),
 ) -> QueryTemplateVersionListResponse:
     try:
         return list_query_template_versions(session, template_id)
@@ -186,6 +220,9 @@ def list_versions(
 def list_review_events(
     template_id: int,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.AUDIT_READ)
+    ),
 ) -> QueryTemplateReviewEventListResponse:
     try:
         return list_query_template_review_events(session, template_id)
@@ -197,6 +234,9 @@ def list_review_events(
 def get_sql_safety(
     template_id: int,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_READ)
+    ),
 ) -> QueryTemplateSqlSafetyResponse:
     try:
         return get_query_template_sql_safety(session, template_id)
@@ -208,6 +248,9 @@ def get_sql_safety(
 def enable(
     template_id: int,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_APPROVE)
+    ),
 ) -> QueryTemplateDetail:
     try:
         return enable_query_template(session, template_id)
@@ -219,6 +262,9 @@ def enable(
 def disable(
     template_id: int,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.TEMPLATE_APPROVE)
+    ),
 ) -> QueryTemplateDetail:
     try:
         return disable_query_template(session, template_id)
