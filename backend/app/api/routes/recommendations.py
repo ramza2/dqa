@@ -44,7 +44,10 @@ def _recommendation_http_error(exc: RecommendationError) -> HTTPException:
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     elif exc.code == RecommendationErrorCode.LLM_OUTPUT_INVALID:
         status_code = status.HTTP_502_BAD_GATEWAY
-    elif exc.code == RecommendationErrorCode.INVALID_REQUEST:
+    elif exc.code in {
+        RecommendationErrorCode.INVALID_REQUEST,
+        RecommendationErrorCode.PROMPT_TOO_LARGE,
+    }:
         status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     else:
         status_code = status.HTTP_400_BAD_REQUEST

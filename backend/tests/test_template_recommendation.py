@@ -879,6 +879,126 @@ def test_candidate_cap_limits_llm_payload(
     assert len(payload["candidates"]) <= MAX_RECOMMENDATION_CANDIDATES
 
 
+def test_single_candidate_oversize_prompt_fail_closed(
+    db_session: Session,
+    db_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    detail = _create_approve_enable(
+        db_session,
+        db_client,
+        fingerprint="fp-oversized",
+        stable_key="over.size",
+        name="병동 조회",
+        description="병동",
+    )
+    # Force any projected payload over the hard character budget.
+    monkeypatch.setattr(
+        "app.services.template_recommendation.MAX_PROMPT_USER_JSON_CHARS",
+        50,
+    )
+    stub = _stub_for(
+        _ranking(
+            recommended_template_id=detail["id"],
+            ranked_template_ids=[detail["id"]],
+            confidence=0.9,
+        )
+    )
+    with pytest.raises(RecommendationError) as exc_info:
+        recommend_query_templates(
+            db_session,
+            TemplateRecommendationRequest(
+                source_name=SOURCE_A["source_name"],
+                request_text=f"{SECRET_TOKEN} 병동 조회",
+            ),
+            llm_provider=stub,
+        )
+    assert exc_info.value.code == RecommendationErrorCode.PROMPT_TOO_LARGE
+    assert stub.calls == []
+    assert SECRET_TOKEN not in str(exc_info.value)
+    assert "병동" not in str(exc_info.value)
+
+
+def test_global_matched_terms_recomputed_after_candidate_drop(
+    db_session: Session,
+    db_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _import_and_activate(db_session, fingerprint="fp-stale-terms")
+    db_session.commit()
+    high = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(
+            stable_key="high.ward",
+            name="병동 조회",
+            description="병동",
+            parameter_schema=[
+                {
+                    "name": "ward_id",
+                    "label": "병동",
+                    "type": "integer",
+                    "required": True,
+                    "min": 1,
+                }
+            ],
+        ),
+    ).json()
+    low = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(
+            stable_key="low.discharge",
+            name="퇴원 조회",
+            description="퇴원특수어 관련",
+            parameter_schema=[
+                {
+                    "name": "x_id",
+                    "label": "퇴원특수어",
+                    "type": "integer",
+                    "required": True,
+                    "min": 1,
+                }
+            ],
+        ),
+    ).json()
+    for template_id in (high["id"], low["id"]):
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/submit-review", json={}
+        ).status_code == 200
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/approve", json={}
+        ).status_code == 200
+        assert db_client.post(
+            f"/api/v1/query-templates/{template_id}/enable"
+        ).status_code == 200
+
+    # Budget allows one compact candidate but not two.
+    monkeypatch.setattr(
+        "app.services.template_recommendation.MAX_PROMPT_USER_JSON_CHARS",
+        900,
+    )
+    stub = _stub_for(
+        _ranking(
+            recommended_template_id=high["id"],
+            ranked_template_ids=[high["id"]],
+            confidence=0.9,
+        )
+    )
+    recommend_query_templates(
+        db_session,
+        TemplateRecommendationRequest(
+            source_name=SOURCE_A["source_name"],
+            request_text="병동 퇴원특수어 조회",
+        ),
+        llm_provider=stub,
+    )
+    assert len(stub.calls) == 1
+    payload = json.loads(stub.calls[0].messages[1].content)
+    candidate_ids = {item["template_id"] for item in payload["candidates"]}
+    assert high["id"] in candidate_ids
+    assert low["id"] not in candidate_ids
+    assert "퇴원특수어" not in set(payload["matched_terms"])
+
+
 def test_stable_key_and_description_match(
     db_session: Session, db_client: TestClient
 ) -> None:

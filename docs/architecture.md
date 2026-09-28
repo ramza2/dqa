@@ -202,6 +202,9 @@ model output.
 Known limitation: initial retrieval is privacy-first lexical matching over
 template metadata. Synonyms / paraphrases / morphology outside metadata may
 yield no-match clarification. Embeddings and raw-NL egress are out of scope.
+Recommendation LLM payloads use a conservative character budget
+(`MAX_PROMPT_USER_JSON_CHARS`); this is a projection cap, not a tokenizer
+guarantee. Oversize prompts fail closed instead of being sent.
 
 
 ### 3.7 Parameter Validation

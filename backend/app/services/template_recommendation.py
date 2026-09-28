@@ -108,11 +108,9 @@ def recommend_query_templates(
             ranked_candidates=[],
         )
 
-    matched_terms = _project_terms(
-        _collect_matched_terms(top),
-        max_terms=MAX_PROMPT_GLOBAL_MATCHED_TERMS,
-    )
-    if not matched_terms:
+    # Lexical presence only; final global matched_terms are recomputed from the
+    # candidates actually kept for the LLM payload after size budgeting.
+    if not _collect_matched_terms(top):
         return TemplateRecommendationResponse(
             source_name=request.source_name,
             catalog_revision_id=active.revision_id,
@@ -129,7 +127,6 @@ def recommend_query_templates(
         source_name=request.source_name,
         catalog_revision_id=active.revision_id,
         schema_fingerprint=active.schema_fingerprint,
-        matched_terms=matched_terms,
         candidates=top,
         llm_provider=llm_provider,
         settings=settings,
@@ -292,7 +289,6 @@ def _rank_with_llm(
     source_name: str,
     catalog_revision_id: int,
     schema_fingerprint: str,
-    matched_terms: list[str],
     candidates: list[_EligibleCandidate],
     llm_provider: LLMProvider | None,
     settings: Settings | None,
@@ -301,7 +297,6 @@ def _rank_with_llm(
         source_name=source_name,
         catalog_revision_id=catalog_revision_id,
         schema_fingerprint=schema_fingerprint,
-        matched_terms=matched_terms,
         candidates=candidates,
     )
     candidate_ids = {item.template.id for item in sent_candidates}
@@ -340,7 +335,6 @@ def _build_messages(
     source_name: str,
     catalog_revision_id: int,
     schema_fingerprint: str,
-    matched_terms: list[str],
     candidates: list[_EligibleCandidate],
 ) -> tuple[list[LLMMessage], list[_EligibleCandidate]]:
     system = (
@@ -360,12 +354,18 @@ def _build_messages(
     )
     kept = list(candidates)
     while True:
+        # Recompute global terms from the final kept set so dropped candidates
+        # cannot leave stale intent terms in the payload.
+        final_matched_terms = _project_terms(
+            _collect_matched_terms(kept),
+            max_terms=MAX_PROMPT_GLOBAL_MATCHED_TERMS,
+        )
         candidate_payloads = [_candidate_prompt_dict(item) for item in kept]
         payload = {
             "source_name": source_name,
             "catalog_revision_id": catalog_revision_id,
             "schema_fingerprint": schema_fingerprint,
-            "matched_terms": matched_terms,
+            "matched_terms": final_matched_terms,
             "candidates": candidate_payloads,
             "response_schema": {
                 "recommended_template_id": "int|null",
@@ -377,11 +377,14 @@ def _build_messages(
             },
         }
         serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-        if (
-            len(serialized) <= MAX_PROMPT_USER_JSON_CHARS
-            or len(kept) <= 1
-        ):
+        if len(serialized) <= MAX_PROMPT_USER_JSON_CHARS:
             break
+        if len(kept) <= 1:
+            # Fail closed: never send an oversize prompt, even for one candidate.
+            raise RecommendationError(
+                RecommendationErrorCode.PROMPT_TOO_LARGE,
+                "recommendation prompt exceeds the configured size limit",
+            )
         # Drop lowest-ranked candidate (list is score-desc ordered).
         kept.pop()
 
