@@ -51,6 +51,13 @@ def extract_query_parameters(
     """Extract and validate declared parameter values for one template version."""
     cfg = settings or get_settings()
 
+    template, version = _require_eligible_template(
+        session,
+        source_name=request.source_name,
+        template_id=request.template_id,
+        version_id=request.version_id,
+    )
+
     try:
         active = get_active_catalog(session, request.source_name)
     except CatalogActivationError:
@@ -59,14 +66,21 @@ def extract_query_parameters(
             "active catalog revision not found for source",
         ) from None
 
-    template, version = _require_eligible_template(
-        session,
-        source_name=request.source_name,
-        template_id=request.template_id,
-        version_id=request.version_id,
-        catalog_revision_id=active.revision_id,
-        schema_fingerprint=active.schema_fingerprint,
-    )
+    if (
+        version.catalog_revision_id != active.revision_id
+        or version.catalog_fingerprint_constraint != active.schema_fingerprint
+    ):
+        raise ParameterExtractionError(
+            ParameterExtractionErrorCode.TEMPLATE_NOT_ELIGIBLE,
+            "query template is not compatible with the active catalog",
+        )
+
+    report = validate_sql_safety(version.sql_text, version.parameter_schema)
+    if not report.safe:
+        raise ParameterExtractionError(
+            ParameterExtractionErrorCode.TEMPLATE_NOT_ELIGIBLE,
+            "query template SQL does not pass safety validation",
+        )
 
     try:
         parameters = [
@@ -145,8 +159,6 @@ def _require_eligible_template(
     source_name: str,
     template_id: int,
     version_id: int,
-    catalog_revision_id: int,
-    schema_fingerprint: str,
 ) -> tuple[QueryTemplate, QueryTemplateVersion]:
     repo = QueryTemplateRepository(session)
     template = repo.get_by_id(template_id)
@@ -177,21 +189,6 @@ def _require_eligible_template(
         raise ParameterExtractionError(
             ParameterExtractionErrorCode.TEMPLATE_NOT_ELIGIBLE,
             "query template is not approved and enabled",
-        )
-    if (
-        version.catalog_revision_id != catalog_revision_id
-        or version.catalog_fingerprint_constraint != schema_fingerprint
-    ):
-        raise ParameterExtractionError(
-            ParameterExtractionErrorCode.TEMPLATE_NOT_ELIGIBLE,
-            "query template is not compatible with the active catalog",
-        )
-
-    report = validate_sql_safety(version.sql_text, version.parameter_schema)
-    if not report.safe:
-        raise ParameterExtractionError(
-            ParameterExtractionErrorCode.TEMPLATE_NOT_ELIGIBLE,
-            "query template SQL does not pass safety validation",
         )
     return template, version
 

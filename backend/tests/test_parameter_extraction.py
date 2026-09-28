@@ -170,7 +170,7 @@ def test_eligible_template_extraction_success(
         ParameterExtractionRequest(
             source_name=SOURCE_A["source_name"],
             template_id=detail["id"],
-            version_id=detail["current_version"]["id"],
+            version_id=detail["current_version_id"],
             request_text=f"{SYNTHETIC} A01 병동 2026-09-01 이력",
         ),
         llm_provider=stub,
@@ -187,6 +187,8 @@ def test_eligible_template_extraction_success(
 
 
 def test_template_not_found(db_session: Session) -> None:
+    _import_and_activate(db_session, fingerprint="fp-missing")
+    db_session.commit()
     stub = _stub(_extraction())
     with pytest.raises(ParameterExtractionError) as exc_info:
         extract_query_parameters(
@@ -215,7 +217,7 @@ def test_source_mismatch_and_stale_version(
             ParameterExtractionRequest(
                 source_name="other_source",
                 template_id=detail["id"],
-                version_id=detail["current_version"]["id"],
+                version_id=detail["current_version_id"],
                 request_text="x",
             ),
             llm_provider=stub,
@@ -258,7 +260,7 @@ def test_ineligible_statuses_skip_llm(
             json=_create_body(stable_key="pex_draft"),
         ).json()
         template_id = created["id"]
-        version_id = created["current_version"]["id"]
+        version_id = created["current_version_id"]
     elif status_setup == "in_review":
         _import_and_activate(db_session, fingerprint="fp-review")
         db_session.commit()
@@ -267,7 +269,7 @@ def test_ineligible_statuses_skip_llm(
             json=_create_body(stable_key="pex_review"),
         ).json()
         template_id = created["id"]
-        version_id = created["current_version"]["id"]
+        version_id = created["current_version_id"]
         assert db_client.post(
             f"/api/v1/query-templates/{template_id}/submit-review", json={}
         ).status_code == 200
@@ -279,7 +281,7 @@ def test_ineligible_statuses_skip_llm(
             json=_create_body(stable_key="pex_rej"),
         ).json()
         template_id = created["id"]
-        version_id = created["current_version"]["id"]
+        version_id = created["current_version_id"]
         assert db_client.post(
             f"/api/v1/query-templates/{template_id}/submit-review", json={}
         ).status_code == 200
@@ -292,7 +294,7 @@ def test_ineligible_statuses_skip_llm(
             db_session, db_client, fingerprint="fp-dis", stable_key="pex_dis"
         )
         template_id = detail["id"]
-        version_id = detail["current_version"]["id"]
+        version_id = detail["current_version_id"]
         assert db_client.post(
             f"/api/v1/query-templates/{template_id}/disable"
         ).status_code == 200
@@ -301,7 +303,7 @@ def test_ineligible_statuses_skip_llm(
             db_session, db_client, fingerprint="fp-old", stable_key="pex_old"
         )
         template_id = detail["id"]
-        version_id = detail["current_version"]["id"]
+        version_id = detail["current_version_id"]
         _import_and_activate(db_session, fingerprint="fp-new")
         db_session.commit()
     else:  # unsafe
@@ -318,7 +320,7 @@ def test_ineligible_statuses_skip_llm(
         # no-param unsafe still fails eligibility via SQL safety before no-param shortcut
         # Wait - empty params skip LLM but eligibility checks SQL safety first.
         template_id = detail["id"]
-        version_id = detail["current_version"]["id"]
+        version_id = detail["current_version_id"]
 
     with pytest.raises(ParameterExtractionError) as exc_info:
         extract_query_parameters(
@@ -355,7 +357,7 @@ def test_egress_gate_default_blocks_llm(
             ParameterExtractionRequest(
                 source_name=SOURCE_A["source_name"],
                 template_id=detail["id"],
-                version_id=detail["current_version"]["id"],
+                version_id=detail["current_version_id"],
                 request_text=f"{SYNTHETIC} A01",
             ),
             llm_provider=stub,
@@ -384,7 +386,7 @@ def test_no_parameter_template_succeeds_without_egress(
         ParameterExtractionRequest(
             source_name=SOURCE_A["source_name"],
             template_id=detail["id"],
-            version_id=detail["current_version"]["id"],
+            version_id=detail["current_version_id"],
             request_text="anything",
         ),
         llm_provider=stub,
@@ -413,7 +415,7 @@ def test_prompt_includes_request_excludes_sql(
         ParameterExtractionRequest(
             source_name=SOURCE_A["source_name"],
             template_id=detail["id"],
-            version_id=detail["current_version"]["id"],
+            version_id=detail["current_version_id"],
             request_text=raw,
         ),
         llm_provider=stub,
@@ -444,7 +446,7 @@ def test_hallucinated_parameter_fail_closed(
             ParameterExtractionRequest(
                 source_name=SOURCE_A["source_name"],
                 template_id=detail["id"],
-                version_id=detail["current_version"]["id"],
+                version_id=detail["current_version_id"],
                 request_text="x",
             ),
             llm_provider=stub,
@@ -470,7 +472,7 @@ def test_invalid_extracted_value_is_clarification_not_http_error(
         ParameterExtractionRequest(
             source_name=SOURCE_A["source_name"],
             template_id=detail["id"],
-            version_id=detail["current_version"]["id"],
+            version_id=detail["current_version_id"],
             request_text="x",
         ),
         llm_provider=stub,
@@ -491,7 +493,7 @@ def test_missing_required_clarification(
         ParameterExtractionRequest(
             source_name=SOURCE_A["source_name"],
             template_id=detail["id"],
-            version_id=detail["current_version"]["id"],
+            version_id=detail["current_version_id"],
             request_text="x",
         ),
         llm_provider=stub,
@@ -549,7 +551,7 @@ def test_api_success_and_cache_headers(
         json={
             "source_name": SOURCE_A["source_name"],
             "template_id": detail["id"],
-            "version_id": detail["current_version"]["id"],
+            "version_id": detail["current_version_id"],
             "request_text": f"{SYNTHETIC} A01 2026-09-01",
         },
     )
@@ -572,7 +574,7 @@ def test_api_egress_forbidden_by_default(
         json={
             "source_name": SOURCE_A["source_name"],
             "template_id": detail["id"],
-            "version_id": detail["current_version"]["id"],
+            "version_id": detail["current_version_id"],
             "request_text": "A01",
         },
     )
@@ -625,7 +627,7 @@ def test_provider_timeout_maps_to_unavailable(
             ParameterExtractionRequest(
                 source_name=SOURCE_A["source_name"],
                 template_id=detail["id"],
-                version_id=detail["current_version"]["id"],
+                version_id=detail["current_version_id"],
                 request_text="x",
             ),
             llm_provider=stub,
