@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 # Deterministic defaults applied via monkeypatch in fixtures (not setdefault).
 # Password matches local Cloud Agent PostgreSQL (scripts/cloud-agent-start.sh).
+# LLM env is cleared so developer-local LLM_* values cannot leak into tests.
 _TEST_ENV = {
     "APP_ENV": "test",
     "APP_NAME": "DEMIS Query Assistant",
@@ -14,6 +15,11 @@ _TEST_ENV = {
     "DQA_DB_NAME": "dqa",
     "DQA_DB_USER": "dqa",
     "DQA_DB_PASSWORD": "dqa",
+    "LLM_BASE_URL": "",
+    "LLM_API_KEY": "",
+    "LLM_MODEL": "",
+    "LLM_TIMEOUT_SECONDS": "60",
+    "LLM_CONNECT_TIMEOUT_SECONDS": "10",
 }
 
 
