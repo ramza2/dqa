@@ -202,12 +202,21 @@ def _assert_default_list_bounds(param: QueryTemplateParameter, value: list[Any])
         raise ValueError("parameter default list has more items than allowed")
 
 
-def _is_iso_datetime_with_time(value: str) -> bool:
-    """True when value is an ISO datetime with an explicit time component.
+_ISO_DATETIME_WITH_TIME_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T"
+    r"\d{2}:\d{2}"
+    r"(?::\d{2}(?:\.\d+)?)?"
+    r"(?:Z|[+-]\d{2}:\d{2})?$"
+)
 
-    Date-only strings such as YYYY-MM-DD are rejected. No timezone is invented.
+
+def _is_iso_datetime_with_time(value: str) -> bool:
+    """True for canonical ISO datetime with an explicit time component.
+
+    Contract: ``YYYY-MM-DDT...`` with optional timezone (``Z`` or ``±HH:MM``).
+    Date-only and alternate ISO date forms are rejected. No timezone is invented.
     """
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+    if not isinstance(value, str) or _ISO_DATETIME_WITH_TIME_RE.fullmatch(value) is None:
         return False
     try:
         datetime.fromisoformat(value.replace("Z", "+00:00"))

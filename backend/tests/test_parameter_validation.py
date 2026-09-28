@@ -117,9 +117,16 @@ def test_date_and_datetime() -> None:
         ).needs_clarification
         is False
     )
-    assert ISSUE_TYPE_MISMATCH in _codes(
-        validate_parameter_values([dt_param], {"ts": "2026-09-01"}, [])
+    assert (
+        validate_parameter_values(
+            [dt_param], {"ts": "2026-09-01T10:00:00Z"}, []
+        ).needs_clarification
+        is False
     )
+    for rejected in ("2026-09-01", "20260901", "2026-W36-2"):
+        assert ISSUE_TYPE_MISMATCH in _codes(
+            validate_parameter_values([dt_param], {"ts": rejected}, [])
+        )
     assert ISSUE_TYPE_MISMATCH in _codes(
         validate_parameter_values([dt_param], {"ts": "bad"}, [])
     )
@@ -150,6 +157,10 @@ def test_parameter_default_constraints_fail_closed() -> None:
         _p(name="ids", type="integer_list", max_items=1, default=[1, 2])
     with pytest.raises(ValidationError):
         _p(name="ts", type="datetime", default="2026-09-01")
+    with pytest.raises(ValidationError):
+        _p(name="ts", type="datetime", default="20260901")
+    with pytest.raises(ValidationError):
+        _p(name="ts", type="datetime", default="2026-W36-2")
 
 
 def test_parameter_valid_defaults_regression() -> None:
@@ -170,6 +181,9 @@ def test_parameter_valid_defaults_regression() -> None:
     assert _p(
         name="ts", type="datetime", default="2026-09-01T10:00:00+09:00"
     ).default == "2026-09-01T10:00:00+09:00"
+    assert _p(
+        name="ts", type="datetime", default="2026-09-01T10:00:00Z"
+    ).default == "2026-09-01T10:00:00Z"
 
 
 def test_enum_strict_type_and_membership() -> None:
