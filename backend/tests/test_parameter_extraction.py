@@ -427,11 +427,19 @@ def test_prompt_includes_request_excludes_sql(
     assert "DELETE" not in blob
     assert "ward_cd" in blob
     assert "password" not in blob.casefold()
-    assert "not mentioned in request_text" in blob
-    assert "omit it from both" in blob
+    assert "values MUST be a JSON array" in blob
+    assert "omit it from both values and unresolved_parameter_names" in blob
+    assert "Do not fill default values" in blob
+    assert "Do not invent or guess" in blob
+    assert (
+        '{"values":[{"name":"ward_cd","value":"A01"}],'
+        '"unresolved_parameter_names":[]}'
+    ) in blob
     payload = json.loads(stub.calls[0].messages[1].content)
     assert payload["request_text"] == raw
     assert "sql_text" not in payload
+    assert payload["response_schema"]["values"]["type"] == "array"
+    assert payload["response_example"]["values"][0]["name"] == "ward_cd"
     assert stub.calls[0].purpose == LLMRequestPurpose.PARAMETER_EXTRACTION
 
 
