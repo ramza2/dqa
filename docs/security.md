@@ -81,7 +81,19 @@ Never let model output:
 - supply credentials
 - change active Catalog state without deterministic authorization
 
-Structured model output must be schema-validated.
+Structured model output must be schema-validated (strict JSON + Pydantic).
+Do not auto-repair markdown fences, surrounding prose, or partial JSON.
+
+Provider boundary (`app/adapters/llm`):
+- do not log request prompts, message content, or raw provider response bodies
+- do not put API keys, Authorization headers, or full request/response bodies
+  into exception messages
+- sanitize HTTP failures to status-level messages (e.g. "LLM provider returned HTTP 500")
+- do not expose a public arbitrary `/chat` proxy
+- do not implement query-result summarization or any path that sends result rows
+  to an LLM until an approved data-egress policy exists
+
+API keys use `SecretStr` and empty keys omit the Authorization header.
 
 ## 6. Catalog Package controls
 

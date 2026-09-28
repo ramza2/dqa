@@ -149,6 +149,30 @@ Output:
 
 The LLM is advisory. The backend performs final deterministic validation.
 
+LLM access is mediated by a provider abstraction (transport boundary only):
+
+```text
+Application Service
+       |
+       v
+LLMProvider interface
+       |
+       +--> OpenAICompatibleLLMProvider (httpx Chat Completions)
+       |
+       +--> test double (tests only)
+```
+
+Rules for this boundary:
+- structured output is strict JSON parsed into a caller-supplied Pydantic model
+- LLM output is untrusted input and never the sole security control
+- no public arbitrary chat / Text-to-SQL endpoint
+- provider does not generate or execute SQL
+- query result rows are not sent to an LLM (no RESULT_SUMMARIZATION purpose)
+
+LLM settings (`LLM_BASE_URL`, `LLM_MODEL`, optional `LLM_API_KEY`) are optional at
+process start; completeness is validated only when `create_llm_provider` runs.
+
+
 ### 3.7 Parameter Validation
 
 Validates:
@@ -250,8 +274,10 @@ Deployment:
 - public DNS / external Traefik optional, not required by the core architecture
 
 LLM:
-- OpenAI-compatible provider abstraction
-- model/provider configured by environment
+- OpenAI-compatible provider abstraction (`app/adapters/llm`)
+- model/provider configured by environment (optional at startup)
+- httpx Chat Completions client; structured results via Pydantic validation
+- no request/response content logging at the provider boundary
 
 ## 5. Data separation
 
