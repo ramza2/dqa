@@ -12,6 +12,7 @@ from app.api.routes import (
     connection_profiles,
     health,
     parameter_extraction,
+    query_executions,
     query_templates,
     recommendations,
 )
@@ -28,5 +29,6 @@ api_router.include_router(catalog_active.activations_router)
 api_router.include_router(query_templates.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(parameter_extraction.router)
+api_router.include_router(query_executions.router)
 api_router.include_router(connection_profiles.router)
 api_router.include_router(audit_events.router)

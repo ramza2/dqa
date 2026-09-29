@@ -234,20 +234,29 @@ Protected in this foundation:
 - Template Recommendation
 - Parameter Extraction
 - Connection Profile management (`CONNECTION_PROFILE_MANAGE`, administrator only)
+- Execution preview (`QUERY_OPERATE`; no DEMIS connection / no credential resolve)
 
 Connection Profile rules:
 - credentials are referenced, never stored as secret values
 - diagnostics are configuration-level only (no live DEMIS connection test)
 - Catalog activation does not auto-create or mutate Connection Profiles
 
+Execution preview rules:
+- authoritative catalog/profile/template metadata loaded server-side only
+- resolved parameter values may appear in the preview response for confirmation
+  (`Cache-Control: no-store, private`); never log or persist parameter values
+- SQL text, host/port/username/database, credential refs, and DSN never returned
+- live execution remains blocked (`execution_available=false`,
+  `DEMIS_ADAPTER_UNAVAILABLE`) until a concrete DEMIS adapter exists
+- preview does not write audit events
+
 Not yet covered (follow-up):
 - Catalog Package import / activation admin authorization
 - Catalog Explorer admin surfaces
 - OIDC/OAuth2/JWT verification, user directory, MFA, sessions
-- wiring audit writes into live execution (preview/execute)
+- public execute endpoint + audit writes for QUERY_REQUEST / QUERY_EXECUTION
 - concrete DEMIS DBMS driver / live connectivity (blocked on confirmed requirements)
 - production credential secret-store resolver
-- public query execution API
 
 ## 11. Production checklist
 

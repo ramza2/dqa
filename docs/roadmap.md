@@ -175,15 +175,17 @@ Scope:
 - no public execution API; not wired to recommendation / extraction / audit yet
 
 ### PR 18 - Execution preview and execution service
+Status: preview + eligibility gate landed (`POST /api/v1/query-executions/preview`);
+actual execute endpoint / DEMIS call / audit wiring remain follow-up.
 Scope:
-- complete production execution gate
-- executable eligibility checks
-- preview
-- explicit user execution action
-- approved read-only execution
-- normalized result
-- audit write
-- failure categories
+- complete production execution eligibility gate (reusable service)
+- executable eligibility checks (template/catalog/SQL/params/profile)
+- preview API (`QUERY_OPERATE`); `execution_available=false` while no concrete DEMIS adapter
+- explicit user execution action (not in this PR)
+- approved read-only execution (not in this PR)
+- normalized result (not in this PR)
+- audit write (not in this PR)
+- failure categories for preview/eligibility
 
 ### PR 19 - Query Assistant frontend
 Scope:

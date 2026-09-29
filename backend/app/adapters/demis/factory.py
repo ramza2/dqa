@@ -99,6 +99,41 @@ def _is_concrete_adapter_registered(dbms: str) -> bool:
     return dbms in _REGISTERED_CONCRETE_DBMS
 
 
+def is_concrete_demis_adapter_available(dbms_type: str | None) -> bool:
+    """Return whether a concrete DEMIS adapter is registered for ``dbms_type``.
+
+    Does not resolve credentials, open connections, or instantiate adapters.
+    Forbidden fake/test kinds are never available through production.
+    """
+    dbms = _normalize_dbms_type(dbms_type)
+    if not dbms or dbms in _FORBIDDEN_PRODUCTION_KINDS:
+        return False
+    return _is_concrete_adapter_registered(dbms)
+
+
+def required_adapter_config_present(
+    *,
+    dbms_type: str | None,
+    host: str | None,
+    port: int | None,
+    database_name: str | None,
+    username: str | None,
+    credential_secret_ref: str | None,
+) -> bool:
+    """True when non-secret target metadata + credential *ref* are present.
+
+    Does not resolve secrets or validate connectivity.
+    """
+    return bool(
+        dbms_type
+        and host
+        and port is not None
+        and database_name
+        and username
+        and credential_secret_ref
+    )
+
+
 def _resolve_credentials(
     credential_resolver: CredentialResolver, credential_secret_ref: str
 ) -> CredentialMaterial:
