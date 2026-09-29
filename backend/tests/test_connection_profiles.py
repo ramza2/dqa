@@ -34,7 +34,7 @@ def _create_body(**overrides: Any) -> dict[str, Any]:
         "port": 1521,
         "database_name": "DEMIS",
         "username": "dqa_ro",
-        "credential_secret_ref": "env:DEMIS_DB_PASSWORD",
+        "credential_secret_ref": "env:DEMIS_SECRET_PASSWORD",
     }
     body.update(overrides)
     return body
@@ -48,7 +48,7 @@ def test_administrator_crud_enable_disable_diagnostics(
     body = created.json()
     assert body["enabled"] is False
     assert body["created_by"] == "test-admin"
-    assert body["credential_secret_ref"] == "env:DEMIS_DB_PASSWORD"
+    assert body["credential_secret_ref"] == "env:DEMIS_SECRET_PASSWORD"
     assert "change-me" not in created.text
     assert "super-secret" not in created.text
     profile_id = body["id"]
@@ -94,7 +94,7 @@ def test_administrator_crud_enable_disable_diagnostics(
     stored = db_session.scalars(
         select(ConnectionProfile).where(ConnectionProfile.id == profile_id)
     ).one()
-    assert stored.credential_secret_ref == "env:DEMIS_DB_PASSWORD"
+    assert stored.credential_secret_ref == "env:DEMIS_SECRET_PASSWORD"
     assert stored.credential_secret_ref is not None
     assert "secret-value" not in (stored.credential_secret_ref or "")
 

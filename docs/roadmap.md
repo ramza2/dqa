@@ -163,7 +163,8 @@ Status: foundation contracts landed (`app/adapters/demis`); concrete DBMS
 adapter still blocked on confirmed DEMIS requirements.
 Scope:
 - DBMS-neutral adapter interface (`diagnostics`, `execute_readonly`)
-- credential resolver protocol (no secret-store implementation yet)
+- credential resolver protocol
+- production `EnvironmentCredentialResolver` (`env:` + dedicated prefix boundary)
 - Connection Profile snapshot eligibility (enabled + target metadata + credential ref)
 - production factory fail-closed (`UNSUPPORTED_DBMS`); no DQA PG fallback
 - test/fake adapter only (never production-selectable)
@@ -173,6 +174,15 @@ Scope:
 - sanitized connection diagnostics (`live_connection_tested=false` until a driver exists)
 - least-privilege assumptions documented
 - no public execution API; not wired to recommendation / extraction / audit yet
+
+### PR 17b - Environment credential resolver
+Status: landed on top of adapter foundation / preview.
+Scope:
+- `EnvironmentCredentialResolver` for `env:<NAME>` only
+- `DQA_DEMIS_CREDENTIAL_ENV_PREFIX` allowlist boundary (default `DEMIS_SECRET_`)
+- `create_credential_resolver(settings)` factory
+- no DEMIS driver / connection / execute API
+- Connection Profile and preview still store/check references only (no resolve)
 
 ### PR 18 - Execution preview and execution service
 Status: preview + eligibility gate landed (`POST /api/v1/query-executions/preview`);

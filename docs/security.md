@@ -282,9 +282,15 @@ Foundation (`app/adapters/demis`):
 - DBMS-neutral protocol and DTOs only; no concrete DEMIS driver package
 - DQA PostgreSQL/`psycopg` must never be used as the DEMIS adapter
 - fake/test adapters are test-only and cannot be selected by the production factory
-- credential values, host/port/username/database, DSN, and result rows must never
-  appear in logs, exceptions, or public API payloads
+- first production credential source: `EnvironmentCredentialResolver` (`env:` only)
+  with dedicated prefix `DQA_DEMIS_CREDENTIAL_ENV_PREFIX` (default `DEMIS_SECRET_`)
+- arbitrary process environment variables (PATH, HOME, DQA_DB_PASSWORD, cloud keys)
+  cannot be resolved through this boundary
+- future approved secret stores may implement the same `CredentialResolver` protocol
+- credential values, host/port/username/database, DSN, credential refs, and result
+  rows must never appear in logs, exceptions, or public API payloads
 - adapter assumes SQL Safety already passed and must not weaken it
 - DB least privilege remains mandatory outside application controls
 - Connection Profile diagnostics remain configuration-level until a concrete
   adapter can set `live_connection_tested`
+- concrete DEMIS DBMS adapter remains unavailable until requirements are confirmed

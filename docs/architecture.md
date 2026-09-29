@@ -336,9 +336,17 @@ Implemented in this foundation:
 - result DTO: `columns`, `rows`, `row_count`, `truncated`, `elapsed_ms`
 - sanitized diagnostics DTO (no host/port/user/DSN/credential ref)
 - `CredentialResolver` protocol (`credential_secret_ref` → opaque runtime material)
+- production `EnvironmentCredentialResolver` for explicit `env:<NAME>` refs only,
+  gated by `DQA_DEMIS_CREDENTIAL_ENV_PREFIX` (default `DEMIS_SECRET_`)
+- `create_credential_resolver(settings)` factory for the production resolver boundary
 - production factory `create_readonly_demis_adapter(...)` consuming an enabled
   Connection Profile snapshot + credential resolver (fail-closed)
 - test-only fake adapter / fake resolver (never selectable via production factory)
+
+Credentials are never resolved during Connection Profile CRUD/diagnostics or
+execution preview. Resolver invocation remains behind concrete adapter selection;
+with no registered DEMIS driver the adapter factory still returns
+`UNSUPPORTED_DBMS` without reading environment secrets.
 
 Responsibilities (contract / future concrete adapters):
 - connection lifecycle
