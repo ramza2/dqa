@@ -409,15 +409,20 @@ Orchestration (`execute_query`):
 3. if `execution_available=false`, durable-append `DENIED` with
    `DEMIS_ADAPTER_UNAVAILABLE` and fail closed (no credential resolution)
 4. on eligibility success, durable-append `QUERY_REQUEST` / `SUCCEEDED`
-5. build `ConnectionProfileSnapshot` server-side; create credential resolver +
-   read-only adapter via production factories
-6. build `ReadonlyQueryRequest` only from approved `version.sql_text`,
-   resolved parameters, and approved timeout/row_limit
-7. durable-append `QUERY_EXECUTION` / `STARTED`; call
-   `adapter.execute_readonly()` exactly once
-8. success → durable-append `SUCCEEDED` (elapsed/row_count/truncated + names only)
-   and return normalized rows; adapter/runtime failure → durable-append `FAILED`
-   with sanitized `failure_category`
+5. durable-append `QUERY_EXECUTION` / `STARTED` (if this fails, no credentials)
+6. build `ConnectionProfileSnapshot` server-side; create credential resolver +
+   read-only adapter via production factories (factory failures append
+   `QUERY_EXECUTION` / `FAILED`)
+7. build `ReadonlyQueryRequest` only from approved `version.sql_text`,
+   resolved parameters, and approved timeout/row_limit (unexpected contract
+   validation failures append `FAILED` with sanitized `EXECUTION_FAILED`)
+8. call `adapter.execute_readonly()` exactly once; success → durable-append
+   `SUCCEEDED` (elapsed/row_count/truncated + names only); adapter/runtime
+   failure → durable-append `FAILED` with sanitized `failure_category`
+
+Eligibility also rejects approved `sql_text` longer than the adapter
+`MAX_SQL_TEXT_LENGTH` contract (`TEMPLATE_NOT_ELIGIBLE`) before any
+credential/adapter access, without echoing SQL.
 
 Caller-controlled request fields match preview (`source_name`, `environment`,
 `template_id`, `version_id`, `parameters`). Caller-supplied SQL, catalog

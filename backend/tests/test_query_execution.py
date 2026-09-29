@@ -359,6 +359,17 @@ def test_adapter_timeout_and_execution_failure_mapping(
     assert timeout.status_code == 504
     assert timeout.json()["detail"]["code"] == DemisAdapterErrorCode.TIMEOUT
 
+    timeout_events = [
+        e
+        for e in db_session.scalars(select(QueryAuditEvent)).all()
+        if e.template_id == fixture["template_id"]
+        and e.event_type == "QUERY_EXECUTION"
+    ]
+    assert [(e.status, e.failure_category) for e in timeout_events] == [
+        ("STARTED", None),
+        ("FAILED", DemisAdapterErrorCode.TIMEOUT),
+    ]
+
     fixture2 = _setup_eligible(
         db_session,
         db_client,
@@ -374,19 +385,337 @@ def test_adapter_timeout_and_execution_failure_mapping(
     assert failed.status_code == 502
     assert failed.json()["detail"]["code"] == DemisAdapterErrorCode.EXECUTION_FAILED
 
-    events = list(db_session.scalars(select(QueryAuditEvent)).all())
-    assert any(
-        e.event_type == "QUERY_EXECUTION"
-        and e.status == "FAILED"
-        and e.failure_category == DemisAdapterErrorCode.TIMEOUT
-        for e in events
+    fail_events = [
+        e
+        for e in db_session.scalars(select(QueryAuditEvent)).all()
+        if e.template_id == fixture2["template_id"]
+        and e.event_type == "QUERY_EXECUTION"
+    ]
+    assert [(e.status, e.failure_category) for e in fail_events] == [
+        ("STARTED", None),
+        ("FAILED", DemisAdapterErrorCode.EXECUTION_FAILED),
+    ]
+
+
+def test_resolver_failure_execution_started_then_failed(
+    db_session: Session, db_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = _setup_eligible(db_session, db_client, fingerprint="fp-resolver-fail")
+    monkeypatch.setattr(
+        "app.services.execution_eligibility.is_concrete_demis_adapter_available",
+        lambda dbms_type: True,
     )
-    assert any(
-        e.event_type == "QUERY_EXECUTION"
-        and e.status == "FAILED"
-        and e.failure_category == DemisAdapterErrorCode.EXECUTION_FAILED
-        for e in events
+    factory_calls: list[str] = []
+
+    def _resolver_boom(settings=None):
+        factory_calls.append("resolver")
+        raise DemisAdapterError(
+            DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE,
+            "credential material is unavailable",
+        )
+
+    def _adapter_boom(profile, credential_resolver):
+        factory_calls.append("adapter")
+        raise AssertionError("adapter must not be built when resolver fails")
+
+    monkeypatch.setattr(
+        "app.adapters.demis.credential_factory.create_credential_resolver",
+        _resolver_boom,
     )
+    monkeypatch.setattr(
+        "app.services.query_execution.create_readonly_demis_adapter",
+        _adapter_boom,
+    )
+
+    response = db_client.post(EXECUTE_PATH, json=_execute_body(fixture))
+    assert response.status_code == 503
+    assert (
+        response.json()["detail"]["code"]
+        == DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE
+    )
+    assert "ValidationError" not in response.text
+    assert factory_calls == ["resolver"]
+
+    events = [
+        e
+        for e in db_session.scalars(select(QueryAuditEvent)).all()
+        if e.template_id == fixture["template_id"]
+    ]
+    statuses = [(e.event_type, e.status, e.failure_category) for e in events]
+    assert statuses == [
+        ("QUERY_REQUEST", "STARTED", None),
+        ("QUERY_REQUEST", "SUCCEEDED", None),
+        ("QUERY_EXECUTION", "STARTED", None),
+        (
+            "QUERY_EXECUTION",
+            "FAILED",
+            DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE,
+        ),
+    ]
+
+
+def test_adapter_factory_failure_execution_started_then_failed(
+    db_session: Session, db_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = _setup_eligible(db_session, db_client, fingerprint="fp-factory-fail")
+    monkeypatch.setattr(
+        "app.services.execution_eligibility.is_concrete_demis_adapter_available",
+        lambda dbms_type: True,
+    )
+    monkeypatch.setattr(
+        "app.adapters.demis.credential_factory.create_credential_resolver",
+        lambda settings=None: FakeCredentialResolver(
+            {ALLOWED_REF: "test-secret-value"}
+        ),
+    )
+
+    def _factory_boom(profile, credential_resolver):
+        raise DemisAdapterError(
+            DemisAdapterErrorCode.UNSUPPORTED_DBMS,
+            "no concrete DEMIS adapter is registered",
+        )
+
+    monkeypatch.setattr(
+        "app.services.query_execution.create_readonly_demis_adapter",
+        _factory_boom,
+    )
+
+    response = db_client.post(EXECUTE_PATH, json=_execute_body(fixture))
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == DemisAdapterErrorCode.UNSUPPORTED_DBMS
+
+    events = [
+        e
+        for e in db_session.scalars(select(QueryAuditEvent)).all()
+        if e.template_id == fixture["template_id"]
+        and e.event_type == "QUERY_EXECUTION"
+    ]
+    assert [(e.status, e.failure_category) for e in events] == [
+        ("STARTED", None),
+        ("FAILED", DemisAdapterErrorCode.UNSUPPORTED_DBMS),
+    ]
+
+
+def test_oversized_approved_sql_rejected_before_adapter(
+    db_session: Session, db_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.adapters.demis.types import MAX_SQL_TEXT_LENGTH
+    from app.models.query_template import QueryTemplateVersion
+
+    fixture = _setup_eligible(db_session, db_client, fingerprint="fp-sql-too-long")
+    version = db_session.get(QueryTemplateVersion, fixture["version_id"])
+    assert version is not None
+    # Keep a SELECT prefix so any accidental safety path stays deterministic;
+    # length gate must reject before credential/adapter access.
+    version.sql_text = "SELECT 1 FROM dual WHERE 1=1 -- " + (
+        "x" * (MAX_SQL_TEXT_LENGTH + 1)
+    )
+    db_session.commit()
+
+    resolve = MagicMock(side_effect=AssertionError("resolve must not be called"))
+    monkeypatch.setattr(
+        "app.services.execution_eligibility.is_concrete_demis_adapter_available",
+        lambda dbms_type: True,
+    )
+    monkeypatch.setattr(
+        "app.adapters.demis.credential_factory.create_credential_resolver",
+        MagicMock(
+            side_effect=AssertionError("credential resolver must not be created")
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.query_execution.create_readonly_demis_adapter",
+        MagicMock(side_effect=AssertionError("adapter factory must not be called")),
+    )
+    monkeypatch.setattr(
+        "app.adapters.demis.env_credentials.EnvironmentCredentialResolver.resolve",
+        resolve,
+        raising=False,
+    )
+
+    response = db_client.post(EXECUTE_PATH, json=_execute_body(fixture))
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == ExecutionPreviewErrorCode.TEMPLATE_NOT_ELIGIBLE
+    assert "ValidationError" not in response.text
+    assert "SELECT 1 FROM dual" not in response.text
+    assert "xxxxx" not in response.text
+    resolve.assert_not_called()
+
+    events = [
+        e
+        for e in db_session.scalars(select(QueryAuditEvent)).all()
+        if e.template_id == fixture["template_id"]
+    ]
+    assert [(e.event_type, e.status) for e in events] == [
+        ("QUERY_REQUEST", "STARTED"),
+        ("QUERY_REQUEST", "DENIED"),
+    ]
+    assert events[-1].failure_category == ExecutionPreviewErrorCode.TEMPLATE_NOT_ELIGIBLE
+
+
+def test_readonly_request_validation_failure_sanitized(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unexpected ReadonlyQueryRequest validation must not leak as 500/Pydantic."""
+    from pydantic import ValidationError
+
+    writes: list[QueryAuditEventCreate] = []
+
+    def _writer(payload: QueryAuditEventCreate):
+        writes.append(payload)
+        return record_query_audit_event_durable(payload)
+
+    eligibility = MagicMock()
+    eligibility.execution_available = True
+    eligibility.execution_blockers = []
+    eligibility.source_name = SOURCE["source_name"]
+    eligibility.environment = ENVIRONMENT
+    eligibility.catalog_revision_id = 1
+    eligibility.catalog_fingerprint = "fp"
+    eligibility.template = MagicMock()
+    eligibility.template.id = 11
+    eligibility.version = MagicMock()
+    eligibility.version.id = 22
+    eligibility.version.version = 1
+    # Empty sql_text would fail ReadonlyQueryRequest; eligibility should normally
+    # prevent this — defensive path still must sanitize.
+    eligibility.version.sql_text = "   "
+    eligibility.connection_profile = MagicMock()
+    eligibility.connection_profile.id = 33
+    eligibility.connection_profile.name = "p"
+    eligibility.connection_profile.source_name = SOURCE["source_name"]
+    eligibility.connection_profile.environment = ENVIRONMENT
+    eligibility.connection_profile.enabled = True
+    eligibility.connection_profile.dbms_type = "oracle"
+    eligibility.connection_profile.host = "h"
+    eligibility.connection_profile.port = 1
+    eligibility.connection_profile.database_name = "d"
+    eligibility.connection_profile.username = "u"
+    eligibility.connection_profile.credential_secret_ref = ALLOWED_REF
+    eligibility.parameters = []
+    eligibility.resolved_parameters = {"secret_param": "SECRET_VALUE"}
+    eligibility.sensitive_parameter_names = []
+    eligibility.row_limit = 10
+    eligibility.timeout_seconds = 5
+
+    actor = AuthenticatedActor(
+        actor_id="op",
+        roles=frozenset({Role.QUERY_OPERATOR}),
+        provider="dev_headers",
+    )
+    adapter = FakeReadOnlyDemisAdapter(columns=["c"], rows=[{"c": 1}])
+
+    with pytest.raises(DemisAdapterError) as exc:
+        execute_query(
+            db_session,
+            QueryExecutionRequest.model_validate(
+                {
+                    "source_name": SOURCE["source_name"],
+                    "environment": ENVIRONMENT,
+                    "template_id": 11,
+                    "version_id": 22,
+                    "parameters": {},
+                }
+            ),
+            actor=actor,
+            audit_writer=_writer,
+            eligibility_fn=lambda *a, **k: eligibility,
+            credential_resolver_factory=lambda: FakeCredentialResolver(
+                {ALLOWED_REF: "x"}
+            ),
+            adapter_factory=lambda profile, credential_resolver: adapter,
+        )
+    assert exc.value.code == DemisAdapterErrorCode.EXECUTION_FAILED
+    assert "SECRET_VALUE" not in str(exc.value)
+    assert "ValidationError" not in str(exc.value)
+    assert not isinstance(exc.value.__cause__, ValidationError)
+    assert adapter.last_sql_text is None
+    statuses = [(w.event_type, w.status) for w in writes]
+    assert statuses == [
+        ("QUERY_REQUEST", "STARTED"),
+        ("QUERY_REQUEST", "SUCCEEDED"),
+        ("QUERY_EXECUTION", "STARTED"),
+        ("QUERY_EXECUTION", "FAILED"),
+    ]
+    assert writes[-1].failure_category == DemisAdapterErrorCode.EXECUTION_FAILED
+
+
+def test_execution_started_audit_failure_blocks_credentials(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writes: list[QueryAuditEventCreate] = []
+    resolver_called = MagicMock()
+
+    def _writer(payload: QueryAuditEventCreate):
+        writes.append(payload)
+        if (
+            payload.event_type == "QUERY_EXECUTION"
+            and payload.status == "STARTED"
+        ):
+            raise RuntimeError("execution started audit down")
+        return record_query_audit_event_durable(payload)
+
+    eligibility = MagicMock()
+    eligibility.execution_available = True
+    eligibility.execution_blockers = []
+    eligibility.source_name = SOURCE["source_name"]
+    eligibility.environment = ENVIRONMENT
+    eligibility.catalog_revision_id = 1
+    eligibility.catalog_fingerprint = "fp"
+    eligibility.template = MagicMock()
+    eligibility.template.id = 1
+    eligibility.version = MagicMock()
+    eligibility.version.id = 2
+    eligibility.version.version = 1
+    eligibility.version.sql_text = "SELECT 1 FROM dual"
+    eligibility.connection_profile = MagicMock()
+    eligibility.connection_profile.id = 3
+    eligibility.connection_profile.name = "p"
+    eligibility.connection_profile.source_name = SOURCE["source_name"]
+    eligibility.connection_profile.environment = ENVIRONMENT
+    eligibility.connection_profile.enabled = True
+    eligibility.connection_profile.dbms_type = "oracle"
+    eligibility.connection_profile.host = "h"
+    eligibility.connection_profile.port = 1
+    eligibility.connection_profile.database_name = "d"
+    eligibility.connection_profile.username = "u"
+    eligibility.connection_profile.credential_secret_ref = ALLOWED_REF
+    eligibility.parameters = []
+    eligibility.resolved_parameters = {}
+    eligibility.sensitive_parameter_names = []
+    eligibility.row_limit = 10
+    eligibility.timeout_seconds = 5
+
+    actor = AuthenticatedActor(
+        actor_id="op",
+        roles=frozenset({Role.QUERY_OPERATOR}),
+        provider="dev_headers",
+    )
+    with pytest.raises(Exception) as exc:
+        execute_query(
+            db_session,
+            QueryExecutionRequest.model_validate(
+                {
+                    "source_name": SOURCE["source_name"],
+                    "environment": ENVIRONMENT,
+                    "template_id": 1,
+                    "version_id": 2,
+                    "parameters": {},
+                }
+            ),
+            actor=actor,
+            audit_writer=_writer,
+            eligibility_fn=lambda *a, **k: eligibility,
+            credential_resolver_factory=lambda: resolver_called()
+            or FakeCredentialResolver({ALLOWED_REF: "x"}),
+            adapter_factory=lambda profile, credential_resolver: (
+                FakeReadOnlyDemisAdapter(columns=["c"], rows=[])
+            ),
+        )
+    assert getattr(exc.value, "code", None) == ExecutionErrorCode.AUDIT_UNAVAILABLE
+    resolver_called.assert_not_called()
+    assert "audit down" not in str(exc.value)
 
 
 def test_initial_audit_failure_prevents_adapter(

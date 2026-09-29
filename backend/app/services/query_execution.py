@@ -149,65 +149,9 @@ def execute_query(
         required=True,
     )
 
-    snapshot = _profile_snapshot(eligibility.connection_profile)
-    try:
-        resolver = resolver_factory()
-        adapter = build_adapter(snapshot, credential_resolver=resolver)
-    except DemisAdapterError as exc:
-        _write_audit(
-            writer,
-            QueryAuditEventCreate(
-                audit_id=audit_id,
-                event_type="QUERY_EXECUTION",
-                status="FAILED",
-                actor_id=actor.actor_id,
-                source_name=eligibility.source_name,
-                catalog_revision_id=eligibility.catalog_revision_id,
-                catalog_fingerprint=eligibility.catalog_fingerprint,
-                template_id=eligibility.template.id,
-                template_version_id=eligibility.version.id,
-                connection_profile_id=eligibility.connection_profile.id,
-                parameter_names=param_names,
-                sensitive_parameter_names=sensitive_names,
-                failure_category=exc.failure_category,
-            ),
-            required=True,
-        )
-        raise
-    except ExecutionError:
-        raise
-    except Exception:
-        _write_audit(
-            writer,
-            QueryAuditEventCreate(
-                audit_id=audit_id,
-                event_type="QUERY_EXECUTION",
-                status="FAILED",
-                actor_id=actor.actor_id,
-                source_name=eligibility.source_name,
-                catalog_revision_id=eligibility.catalog_revision_id,
-                catalog_fingerprint=eligibility.catalog_fingerprint,
-                template_id=eligibility.template.id,
-                template_version_id=eligibility.version.id,
-                connection_profile_id=eligibility.connection_profile.id,
-                parameter_names=param_names,
-                sensitive_parameter_names=sensitive_names,
-                failure_category=DemisAdapterErrorCode.EXECUTION_FAILED,
-            ),
-            required=True,
-        )
-        raise DemisAdapterError(
-            DemisAdapterErrorCode.EXECUTION_FAILED,
-            "read-only query execution failed",
-        ) from None
-
-    query_request = ReadonlyQueryRequest(
-        sql_text=eligibility.version.sql_text,
-        parameters=dict(eligibility.resolved_parameters),
-        timeout_seconds=eligibility.timeout_seconds,
-        row_limit=eligibility.row_limit,
-    )
-
+    # Execution STARTED must precede credential/adapter work so factory failures
+    # always produce STARTED -> FAILED. If this audit cannot persist, fail closed
+    # without resolving credentials.
     _write_audit(
         writer,
         QueryAuditEventCreate(
@@ -227,48 +171,82 @@ def execute_query(
         required=True,
     )
 
+    snapshot = _profile_snapshot(eligibility.connection_profile)
+    try:
+        resolver = resolver_factory()
+        adapter = build_adapter(snapshot, credential_resolver=resolver)
+    except DemisAdapterError as exc:
+        _write_execution_failed(
+            writer,
+            audit_id=audit_id,
+            actor=actor,
+            eligibility=eligibility,
+            param_names=param_names,
+            sensitive_names=sensitive_names,
+            failure_category=exc.failure_category,
+        )
+        raise
+    except ExecutionError:
+        raise
+    except Exception:
+        _write_execution_failed(
+            writer,
+            audit_id=audit_id,
+            actor=actor,
+            eligibility=eligibility,
+            param_names=param_names,
+            sensitive_names=sensitive_names,
+            failure_category=DemisAdapterErrorCode.EXECUTION_FAILED,
+        )
+        raise DemisAdapterError(
+            DemisAdapterErrorCode.EXECUTION_FAILED,
+            "read-only query execution failed",
+        ) from None
+
+    try:
+        query_request = ReadonlyQueryRequest(
+            sql_text=eligibility.version.sql_text,
+            parameters=dict(eligibility.resolved_parameters),
+            timeout_seconds=eligibility.timeout_seconds,
+            row_limit=eligibility.row_limit,
+        )
+    except Exception:
+        _write_execution_failed(
+            writer,
+            audit_id=audit_id,
+            actor=actor,
+            eligibility=eligibility,
+            param_names=param_names,
+            sensitive_names=sensitive_names,
+            failure_category=DemisAdapterErrorCode.EXECUTION_FAILED,
+        )
+        raise DemisAdapterError(
+            DemisAdapterErrorCode.EXECUTION_FAILED,
+            "read-only query execution failed",
+        ) from None
+
     try:
         result = adapter.execute_readonly(query_request)
     except DemisAdapterError as exc:
-        _write_audit(
+        _write_execution_failed(
             writer,
-            QueryAuditEventCreate(
-                audit_id=audit_id,
-                event_type="QUERY_EXECUTION",
-                status="FAILED",
-                actor_id=actor.actor_id,
-                source_name=eligibility.source_name,
-                catalog_revision_id=eligibility.catalog_revision_id,
-                catalog_fingerprint=eligibility.catalog_fingerprint,
-                template_id=eligibility.template.id,
-                template_version_id=eligibility.version.id,
-                connection_profile_id=eligibility.connection_profile.id,
-                parameter_names=param_names,
-                sensitive_parameter_names=sensitive_names,
-                failure_category=exc.failure_category,
-            ),
-            required=True,
+            audit_id=audit_id,
+            actor=actor,
+            eligibility=eligibility,
+            param_names=param_names,
+            sensitive_names=sensitive_names,
+            failure_category=exc.failure_category,
         )
         raise
     except Exception:
-        _write_audit(
+        _write_execution_failed(
             writer,
-            QueryAuditEventCreate(
-                audit_id=audit_id,
-                event_type="QUERY_EXECUTION",
-                status="FAILED",
-                actor_id=actor.actor_id,
-                source_name=eligibility.source_name,
-                catalog_revision_id=eligibility.catalog_revision_id,
-                catalog_fingerprint=eligibility.catalog_fingerprint,
-                template_id=eligibility.template.id,
-                template_version_id=eligibility.version.id,
-                connection_profile_id=eligibility.connection_profile.id,
-                parameter_names=param_names,
-                sensitive_parameter_names=sensitive_names,
-                failure_category=DemisAdapterErrorCode.EXECUTION_FAILED,
-            ),
-            required=True,
+            audit_id=audit_id,
+            actor=actor,
+            eligibility=eligibility,
+            param_names=param_names,
+            sensitive_names=sensitive_names,
+            failure_category=DemisAdapterErrorCode.EXECUTION_FAILED,
         )
         raise DemisAdapterError(
             DemisAdapterErrorCode.EXECUTION_FAILED,
@@ -312,6 +290,37 @@ def execute_query(
         row_count=result.row_count,
         truncated=result.truncated,
         elapsed_ms=result.elapsed_ms,
+    )
+
+
+def _write_execution_failed(
+    writer: DurableAuditWriter,
+    *,
+    audit_id: str,
+    actor: AuthenticatedActor,
+    eligibility: ExecutionEligibilityResult,
+    param_names: list[str],
+    sensitive_names: list[str],
+    failure_category: str,
+) -> None:
+    _write_audit(
+        writer,
+        QueryAuditEventCreate(
+            audit_id=audit_id,
+            event_type="QUERY_EXECUTION",
+            status="FAILED",
+            actor_id=actor.actor_id,
+            source_name=eligibility.source_name,
+            catalog_revision_id=eligibility.catalog_revision_id,
+            catalog_fingerprint=eligibility.catalog_fingerprint,
+            template_id=eligibility.template.id,
+            template_version_id=eligibility.version.id,
+            connection_profile_id=eligibility.connection_profile.id,
+            parameter_names=param_names,
+            sensitive_parameter_names=sensitive_names,
+            failure_category=failure_category,
+        ),
+        required=True,
     )
 
 
