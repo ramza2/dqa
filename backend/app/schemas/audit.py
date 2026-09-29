@@ -17,7 +17,6 @@ MAX_ACTOR_ID_LENGTH = 255
 MAX_SOURCE_NAME_LENGTH = 255
 MAX_FINGERPRINT_LENGTH = 128
 MAX_FAILURE_CATEGORY_LENGTH = 64
-MAX_RESULT_TRUNCATION_LENGTH = 64
 MAX_PARAMETER_NAME_LENGTH = 128
 MAX_PARAMETER_NAMES = 64
 
@@ -52,9 +51,7 @@ class QueryAuditEventCreate(BaseModel):
     failure_category: str | None = Field(default=None, max_length=MAX_FAILURE_CATEGORY_LENGTH)
     elapsed_ms: int | None = Field(default=None, ge=0)
     row_count: int | None = Field(default=None, ge=0)
-    result_truncated: str | None = Field(
-        default=None, max_length=MAX_RESULT_TRUNCATION_LENGTH
-    )
+    result_truncated: bool | None = Field(default=None, strict=True)
 
     @field_validator("audit_id", "actor_id", "source_name", "catalog_fingerprint")
     @classmethod
@@ -64,7 +61,7 @@ class QueryAuditEventCreate(BaseModel):
         cleaned = value.strip()
         return cleaned or None
 
-    @field_validator("failure_category", "result_truncated")
+    @field_validator("failure_category")
     @classmethod
     def sanitized_optional_token(cls, value: str | None) -> str | None:
         if value is None:
@@ -125,7 +122,7 @@ class QueryAuditEventView(BaseModel):
     failure_category: str | None = None
     elapsed_ms: int | None = None
     row_count: int | None = None
-    result_truncated: str | None = None
+    result_truncated: bool | None = Field(default=None, strict=True)
     created_at: datetime
 
 

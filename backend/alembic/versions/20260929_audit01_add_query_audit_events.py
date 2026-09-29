@@ -55,7 +55,7 @@ def upgrade() -> None:
         sa.Column("failure_category", sa.String(length=64), nullable=True),
         sa.Column("elapsed_ms", sa.Integer(), nullable=True),
         sa.Column("row_count", sa.Integer(), nullable=True),
-        sa.Column("result_truncated", sa.String(length=64), nullable=True),
+        sa.Column("result_truncated", sa.Boolean(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

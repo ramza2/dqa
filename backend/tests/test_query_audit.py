@@ -73,7 +73,7 @@ def test_record_and_list_get_audit_events(
             status="SUCCEEDED",
             elapsed_ms=12,
             row_count=5,
-            result_truncated="truncated",
+            result_truncated=True,
         ),
     )
     db_session.commit()
@@ -83,6 +83,8 @@ def test_record_and_list_get_audit_events(
     assert first.parameter_names == ["ward_cd", "from_date"]
     assert first.sensitive_parameter_names == ["ward_cd"]
     assert second.id > first.id
+    assert second.result_truncated is True
+    assert first.result_truncated is None
 
     listed = db_client.get("/api/v1/audit-events", params={"audit_id": audit_id})
     assert listed.status_code == 200, listed.text
@@ -258,6 +260,16 @@ def test_failure_category_sanitized(db_session: Session) -> None:
         ),
     )
     assert ok.failure_category == "AUTHZ_DENIED"
+
+
+def test_result_truncated_is_boolean_indicator_only() -> None:
+    assert _payload(result_truncated=True).result_truncated is True
+    assert _payload(result_truncated=False).result_truncated is False
+    assert _payload(result_truncated=None).result_truncated is None
+    with pytest.raises(ValidationError):
+        _payload(result_truncated="TRUNCATED")
+    with pytest.raises(ValidationError):
+        _payload(result_truncated="true")
 
 
 def test_unknown_event_type_rejected() -> None:

@@ -366,7 +366,7 @@ Record at minimum:
 - parameter names only (`parameter_logging_policy=NAMES_ONLY`)
 - sensitive parameter *names* (never values)
 - status / event_type
-- elapsed time / row count / result truncation indicator
+- elapsed time / row count / boolean result truncation indicator
 - sanitized `failure_category`
 
 Read API: `GET /api/v1/audit-events` and `GET /api/v1/audit-events/{audit_id}`

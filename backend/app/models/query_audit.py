@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -51,8 +51,8 @@ class QueryAuditEvent(Base):
     failure_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     elapsed_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Short truncation indicator only (e.g. "truncated"); never result payload.
-    result_truncated: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Boolean truncation indicator only; never result payload.
+    result_truncated: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
