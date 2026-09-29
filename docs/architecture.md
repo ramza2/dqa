@@ -361,8 +361,10 @@ The adapter must not:
 - fall back silently to DQA PostgreSQL
 
 Factory behavior without a registered concrete driver: validate profile
-eligibility (enabled, target metadata, credential ref resolution), then raise
-`UNSUPPORTED_DBMS`. No public query-execution HTTP API is exposed yet.
+eligibility (enabled, target metadata, credential ref *presence*), reject
+forbidden fake/test kinds, then raise `UNSUPPORTED_DBMS` **before** calling
+`CredentialResolver.resolve`. Credentials are resolved only after a concrete
+adapter is selected.
 
 No query generation occurs here.
 

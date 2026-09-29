@@ -144,32 +144,51 @@ def test_disabled_profile_rejected() -> None:
 
 
 def test_missing_credential_reference_rejected() -> None:
+    resolver = _TrackingCredentialResolver({"env:DEMIS_DB_PASSWORD": "test-secret-value"})
     with pytest.raises(DemisAdapterError) as exc:
         create_readonly_demis_adapter(
             _eligible_snapshot(credential_secret_ref=None),
-            credential_resolver=_resolver(),
+            credential_resolver=resolver,
         )
     assert exc.value.code == DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE
-
-
-def test_unresolved_credential_reference_rejected() -> None:
-    with pytest.raises(DemisAdapterError) as exc:
-        create_readonly_demis_adapter(
-            _eligible_snapshot(credential_secret_ref="env:MISSING"),
-            credential_resolver=_resolver(),
-        )
-    assert exc.value.code == DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE
-    assert "test-secret-value" not in str(exc.value)
+    assert resolver.resolve_calls == []
 
 
 def test_incomplete_target_metadata_rejected() -> None:
+    resolver = _TrackingCredentialResolver({"env:DEMIS_DB_PASSWORD": "test-secret-value"})
     with pytest.raises(DemisAdapterError) as exc:
         create_readonly_demis_adapter(
             _eligible_snapshot(host=None, port=None),
-            credential_resolver=_resolver(),
+            credential_resolver=resolver,
         )
     assert exc.value.code == DemisAdapterErrorCode.ADAPTER_NOT_CONFIGURED
     assert "demis.internal.example" not in str(exc.value)
+    assert resolver.resolve_calls == []
+
+
+def test_unsupported_dbms_does_not_resolve_credentials() -> None:
+    resolver = _TrackingCredentialResolver({"env:DEMIS_DB_PASSWORD": "test-secret-value"})
+    with pytest.raises(DemisAdapterError) as exc:
+        create_readonly_demis_adapter(
+            _eligible_snapshot(dbms_type="oracle"),
+            credential_resolver=resolver,
+        )
+    assert exc.value.code == DemisAdapterErrorCode.UNSUPPORTED_DBMS
+    assert resolver.resolve_calls == []
+
+
+def test_fake_adapter_kinds_do_not_resolve_credentials() -> None:
+    for kind in ("fake", "test", "mock", "memory"):
+        resolver = _TrackingCredentialResolver(
+            {"env:DEMIS_DB_PASSWORD": "test-secret-value"}
+        )
+        with pytest.raises(DemisAdapterError) as exc:
+            create_readonly_demis_adapter(
+                _eligible_snapshot(dbms_type=kind),
+                credential_resolver=resolver,
+            )
+        assert exc.value.code == DemisAdapterErrorCode.UNSUPPORTED_DBMS
+        assert resolver.resolve_calls == []
 
 
 def test_unsupported_dbms_fail_closed() -> None:
@@ -190,6 +209,18 @@ def test_fake_adapter_not_selectable_via_production_factory() -> None:
                 credential_resolver=_resolver(),
             )
         assert exc.value.code == DemisAdapterErrorCode.UNSUPPORTED_DBMS
+
+
+class _TrackingCredentialResolver:
+    """Test double that records resolve invocations without logging secrets."""
+
+    def __init__(self, mapping: dict[str, str]) -> None:
+        self._inner = FakeCredentialResolver(mapping)
+        self.resolve_calls: list[str] = []
+
+    def resolve(self, credential_secret_ref: str):
+        self.resolve_calls.append(credential_secret_ref)
+        return self._inner.resolve(credential_secret_ref)
 
 
 def test_diagnostics_sanitized_no_live_connection() -> None:
