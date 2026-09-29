@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    audit_events,
     auth,
     catalog_active,
     catalog_imports,
@@ -28,3 +29,4 @@ api_router.include_router(query_templates.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(parameter_extraction.router)
 api_router.include_router(connection_profiles.router)
+api_router.include_router(audit_events.router)

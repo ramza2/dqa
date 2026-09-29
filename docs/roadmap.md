@@ -144,13 +144,17 @@ Scope:
 - Alembic migration for `connection_profiles`
 
 ### PR 16 - Audit foundation
+Status: implemented (foundation)
 Scope:
 - request/execution audit model
 - active Catalog revision/fingerprint
 - template/version
 - actor
-- sensitive parameter logging policy
+- sensitive parameter logging policy (`NAMES_ONLY`)
 - no full result-set logging by default
+- append-only `query_audit_events` + `AUDIT_READ` list/get API
+- Alembic revision after `connection_profiles` (`20260929_cp01`)
+- not yet wired into recommendation / extraction / execution paths
 
 ## Phase 6 - Read-only execution
 

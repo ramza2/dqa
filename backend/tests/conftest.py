@@ -108,6 +108,7 @@ def db_session(test_settings_env: dict[str, str]):
     engine = get_engine()
     # Ensure clean catalog tables for persistence tests without dropping unrelated objects.
     tables = (
+        "query_audit_events",
         "connection_profiles",
         "query_template_review_events",
         "query_template_versions",
