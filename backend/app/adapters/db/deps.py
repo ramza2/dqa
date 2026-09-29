@@ -13,8 +13,9 @@ from app.models import Base
 def init_db_schema() -> None:
     """Create application tables if they do not already exist.
 
-    This project does not yet use Alembic. Schema creation is intentional for the
-    early roadmap and is a known limitation until a migration framework lands.
+    Alembic migrations are the preferred production schema path for new tables.
+    ``create_all`` remains for local/test bootstrap until full migration
+    ownership covers historical tables.
     """
     # Import models so metadata is populated.
     import app.models  # noqa: F401

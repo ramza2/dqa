@@ -132,6 +132,7 @@ Scope:
 - test/dev identity provider abstraction
 
 ### PR 15 - Connection Profile management
+Status: implemented (foundation)
 Scope:
 - source/environment -> live DEMIS target binding
 - non-secret connection metadata
@@ -139,6 +140,8 @@ Scope:
 - enable/disable
 - sanitized connection diagnostics
 - no live query execution yet
+- administrator-only `CONNECTION_PROFILE_MANAGE` API protection
+- Alembic migration for `connection_profiles`
 
 ### PR 16 - Audit foundation
 Scope:
