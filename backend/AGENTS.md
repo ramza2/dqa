@@ -28,7 +28,9 @@ backend/
     repositories/
     adapters/
       catalog/
+      connection_profile/
       db/
+      demis/          # DBMS-neutral read-only DEMIS boundary (no concrete driver yet)
       llm/
   tests/
 ```
@@ -41,7 +43,8 @@ External systems belong in adapters.
 
 ## Database access
 
-Live DEMIS access must only occur through a dedicated read-only DB adapter.
+Live DEMIS access must only occur through a dedicated read-only DB adapter
+(`app/adapters/demis`).
 
 Never execute raw user-provided SQL.
 
@@ -49,6 +52,10 @@ Use bound parameters only.
 Do not create SQL with user-value string concatenation.
 
 All executable Query Templates must pass a centralized safety validator before reaching the adapter.
+
+Do not add a concrete DEMIS DBMS driver until requirements are confirmed.
+Do not reuse the DQA PostgreSQL/`psycopg` stack as the DEMIS adapter.
+Fake/test adapters are for tests only and must not be production-selectable.
 
 ## Catalog Package
 
