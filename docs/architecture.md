@@ -368,6 +368,27 @@ adapter is selected.
 
 No query generation occurs here.
 
+### 3.9.1 Execution preview / eligibility gate
+
+`POST /api/v1/query-executions/preview` (requires `QUERY_OPERATE`) runs the
+deterministic production eligibility gate without contacting DEMIS.
+
+Reusable service: `evaluate_execution_eligibility(...)` (also intended for the
+future execute path). It re-checks template existence/source, current version,
+APPROVED+enabled, Active Catalog revision/fingerprint match, SQL Safety PASS,
+parameter schema + undeclared-key rejection + deterministic validation, and an
+enabled Connection Profile with complete non-secret adapter metadata.
+
+Preview may succeed while live execution remains blocked:
+- `execution_available=false`
+- `execution_blockers` may include `DEMIS_ADAPTER_UNAVAILABLE`
+  until a concrete DEMIS DBMS adapter is confirmed/implemented
+
+Preview does **not** resolve credentials, instantiate a live adapter, execute
+SQL, call LLM, return SQL/host/user/DSN, or write audit events.
+`row_limit` / `timeout_seconds` come only from the approved template version.
+Responses that include resolved parameter values use `Cache-Control: no-store, private`.
+
 ### 3.10 Result Handling
 
 Return:
