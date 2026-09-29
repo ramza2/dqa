@@ -10,11 +10,11 @@ from fastapi import Request
 
 from app.auth.errors import AuthError, AuthErrorCode
 from app.auth.models import AuthenticatedActor, Role
+from app.auth.actor import MAX_ACTOR_ID_LENGTH
 
 DEV_ACTOR_HEADER = "X-DQA-Dev-Actor"
 DEV_ROLES_HEADER = "X-DQA-Dev-Roles"
 PROVIDER_NAME = "dev_headers"
-MAX_ACTOR_ID_LENGTH = 255
 
 _ROLE_BY_VALUE = {role.value: role for role in Role}
 

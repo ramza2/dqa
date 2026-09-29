@@ -354,7 +354,123 @@ def test_query_operator_allowed_and_template_mutation_denied(
         headers=ops,
     )
     assert response.status_code in {200, 503}
-    assert response.status_code != 403
+    assert response.status_code not in {401, 403}
+
+    # Parameter Extraction: RBAC gate must pass for query_operator even when
+    # downstream application rules (missing template / egress disabled) fail.
+    extract = unauth_db_client.post(
+        "/api/v1/query-parameters/extract",
+        json={
+            "source_name": SOURCE["source_name"],
+            "template_id": 999999,
+            "version_id": 1,
+            "request_text": "SYNTHETIC-PATIENT-001 A01",
+        },
+        headers=ops,
+    )
+    assert extract.status_code not in {401, 403}
+    assert extract.status_code in {200, 404, 409, 422, 502, 503}
+    # Missing template or other application errors are fine; auth must not deny.
+    detail = extract.json().get("detail") or {}
+    code = detail.get("code") if isinstance(detail, dict) else None
+    assert code != AuthErrorCode.AUTHENTICATION_REQUIRED
+    assert code != AuthErrorCode.AUTHENTICATION_INVALID
+    assert code != AuthErrorCode.AUTHORIZATION_DENIED
+
+    for role in ("viewer", "auditor", "template_author"):
+        denied = unauth_db_client.post(
+            "/api/v1/query-parameters/extract",
+            json={
+                "source_name": SOURCE["source_name"],
+                "template_id": 1,
+                "version_id": 1,
+                "request_text": "x",
+            },
+            headers=_headers(f"no-ops-{role}", role),
+        )
+        assert denied.status_code == 403
+        assert denied.json()["detail"]["code"] == AuthErrorCode.AUTHORIZATION_DENIED
+
+
+def test_reject_actor_propagation_and_disable(
+    db_session: Session, unauth_db_client: TestClient
+) -> None:
+    _import_and_activate(db_session, fingerprint="fp-reject")
+    db_session.commit()
+    author = _headers("test-author", "template_author")
+    approver = _headers("test-approver", "template_approver")
+
+    created = unauth_db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(stable_key="auth_reject_flow"),
+        headers=author,
+    )
+    assert created.status_code == 201
+    template_id = created.json()["id"]
+    assert (
+        unauth_db_client.post(
+            f"/api/v1/query-templates/{template_id}/submit-review",
+            json={},
+            headers=author,
+        ).status_code
+        == 200
+    )
+
+    rejected = unauth_db_client.post(
+        f"/api/v1/query-templates/{template_id}/reject",
+        json={"note": "needs rewrite"},
+        headers=approver,
+    )
+    assert rejected.status_code == 200
+    events = unauth_db_client.get(
+        f"/api/v1/query-templates/{template_id}/review-events",
+        headers=approver,
+    )
+    assert events.status_code == 200
+    reject_events = [
+        item for item in events.json()["items"] if item["to_status"] == "REJECTED"
+    ]
+    assert reject_events
+    assert reject_events[0]["actor"] == "test-approver"
+
+    # New version -> approve/enable so disable permission can be exercised.
+    assert (
+        unauth_db_client.post(
+            f"/api/v1/query-templates/{template_id}/versions",
+            json={},
+            headers=author,
+        ).status_code
+        == 201
+    )
+    assert (
+        unauth_db_client.post(
+            f"/api/v1/query-templates/{template_id}/submit-review",
+            json={},
+            headers=author,
+        ).status_code
+        == 200
+    )
+    assert (
+        unauth_db_client.post(
+            f"/api/v1/query-templates/{template_id}/approve",
+            json={},
+            headers=approver,
+        ).status_code
+        == 200
+    )
+    assert (
+        unauth_db_client.post(
+            f"/api/v1/query-templates/{template_id}/enable",
+            headers=approver,
+        ).status_code
+        == 200
+    )
+    disabled = unauth_db_client.post(
+        f"/api/v1/query-templates/{template_id}/disable",
+        headers=approver,
+    )
+    assert disabled.status_code == 200
+    assert disabled.json()["enabled"] is False
 
 
 def test_auditor_read_allowed_mutation_denied(

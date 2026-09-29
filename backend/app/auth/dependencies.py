@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Request, status
 from app.auth.errors import AuthError, AuthErrorCode
 from app.auth.factory import create_identity_provider
 from app.auth.models import AuthenticatedActor, Permission
+from app.auth.actor import normalize_authenticated_actor
 from app.auth.rbac import actor_has_permission
 from app.core.config import Settings, get_settings
 
@@ -20,7 +21,7 @@ def get_current_actor(
     """Authenticate the request via the configured IdentityProvider."""
     try:
         provider = create_identity_provider(settings)
-        return provider.authenticate(request)
+        return normalize_authenticated_actor(provider.authenticate(request))
     except AuthError as exc:
         raise _auth_http_error(exc) from None
 

@@ -1,7 +1,11 @@
-"""Unit tests for role -> permission resolution."""
+"""Unit tests for role -> permission resolution and actor normalization."""
 
 from __future__ import annotations
 
+import pytest
+
+from app.auth.actor import normalize_authenticated_actor
+from app.auth.errors import AuthError, AuthErrorCode
 from app.auth.models import AuthenticatedActor, Permission, Role
 from app.auth.rbac import ALL_PERMISSIONS, actor_has_permission, permissions_for_roles
 
@@ -61,3 +65,55 @@ def test_actor_has_permission_helper() -> None:
     )
     assert actor_has_permission(actor, Permission.TEMPLATE_AUTHOR) is True
     assert actor_has_permission(actor, Permission.TEMPLATE_APPROVE) is False
+
+
+@pytest.mark.parametrize(
+    "actor_id",
+    ["", "   ", "a" * 256, "bad\nid", "bad\x00id", "bad\x7fid"],
+)
+def test_normalize_actor_rejects_invalid_actor_id(actor_id: str) -> None:
+    with pytest.raises(AuthError) as exc_info:
+        normalize_authenticated_actor(
+            AuthenticatedActor(
+                actor_id=actor_id,
+                roles=frozenset({Role.VIEWER}),
+                provider="stub",
+            )
+        )
+    assert exc_info.value.code == AuthErrorCode.AUTHENTICATION_INVALID
+
+
+def test_normalize_actor_rejects_blank_provider_and_unknown_role() -> None:
+    with pytest.raises(AuthError) as exc_info:
+        normalize_authenticated_actor(
+            AuthenticatedActor(
+                actor_id="ok",
+                roles=frozenset({Role.VIEWER}),
+                provider="  ",
+            )
+        )
+    assert exc_info.value.code == AuthErrorCode.AUTHENTICATION_INVALID
+
+    with pytest.raises(AuthError) as exc_info:
+        normalize_authenticated_actor(
+            AuthenticatedActor(
+                actor_id="ok",
+                roles=frozenset({"not_a_role"}),  # type: ignore[arg-type]
+                provider="stub",
+            )
+        )
+    assert exc_info.value.code == AuthErrorCode.AUTHENTICATION_INVALID
+
+
+def test_normalize_actor_trims_and_freezes_roles() -> None:
+    normalized = normalize_authenticated_actor(
+        AuthenticatedActor(
+            actor_id="  actor-1  ",
+            roles=[Role.VIEWER, Role.VIEWER, "template_author"],  # type: ignore[arg-type]
+            provider=" stub ",
+        )
+    )
+    assert normalized.actor_id == "actor-1"
+    assert normalized.provider == "stub"
+    assert isinstance(normalized.roles, frozenset)
+    assert normalized.roles == frozenset({Role.VIEWER, Role.TEMPLATE_AUTHOR})
