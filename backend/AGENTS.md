@@ -61,6 +61,10 @@ Production credential resolution uses `EnvironmentCredentialResolver` (`env:` on
 gated by `DQA_DEMIS_CREDENTIAL_ENV_PREFIX`. Do not resolve credentials from
 Connection Profile CRUD, diagnostics, or execution preview.
 
+Query execution (`POST /api/v1/query-executions/execute`) re-runs eligibility,
+writes durable audit on an independent DB session, and fail-closes when no
+concrete DEMIS adapter exists. Never log/persist/LLM-egress result rows.
+
 ## Catalog Package
 
 Treat imported Catalog Package data and live DEMIS connectivity as separate concerns.

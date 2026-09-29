@@ -235,6 +235,7 @@ Protected in this foundation:
 - Parameter Extraction
 - Connection Profile management (`CONNECTION_PROFILE_MANAGE`, administrator only)
 - Execution preview (`QUERY_OPERATE`; no DEMIS connection / no credential resolve)
+- Query execution (`QUERY_OPERATE`; durable audit; fail closed without concrete adapter)
 
 Connection Profile rules:
 - credentials are referenced, never stored as secret values
@@ -250,13 +251,26 @@ Execution preview rules:
   `DEMIS_ADAPTER_UNAVAILABLE`) until a concrete DEMIS adapter exists
 - preview does not write audit events
 
+Query execution rules:
+- same caller-controlled fields as preview; never accept caller SQL, catalog
+  revision/fingerprint, connection_profile_id, row_limit, timeout, actor/audit
+  metadata, or credentials
+- always re-runs `evaluate_execution_eligibility()`; never trusts a prior preview
+- durable audit lifecycle (`QUERY_REQUEST` / `QUERY_EXECUTION` ×
+  STARTED|SUCCEEDED|DENIED|FAILED) commits on an independent DQA session
+- parameter audit is NAMES_ONLY (plus sensitive names); never values
+- result rows are never logged, persisted, exception-embedded, or LLM-egressed
+- if initial STARTED audit cannot persist → `AUDIT_UNAVAILABLE` (503), no DEMIS call
+- if final success audit cannot persist → `AUDIT_UNAVAILABLE` (503), no rows returned
+- production path cannot select fake adapters; live DEMIS remains unavailable until
+  a concrete DBMS adapter exists (`DEMIS_ADAPTER_UNAVAILABLE` before credentials)
+
 Not yet covered (follow-up):
 - Catalog Package import / activation admin authorization
 - Catalog Explorer admin surfaces
 - OIDC/OAuth2/JWT verification, user directory, MFA, sessions
-- public execute endpoint + audit writes for QUERY_REQUEST / QUERY_EXECUTION
 - concrete DEMIS DBMS driver / live connectivity (blocked on confirmed requirements)
-- production credential secret-store resolver
+- production credential secret-store resolver (beyond env-prefix boundary)
 
 ## 11. Production checklist
 

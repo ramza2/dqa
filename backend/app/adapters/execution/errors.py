@@ -1,4 +1,4 @@
-"""Typed errors for execution eligibility / preview."""
+"""Typed errors for execution eligibility / preview / orchestration."""
 
 from __future__ import annotations
 
@@ -36,3 +36,30 @@ class ExecutionPreviewErrorCode:
     CONNECTION_PROFILE_NOT_FOUND = "CONNECTION_PROFILE_NOT_FOUND"
     CONNECTION_PROFILE_DISABLED = "CONNECTION_PROFILE_DISABLED"
     CONNECTION_PROFILE_INCOMPLETE = "CONNECTION_PROFILE_INCOMPLETE"
+
+
+@dataclass(frozen=True)
+class ExecutionIssue:
+    code: str
+    message: str
+
+
+class ExecutionError(Exception):
+    """Sanitized execution failure. Never embed secrets, SQL, or result rows."""
+
+    def __init__(self, code: str, message: str) -> None:
+        self.issue = ExecutionIssue(code=code, message=message)
+        super().__init__(message)
+
+    @property
+    def code(self) -> str:
+        return self.issue.code
+
+    @property
+    def failure_category(self) -> str:
+        return self.issue.code
+
+
+class ExecutionErrorCode:
+    AUDIT_UNAVAILABLE = "AUDIT_UNAVAILABLE"
+    DEMIS_ADAPTER_UNAVAILABLE = "DEMIS_ADAPTER_UNAVAILABLE"

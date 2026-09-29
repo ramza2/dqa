@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.adapters.audit.errors import AuditError, AuditErrorCode
 from app.models.query_audit import QueryAuditEvent
@@ -73,6 +73,32 @@ def record_query_audit_event(
     )
     QueryAuditEventRepository(session).add(event)
     return _to_view(event)
+
+
+def record_query_audit_event_durable(
+    payload: QueryAuditEventCreate,
+    *,
+    session_factory: sessionmaker[Session] | None = None,
+) -> QueryAuditEventView:
+    """Append and commit one audit event on an independent short-lived session.
+
+    Used by production query execution so request-scoped rollback cannot erase
+    the audit lifecycle. Reuses ``record_query_audit_event`` validation.
+    Never accepts parameter values, result rows, SQL, or secrets.
+    """
+    from app.adapters.db.session import get_session_factory
+
+    factory = session_factory or get_session_factory()
+    session = factory()
+    try:
+        view = record_query_audit_event(session, payload)
+        session.commit()
+        return view
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 def list_query_audit_events(
