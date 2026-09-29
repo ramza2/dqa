@@ -159,6 +159,22 @@ def evaluate_execution_eligibility(
     )
 
 
+def require_eligible_executable_template(
+    session: Session,
+    *,
+    source_name: str,
+    template_id: int,
+    version_id: int,
+) -> tuple[QueryTemplate, QueryTemplateVersion]:
+    """Public wrapper: approved + enabled + current version for the source."""
+    return _require_eligible_template(
+        session,
+        source_name=source_name,
+        template_id=template_id,
+        version_id=version_id,
+    )
+
+
 def _require_eligible_template(
     session: Session,
     *,

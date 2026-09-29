@@ -235,6 +235,8 @@ Protected in this foundation:
 - Parameter Extraction
 - Connection Profile management (`CONNECTION_PROFILE_MANAGE`, administrator only)
 - Execution preview (`QUERY_OPERATE`; no DEMIS connection / no credential resolve)
+- Query execution form metadata (`QUERY_OPERATE`; parameter/environment projection
+  without `TEMPLATE_READ` or `CONNECTION_PROFILE_MANAGE`)
 - Query execution (`QUERY_OPERATE`; durable audit; fail closed without concrete adapter)
 
 Connection Profile rules:
@@ -264,6 +266,14 @@ Query execution rules:
 - if final success audit cannot persist → `AUDIT_UNAVAILABLE` (503), no rows returned
 - production path cannot select fake adapters; live DEMIS remains unavailable until
   a concrete DBMS adapter exists (`DEMIS_ADAPTER_UNAVAILABLE` before credentials)
+
+Execution form metadata rules:
+- `GET /api/v1/query-executions/form` is a QUERY_OPERATE-only projection for
+  parameter forms and environment selection
+- does not grant template registry read or Connection Profile management
+- returns parameter schema metadata (including defaults/sensitive flags) without
+  runtime parameter values or SQL text
+- exposes only enabled environments; never host/user/db/credential refs/profile ids
 
 Not yet covered (follow-up):
 - Catalog Package import / activation admin authorization
