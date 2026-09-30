@@ -543,10 +543,12 @@ DQA persistence:
 - PostgreSQL
 
 Deployment:
-- Docker Compose
-- direct LAN IP + explicit ports for internal/on-premise operation
-- DQA PostgreSQL kept internal or loopback-only
+- Docker Compose internal/on-premise foundation (`docker-compose.onprem.yml`)
+- LAN entry via frontend only (`DQA_LAN_BIND_IP` + `DQA_FRONTEND_PORT`)
+- backend and DQA PostgreSQL stay on Compose networks (DB on an internal network; no host DB port)
+- production auth defaults to `DQA_AUTH_PROVIDER=disabled` (fail closed) until an approved IdP exists
 - public DNS / external Traefik optional, not required by the core architecture
+- see `docs/runtime-and-deployment.md` for Mode A/B and migration workflow
 
 LLM:
 - OpenAI-compatible provider abstraction (`app/adapters/llm`)

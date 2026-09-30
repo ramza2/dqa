@@ -8,7 +8,12 @@
 #
 # By default the backend is host-only (127.0.0.1).
 # For GPU-server LAN testing set DQA_LAN_BIND_IP to the GPU server's internal IPv4.
-# PostgreSQL remains loopback-only by default. While DQA has no frontend yet, the backend is the LAN-facing test endpoint.
+# PostgreSQL remains loopback-only by default.
+#
+# For full-stack local UI work, run the Vite frontend separately
+# (`cd frontend && npm run dev`) and proxy /api to this backend.
+# Production/on-prem Compose (docker-compose.onprem.yml) publishes only the
+# frontend to the configured LAN bind and keeps backend + DB internal.
 
 services:
   dqa-db:

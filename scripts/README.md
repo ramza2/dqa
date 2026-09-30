@@ -13,9 +13,36 @@
 These scripts only prepare a local development database with a non-secret
 development password; they never contain production credentials.
 
-## Planned
+## On-prem / internal deployment
 
-- `deploy.sh`: Docker Compose + external Traefik deployment
-- validation helpers where useful
+Operate on `docker-compose.onprem.yml` with a gitignored `.env.onprem`
+(copied from `.env.onprem.example`):
+
+| Script | Purpose |
+|--------|---------|
+| `dqa-migrate.sh` | `alembic upgrade head` via one-shot migrate profile |
+| `dqa-up.sh` | validate config, build, up `--remove-orphans`, wait for health |
+| `dqa-status.sh` | Compose ps + readiness checks |
+| `dqa-logs.sh` | Compose logs (no secret echoing) |
+| `dqa-down.sh` | stop services; preserves DB volume by default |
+
+Shared helpers live in `dqa-common.sh`.
+
+Rules:
+- no hard-coded server IP
+- no secrets printed
+- no auto-prune
+- `down` does not delete volumes by default
+
+Optional development/LAN auth overlay:
+
+```bash
+docker compose -f docker-compose.onprem.yml -f docker-compose.onprem.dev.yml \
+  --env-file .env.onprem up -d
+```
+
+Never enable `dev_headers` on a production host.
+
+See `docs/runtime-and-deployment.md`.
 
 Do not place credentials in scripts.

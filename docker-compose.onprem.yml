@@ -1,0 +1,153 @@
+# Internal / on-premise Compose foundation for DQA.
+#
+# Topology:
+#   Trusted LAN client
+#       |
+#       | ${DQA_LAN_BIND_IP}:${DQA_FRONTEND_PORT}
+#       v
+#   frontend (nginx SPA + /api reverse proxy)  --edge network-->  backend
+#                                                                  |
+#                                                                  | data network (internal)
+#                                                                  v
+#                                                               dqa-db
+#
+# Defaults:
+#   - APP_ENV=production
+#   - DQA_AUTH_PROVIDER=disabled  (protected APIs fail closed until an approved IdP exists)
+#   - DQA PostgreSQL has NO host port publication
+#   - backend is NOT published to the LAN
+#   - no Traefik / public DNS requirement
+#
+# Required environment (see .env.onprem.example):
+#   DQA_DB_PASSWORD  — must be set explicitly; no weak default
+#
+# Usage:
+#   cp .env.onprem.example .env.onprem   # then edit secrets/bind values
+#   ./scripts/dqa-migrate.sh
+#   ./scripts/dqa-up.sh
+#
+# Optional LAN integration auth (NEVER for production):
+#   docker compose -f docker-compose.onprem.yml -f docker-compose.onprem.dev.yml ...
+
+name: dqa-onprem
+
+networks:
+  edge:
+    driver: bridge
+  data:
+    driver: bridge
+    internal: true
+
+volumes:
+  dqa_pgdata:
+
+services:
+  dqa-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DQA_DB_NAME:-dqa}
+      POSTGRES_USER: ${DQA_DB_USER:-dqa}
+      # Fail closed when password is unset. Do not default to "dqa" / "change-me".
+      POSTGRES_PASSWORD: ${DQA_DB_PASSWORD:?Set DQA_DB_PASSWORD in .env.onprem}
+    volumes:
+      - dqa_pgdata:/var/lib/postgresql/data
+    networks:
+      - data
+    # No host ports: PostgreSQL is reachable only on the internal Compose network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  migrate:
+    profiles: ["migrate"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      DQA_DB_HOST: dqa-db
+      DQA_DB_PORT: 5432
+      DQA_DB_NAME: ${DQA_DB_NAME:-dqa}
+      DQA_DB_USER: ${DQA_DB_USER:-dqa}
+      DQA_DB_PASSWORD: ${DQA_DB_PASSWORD:?Set DQA_DB_PASSWORD in .env.onprem}
+    networks:
+      - data
+    depends_on:
+      dqa-db:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_NAME: ${APP_NAME:-DEMIS Query Assistant}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DQA_DB_HOST: dqa-db
+      DQA_DB_PORT: 5432
+      DQA_DB_NAME: ${DQA_DB_NAME:-dqa}
+      DQA_DB_USER: ${DQA_DB_USER:-dqa}
+      DQA_DB_PASSWORD: ${DQA_DB_PASSWORD:?Set DQA_DB_PASSWORD in .env.onprem}
+      # Production foundation: fail closed on protected APIs until an approved IdP exists.
+      DQA_AUTH_PROVIDER: ${DQA_AUTH_PROVIDER:-disabled}
+      DQA_DEMIS_CREDENTIAL_ENV_PREFIX: ${DQA_DEMIS_CREDENTIAL_ENV_PREFIX:-DEMIS_SECRET_}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-60}
+      LLM_CONNECT_TIMEOUT_SECONDS: ${LLM_CONNECT_TIMEOUT_SECONDS:-10}
+      QUERY_DEFAULT_TIMEOUT_SECONDS: ${QUERY_DEFAULT_TIMEOUT_SECONDS:-30}
+      QUERY_MAX_TIMEOUT_SECONDS: ${QUERY_MAX_TIMEOUT_SECONDS:-120}
+      QUERY_DEFAULT_ROW_LIMIT: ${QUERY_DEFAULT_ROW_LIMIT:-200}
+      QUERY_MAX_ROW_LIMIT: ${QUERY_MAX_ROW_LIMIT:-1000}
+    networks:
+      - edge
+      - data
+    # Backend listens inside Compose only. Do not publish 8000 to the host/LAN.
+    expose:
+      - "8000"
+    depends_on:
+      dqa-db:
+        condition: service_healthy
+    # No --reload in production.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # Intentionally no VITE_DQA_DEV_* build-args.
+    networks:
+      - edge
+    ports:
+      - "${DQA_LAN_BIND_IP:-127.0.0.1}:${DQA_FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped

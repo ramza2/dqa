@@ -11,69 +11,139 @@ Default access pattern:
 ```text
 Trusted LAN client
     |
-    | http://<DQA_LAN_IP>:<frontend/backend port>
+    | http://<DQA_LAN_BIND_IP>:<DQA_FRONTEND_PORT>
     v
-DQA containers
+frontend (nginx SPA + /api reverse proxy)
     |
-    +--> DQA PostgreSQL (internal/loopback-only host exposure)
+    +-- Compose edge network --> backend (not LAN-published)
     |
-    +--> operator-managed read-only DEMIS Connection Profile
+    +-- Compose internal data network --> dqa-db (no host ports)
+    |
+    +--> operator-managed read-only DEMIS Connection Profile (external)
 ```
 
 Public DNS and Traefik are not required for this mode.
 
-The current backend-only skeleton exposes the backend on the GPU server LAN for API testing. Once the frontend is implemented, prefer exposing only the frontend to the LAN and keeping the backend on the Compose network or server loopback.
+## 2. Two operating modes
 
-## 2. Services
+### Mode A — production / on-prem foundation
 
-Expected services:
-- frontend (later roadmap phase)
-- backend
-- dqa-db (PostgreSQL)
+Compose: `docker-compose.onprem.yml`  
+Env template: `.env.onprem.example` → gitignored `.env.onprem`
 
-Live DEMIS DB remains external to the DQA stack and is reached through an operator-managed Connection Profile.
+| Setting | Value |
+|---------|-------|
+| `APP_ENV` | `production` |
+| `DQA_AUTH_PROVIDER` | `disabled` |
+| LAN entry | frontend only |
+| Backend / DB host ports | none |
 
+Expected auth behavior:
+- `/health` and `/health/ready` work
+- protected APIs fail closed with `AUTH_PROVIDER_NOT_CONFIGURED` (503)
+- this is an intentional blocker until an approved production IdentityProvider exists
+
+Do not invent JWT/OIDC/SSO/reverse-proxy auth in this foundation.
+
+### Mode B — development / LAN integration
+
+Optional overlay: `docker-compose.onprem.dev.yml`
+
+| Setting | Value |
+|---------|-------|
+| `APP_ENV` | `development` |
+| `DQA_AUTH_PROVIDER` | `dev_headers` |
+
+Rules:
+- never enable `dev_headers` in production Compose
+- never put actor/role values into production configuration
+- production SPA builds never inject `VITE_DQA_DEV_*`
+- Mode B API clients must supply `X-DQA-Dev-Actor` / `X-DQA-Dev-Roles`
+
+Local Vite development against `docker-compose.dev.yml` remains supported separately.
+
+## 3. Services
+
+| Service | Role |
+|---------|------|
+| `frontend` | nginx static SPA; proxies `/api/` (and `/health`) to backend |
+| `backend` | FastAPI; no `--reload`; readiness = DQA PostgreSQL reachable |
+| `dqa-db` | DQA PostgreSQL; persistent named volume; Compose-internal only |
+| `migrate` | one-shot profile (`--profile migrate`) running `alembic upgrade head` |
+
+Live DEMIS DB remains external and is reached through an operator-managed Connection Profile.
 LLM endpoint remains external unless future requirements change.
 Query result rows are not sent to the LLM by default.
 
-## 3. Network exposure rules
+Absence of a concrete DEMIS DBMS adapter is an application capability state
+(`DEMIS_ADAPTER_UNAVAILABLE` / `execution_available=false`). It must not fail
+container liveness/readiness.
 
-Application services:
-- current backend-only phase: backend may bind to the GPU server's explicitly configured LAN IPv4 for API testing
-- after frontend implementation: prefer frontend as the LAN-facing service and keep backend internal/loopback
-- use explicit host ports
-- must not rely on wildcard public DNS
+## 4. Network exposure rules
 
-DQA PostgreSQL:
-- stays on the Compose network for application access
-- if a host port is needed for development tools, bind it to `127.0.0.1` by default
-- must not be broadly exposed to the LAN or Internet
+Production/on-prem Compose:
+- frontend binds `${DQA_LAN_BIND_IP:-127.0.0.1}:${DQA_FRONTEND_PORT:-8080}`
+- backend is not published to the host/LAN
+- PostgreSQL has no host port publication
+- do not expose `5432` or `8000` to `0.0.0.0`
+- `data` network is `internal: true` (frontend cannot reach DB)
 
-DEMIS database:
-- is never published by DQA
-- connectivity is defined by Connection Profile and site network policy
+Development Compose (`docker-compose.dev.yml`):
+- backend may bind to an explicit LAN IP for API testing
+- PostgreSQL defaults to loopback host bind when a host port is needed
 
-## 4. Environment files
+## 5. Environment files
 
-Development:
-- `.env` or local override, never committed
-- LAN bind values may be provided through `.env`
+| File | Purpose |
+|------|---------|
+| `.env.example` | local/dev placeholder |
+| `.env.onprem.example` | on-prem placeholder (committed) |
+| `.env` / `.env.onprem` | real values (gitignored) |
 
-On-premise/internal deployment:
-- use a dedicated non-committed environment file when deployment automation is added
+Production Compose requires an explicitly supplied `DQA_DB_PASSWORD` and fails if absent.
+Do not default production DB passwords to `dqa` or `change-me`.
 
-Template:
-- `.env.example`
+Do not commit real DB passwords, API keys, LLM endpoints when sensitive, DEMIS passwords, or credential secret values.
 
-Current development bind variables:
-- `DQA_LAN_BIND_IP`
-- `DQA_BACKEND_PORT`
-- `DQA_DB_BIND_IP`
-- `DQA_DB_EXTERNAL_PORT`
+## 6. Schema migrations
 
-## 5. Development Compose
+Production migration mechanism:
 
-Current backend skeleton:
+```bash
+./scripts/dqa-migrate.sh
+# equivalent: docker compose ... --profile migrate run --rm migrate
+# runs: alembic upgrade head
+```
+
+Do not rely on `create_all` as the documented production migration mechanism for new tables.
+
+Historical caveat:
+- Alembic currently owns `connection_profiles` and `query_audit_events`
+- backend startup still runs `create_all` for older catalog/template tables until full migration ownership exists
+- recommended fresh-DB order: **migrate first, then start backend**
+- running `create_all` first, then Alembic, can fail when managed tables already exist
+- never run destructive downgrades automatically
+
+## 7. Operational scripts
+
+From repository root (requires Docker + `.env.onprem`):
+
+```bash
+./scripts/dqa-migrate.sh
+./scripts/dqa-up.sh
+./scripts/dqa-status.sh
+./scripts/dqa-logs.sh
+./scripts/dqa-down.sh
+```
+
+Behavior:
+- `set -euo pipefail`
+- secrets are not echoed
+- no hard-coded server IP
+- `down` does not delete the DB volume by default
+- no auto-prune
+
+## 8. Development Compose
 
 ```bash
 docker compose -f docker-compose.dev.yml up --build
@@ -83,67 +153,31 @@ Default:
 - backend -> `127.0.0.1:8000`
 - PostgreSQL -> `127.0.0.1:5432`
 
-For current integration testing, set `DQA_LAN_BIND_IP` to the existing GPU server's internal IPv4 address.
+Run the Vite frontend separately for UI work:
 
-Example:
-
-```text
-DQA_LAN_BIND_IP=192.168.0.100
-DQA_BACKEND_PORT=8000
-DQA_DB_BIND_IP=127.0.0.1
+```bash
+cd frontend && npm run dev
 ```
 
-Then another trusted LAN device may access:
-
-```text
-http://192.168.0.100:8000
-```
-
-subject to the host firewall.
-
-## 6. Future deployment script target
-
-The later deployment PR should provide commands equivalent to:
-
-```text
-deploy
-status
-logs
-down
-```
-
-The internal deployment flow should:
-1. validate environment
-2. validate Docker/Compose availability
-3. validate the selected LAN bind IP
-4. validate Compose config
-5. build images
-6. deploy with remove-orphans
-7. wait for backend/frontend health
-8. print LAN access URLs and service status
-
-Traefik checks must not be mandatory for internal/on-premise mode.
-
-## 7. Optional external reverse proxy
+## 9. Optional external reverse proxy
 
 If a future requirement explicitly needs external/public access, an additional Compose override may attach the application to an external Traefik network.
 
-That optional mode may provide:
-- Host-based routing
-- TLS
-- public DNS integration
-
+That optional mode may provide Host-based routing, TLS, and public DNS integration.
 It must remain separate from the default internal/on-premise Compose configuration.
+No Traefik requirement has been confirmed for current on-prem use.
 
-## 8. Health model
+## 10. Health model
 
 Backend:
-- liveness: process/API alive
-- readiness: DQA PostgreSQL reachable and application initialized
+- `GET /health` — liveness (process/API alive)
+- `GET /health/ready` — readiness (DQA PostgreSQL reachable)
 
-DEMIS DB and LLM availability should normally be exposed as dependency diagnostics rather than make the application process itself unhealthy.
+Frontend healthcheck verifies the nginx HTTP serving endpoint.
 
-## 9. Persistence
+DEMIS adapter absence and LLM unavailability are capability/dependency diagnostics, not container health failures.
+
+## 11. Persistence
 
 DQA PostgreSQL stores:
 - imported Catalog revisions
@@ -151,11 +185,16 @@ DQA PostgreSQL stores:
 - Query Templates and versions
 - approvals
 - execution/audit metadata
+- connection profiles (non-secret)
 
-Imported raw package retention policy should be configurable.
+Volume: Compose named volume `dqa_pgdata`.
 
-## 10. Production query enablement
+## 12. Outstanding external blockers
 
-Deployment success alone does not enable live DEMIS querying.
+This foundation does **not** make DQA ready for real DEMIS clinical use.
 
-Live execution requires the production execution gate defined in `docs/architecture.md`, including authentication/RBAC, an active READY Catalog revision, an enabled Connection Profile, approved Query Template, SQL/parameter validation, read-only DB privileges, limits, and audit persistence.
+Still required externally:
+1. Approved production authentication mechanism / IdentityProvider
+2. Confirmed DEMIS DBMS and concrete read-only driver requirements
+
+Live execution also still requires the full production execution gate in `docs/architecture.md`.

@@ -225,15 +225,20 @@ Scope:
 ## Phase 7 - Operations
 
 ### PR 20 - Internal/on-premise deployment
+Status: foundation landed (`feat/onprem-deployment`).
 Scope:
-- Dockerfiles
-- Compose
-- explicit LAN IP / port binding
-- internal-only DQA DB exposure
-- non-committed deployment environment
-- deploy/status/logs/down workflow
-- health/readiness checks
-- optional Traefik override only if an external-access requirement exists
+- frontend multi-stage production image (Node build → nginx SPA; `/api` proxy)
+- production/on-prem Compose (`docker-compose.onprem.yml`)
+- explicit LAN IP / frontend port binding; backend + DB not LAN-published
+- internal-only DQA DB (no host ports; internal Compose network)
+- production `APP_ENV=production` + `DQA_AUTH_PROVIDER=disabled` (fail closed)
+- optional `docker-compose.onprem.dev.yml` for development/LAN `dev_headers` only
+- `.env.onprem.example` + gitignored real `.env.onprem`; required DB password
+- Alembic migrate workflow (`alembic upgrade head` via migrate profile/scripts)
+- health/readiness (`/health`, `/health/ready`; frontend HTTP healthcheck)
+- operational scripts: up / status / logs / down / migrate
+- optional Traefik override only if an external-access requirement exists (not added)
+- outstanding blockers documented: production IdP + concrete DEMIS DBMS/driver
 
 ### PR 21 - Hardening
 Scope:

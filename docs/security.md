@@ -217,6 +217,10 @@ Config:
 - `DQA_AUTH_PROVIDER` default `disabled` (fail-closed on protected endpoints: 503)
 - `dev_headers` is allowed only when `APP_ENV` is `development` or `test`
 - enabling `dev_headers` under production fails closed (503)
+- on-prem production Compose (`docker-compose.onprem.yml`) keeps `disabled`
+- optional `docker-compose.onprem.dev.yml` overlay enables `dev_headers` for
+  development/LAN integration only — never production
+- production SPA builds must never inject `VITE_DQA_DEV_ACTOR` / `VITE_DQA_DEV_ROLES`
 
 HTTP mapping:
 - unauthenticated / invalid identity → 401
@@ -318,3 +322,19 @@ Foundation (`app/adapters/demis`):
 - Connection Profile diagnostics remain configuration-level until a concrete
   adapter can set `live_connection_tested`
 - concrete DEMIS DBMS adapter remains unavailable until requirements are confirmed
+
+## 13. On-prem deployment exposure
+
+Production Compose foundation (`docker-compose.onprem.yml`):
+- frontend is the only LAN-facing service
+- backend listens on the Compose network only (not published to host/LAN)
+- DQA PostgreSQL has no host port; attached to an internal Compose network
+- `DQA_AUTH_PROVIDER=disabled` by default (protected APIs fail closed)
+- no `dev_headers`, no DEMIS fake adapter selection, no Traefik by default
+- do not expose `5432` or `8000` on `0.0.0.0`
+- real `.env.onprem` is gitignored; only `.env.onprem.example` is committed
+- `DQA_DB_PASSWORD` must be supplied explicitly (no weak Compose default)
+
+Outstanding blockers outside this repository change:
+1. approved production IdentityProvider
+2. confirmed DEMIS DBMS / driver requirements
