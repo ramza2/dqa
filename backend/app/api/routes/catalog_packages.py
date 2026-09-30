@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.adapters.catalog.errors import CatalogPackageValidationError
 from app.adapters.db.deps import get_db_session
 from app.api.uploads import read_upload_bounded
+from app.auth.dependencies import require_permission
+from app.auth.models import AuthenticatedActor, Permission
 from app.models.catalog_import import CatalogImportRevision
 from app.schemas.catalog_package import (
     CatalogImportResult,
@@ -32,6 +34,7 @@ router = APIRouter(prefix="/api/v1/catalog/packages", tags=["catalog-packages"])
 )
 async def validate_catalog_package(
     file: UploadFile = File(..., description="Catalog Package v2 ZIP archive"),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_MANAGE)),
 ) -> CatalogPackageValidateResponse:
     """Validate an uploaded Catalog Package v2 ZIP without persisting it."""
     archive_bytes = await read_upload_bounded(file)
@@ -68,6 +71,7 @@ async def validate_catalog_package(
 async def import_catalog_package(
     file: UploadFile = File(..., description="Catalog Package v2 ZIP archive"),
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_MANAGE)),
 ) -> CatalogImportResult:
     """Validate and persist an immutable Catalog Package import revision."""
     archive_bytes = await read_upload_bounded(file)

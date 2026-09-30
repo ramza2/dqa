@@ -70,6 +70,19 @@ for parameter/environment UI without TEMPLATE_READ or profile-management grants.
 It must not resolve credentials, connect to DEMIS, execute SQL, call LLM, or
 write execution audit.
 
+## Catalog authorization
+
+Catalog APIs are permission-gated via `require_permission()`:
+
+- `CATALOG_READ`: active Catalog pointers/metadata query, import history,
+  activation history (granted to viewer/author/approver/query_operator/auditor)
+- `CATALOG_MANAGE`: package validate / import / activate (administrator only)
+
+`query_operator` must retain `CATALOG_READ` for Query Assistant source discovery.
+Do not grant `CATALOG_MANAGE` to non-administrator roles.
+Production still requires an approved IdentityProvider; Catalog RBAC only closes
+authorization gaps under the existing provider abstraction.
+
 ## Catalog Package
 
 Treat imported Catalog Package data and live DEMIS connectivity as separate concerns.
