@@ -7,13 +7,14 @@ from fastapi import FastAPI
 from app import __version__
 from app.adapters.db.deps import init_db_schema
 from app.api.routes import api_router
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 
 
 def create_app(*, init_db_on_startup: bool = True) -> FastAPI:
     """Build and configure the FastAPI application."""
     settings = get_settings()
     lifespan = _db_lifespan if init_db_on_startup else None
+    docs_urls = _docs_urls_for_env(settings)
     application = FastAPI(
         title=settings.app_name,
         version=__version__,
@@ -25,9 +26,26 @@ def create_app(*, init_db_on_startup: bool = True) -> FastAPI:
             "and draft Query Template registry (no execution)."
         ),
         lifespan=lifespan,
+        docs_url=docs_urls["docs_url"],
+        redoc_url=docs_urls["redoc_url"],
+        openapi_url=docs_urls["openapi_url"],
     )
     application.include_router(api_router)
     return application
+
+
+def _docs_urls_for_env(settings: Settings) -> dict[str, str | None]:
+    """Disable public OpenAPI/docs surfaces in production (attack-surface reduction).
+
+    This is not an authentication control. Development/test keep interactive docs.
+    """
+    if settings.app_env == "production":
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {
+        "docs_url": "/docs",
+        "redoc_url": "/redoc",
+        "openapi_url": "/openapi.json",
+    }
 
 
 @asynccontextmanager

@@ -33,7 +33,7 @@ export function TableList({
         />
       </div>
       {state.status === "loading" || state.status === "error" || state.status === "empty" ? (
-        <div style={{ padding: "0.85rem" }}>
+        <div className="pane-status">
           <StatusBanner state={state} emptyLabel="No tables" />
         </div>
       ) : null}
@@ -51,7 +51,7 @@ export function TableList({
                 <div className="schema">{table.schema_name}</div>
                 <div className="name">{table.name}</div>
                 {table.comment ? <div className="comment">{table.comment}</div> : null}
-                <div className="chip-row" style={{ marginTop: "0.35rem" }}>
+                <div className="chip-row chip-row-spaced">
                   {table.table_type ? (
                     <span className="badge badge-muted">{table.table_type}</span>
                   ) : null}

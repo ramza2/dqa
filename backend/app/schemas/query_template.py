@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.adapters.demis.types import MAX_ROW_LIMIT, MAX_SQL_TEXT_LENGTH, MAX_TIMEOUT_SECONDS
+
 ParameterType = Literal[
     "string",
     "integer",
@@ -28,20 +30,32 @@ ApprovalStatus = Literal["DRAFT", "IN_REVIEW", "APPROVED", "REJECTED"]
 PARAM_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 STABLE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,127}$")
 
+MAX_TEMPLATE_NAME_LENGTH = 255
+MAX_TEMPLATE_DESCRIPTION_LENGTH = 4000
+MAX_SOURCE_NAME_LENGTH = 255
+MAX_TARGET_SCHEMAS = 64
+MAX_SCHEMA_NAME_LENGTH = 255
+MAX_PARAMETER_SCHEMA_ITEMS = 100
+MAX_PARAM_LABEL_LENGTH = 255
+MAX_PARAM_DESCRIPTION_LENGTH = 2000
+MAX_PARAM_PATTERN_LENGTH = 512
+MAX_ENUM_ALLOWED_VALUES = 256
+MAX_NOTE_LENGTH = 2000
+
 
 class QueryTemplateParameter(BaseModel):
     """One declared template parameter (structural validation only)."""
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str
-    label: str | None = None
-    description: str | None = None
+    name: str = Field(min_length=1, max_length=128)
+    label: str | None = Field(default=None, max_length=MAX_PARAM_LABEL_LENGTH)
+    description: str | None = Field(default=None, max_length=MAX_PARAM_DESCRIPTION_LENGTH)
     type: ParameterType
     required: bool = True
     default: Any | None = None
-    allowed_values: list[Any] | None = None
-    pattern: str | None = None
+    allowed_values: list[Any] | None = Field(default=None, max_length=MAX_ENUM_ALLOWED_VALUES)
+    pattern: str | None = Field(default=None, max_length=MAX_PARAM_PATTERN_LENGTH)
     min: int | float | Decimal | None = None
     max: int | float | Decimal | None = None
     min_items: int | None = None
@@ -290,15 +304,17 @@ class QueryTemplateListResponse(BaseModel):
 class QueryTemplateCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    stable_key: str
-    name: str
-    description: str | None = None
-    source_name: str
-    target_schemas: list[str] = Field(min_length=1)
-    sql_text: str
-    parameter_schema: list[QueryTemplateParameter] = Field(default_factory=list)
-    row_limit: int = Field(default=100, gt=0)
-    timeout_seconds: int = Field(default=30, gt=0)
+    stable_key: str = Field(min_length=1, max_length=128)
+    name: str = Field(min_length=1, max_length=MAX_TEMPLATE_NAME_LENGTH)
+    description: str | None = Field(default=None, max_length=MAX_TEMPLATE_DESCRIPTION_LENGTH)
+    source_name: str = Field(min_length=1, max_length=MAX_SOURCE_NAME_LENGTH)
+    target_schemas: list[str] = Field(min_length=1, max_length=MAX_TARGET_SCHEMAS)
+    sql_text: str = Field(min_length=1, max_length=MAX_SQL_TEXT_LENGTH)
+    parameter_schema: list[QueryTemplateParameter] = Field(
+        default_factory=list, max_length=MAX_PARAMETER_SCHEMA_ITEMS
+    )
+    row_limit: int = Field(default=100, gt=0, le=MAX_ROW_LIMIT)
+    timeout_seconds: int = Field(default=30, gt=0, le=MAX_TIMEOUT_SECONDS)
 
     @field_validator("stable_key")
     @classmethod
@@ -341,6 +357,8 @@ class QueryTemplateCreateRequest(BaseModel):
             if not isinstance(item, str) or not item.strip():
                 raise ValueError("target_schemas entries must be non-blank strings")
             name = item.strip()
+            if len(name) > MAX_SCHEMA_NAME_LENGTH:
+                raise ValueError("target schema name exceeds maximum length")
             key = name.casefold()
             if key in seen:
                 raise ValueError(f"duplicate target schema: {name}")
@@ -367,13 +385,15 @@ class QueryTemplateUpdateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str | None = None
-    description: str | None = None
-    target_schemas: list[str] | None = None
-    sql_text: str | None = None
-    parameter_schema: list[QueryTemplateParameter] | None = None
-    row_limit: int | None = Field(default=None, gt=0)
-    timeout_seconds: int | None = Field(default=None, gt=0)
+    name: str | None = Field(default=None, min_length=1, max_length=MAX_TEMPLATE_NAME_LENGTH)
+    description: str | None = Field(default=None, max_length=MAX_TEMPLATE_DESCRIPTION_LENGTH)
+    target_schemas: list[str] | None = Field(default=None, min_length=1, max_length=MAX_TARGET_SCHEMAS)
+    sql_text: str | None = Field(default=None, min_length=1, max_length=MAX_SQL_TEXT_LENGTH)
+    parameter_schema: list[QueryTemplateParameter] | None = Field(
+        default=None, max_length=MAX_PARAMETER_SCHEMA_ITEMS
+    )
+    row_limit: int | None = Field(default=None, gt=0, le=MAX_ROW_LIMIT)
+    timeout_seconds: int | None = Field(default=None, gt=0, le=MAX_TIMEOUT_SECONDS)
 
     @field_validator("name")
     @classmethod
@@ -407,6 +427,8 @@ class QueryTemplateUpdateRequest(BaseModel):
             if not isinstance(item, str) or not item.strip():
                 raise ValueError("target_schemas entries must be non-blank strings")
             name = item.strip()
+            if len(name) > MAX_SCHEMA_NAME_LENGTH:
+                raise ValueError("target schema name exceeds maximum length")
             key = name.casefold()
             if key in seen:
                 raise ValueError(f"duplicate target schema: {name}")
@@ -439,13 +461,13 @@ class QueryTemplateUpdateRequest(BaseModel):
 class QueryTemplateNoteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    note: str | None = None
+    note: str | None = Field(default=None, max_length=MAX_NOTE_LENGTH)
 
 
 class QueryTemplateRejectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    note: str
+    note: str = Field(min_length=1, max_length=MAX_NOTE_LENGTH)
 
     @field_validator("note")
     @classmethod
@@ -461,10 +483,12 @@ class QueryTemplateNewVersionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    sql_text: str | None = None
-    parameter_schema: list[QueryTemplateParameter] | None = None
-    row_limit: int | None = Field(default=None, gt=0)
-    timeout_seconds: int | None = Field(default=None, gt=0)
+    sql_text: str | None = Field(default=None, min_length=1, max_length=MAX_SQL_TEXT_LENGTH)
+    parameter_schema: list[QueryTemplateParameter] | None = Field(
+        default=None, max_length=MAX_PARAMETER_SCHEMA_ITEMS
+    )
+    row_limit: int | None = Field(default=None, gt=0, le=MAX_ROW_LIMIT)
+    timeout_seconds: int | None = Field(default=None, gt=0, le=MAX_TIMEOUT_SECONDS)
 
     @field_validator("sql_text")
     @classmethod

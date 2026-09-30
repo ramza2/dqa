@@ -250,11 +250,25 @@ Scope:
 - `query_operator` retains Catalog read for Query Assistant source discovery
 - no production IdP / DEMIS adapter / frontend redesign / rate limiting
 
-### PR 21 - Hardening
+### PR 21 - Runtime security hardening (Phase 1)
+Status: landed (`feat/runtime-security-hardening`).
 Scope:
-- rate/size limits
-- operational error handling
-- security regression suite
+- nginx outer body-size limits (2m general; 55m Catalog validate/import)
+- proxy/client timeout boundaries (backend query timeouts remain authoritative)
+- CSP / Permissions-Policy / cache hygiene / `server_tokens off`
+- production FastAPI `/docs` `/redoc` `/openapi.json` disabled
+- error-sanitization regressions for representative secret markers
+- request-field bound review for high-risk JSON endpoints
+- on-prem checker no longer pip-installs dependencies
+- rate limiting deferred pending traffic/concurrency requirements
+- HSTS deferred to approved TLS termination
+- no production IdP / DEMIS driver / frontend redesign
+
+### PR 22 - Hardening (follow-up)
+Scope:
+- rate/size policy tuning after concurrency requirements are confirmed
+- operational error handling expansion
+- security regression suite growth
 - backup/restore guidance
 - audit retention
 - RBAC refinement (beyond Catalog)

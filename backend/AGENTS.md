@@ -83,6 +83,9 @@ Do not grant `CATALOG_MANAGE` to non-administrator roles.
 Production still requires an approved IdentityProvider; Catalog RBAC only closes
 authorization gaps under the existing provider abstraction.
 
+Production FastAPI docs (`/docs`, `/redoc`, `/openapi.json`) are disabled when
+`APP_ENV=production` (attack-surface reduction only; not an auth control).
+
 ## Catalog Package
 
 Treat imported Catalog Package data and live DEMIS connectivity as separate concerns.

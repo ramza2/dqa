@@ -199,7 +199,31 @@ Frontend healthcheck verifies the nginx HTTP serving endpoint.
 
 DEMIS adapter absence and LLM unavailability are capability/dependency diagnostics, not container health failures.
 
-## 11. Persistence
+## 11. Frontend nginx edge policy
+
+The production frontend image uses nginx as the LAN entrypoint:
+
+- general `/api/` body limit: `2m`
+- Catalog package `validate` / `import`: `55m` (outer bound only; backend archive
+  limit remains 50 MiB)
+- explicit `proxy_send_timeout` / `proxy_read_timeout` / `client_*_timeout` /
+  `send_timeout` (conservative; not unlimited)
+- backend remains authoritative for SQL/query timeouts and Catalog archive limits
+- CSP (`default-src 'self'`, no `unsafe-eval`, no CDN hosts) + Permissions-Policy
+- `index.html` no-cache; hashed `/assets/` immutable long cache
+- no `proxy_cache`
+- `server_tokens off`
+- no X-DQA-Dev-* identity header injection
+- HSTS not enabled here — configure at the approved TLS termination point
+
+Production backend also disables public OpenAPI docs (`/docs`, `/redoc`,
+`/openapi.json`) when `APP_ENV=production`.
+
+Rate limiting is deferred until hospital/internal concurrency expectations are
+confirmed. Future limits should distinguish inexpensive reads, Catalog uploads,
+LLM-backed endpoints, and query preview/execute.
+
+## 12. Persistence
 
 DQA PostgreSQL stores:
 - imported Catalog revisions
@@ -211,12 +235,13 @@ DQA PostgreSQL stores:
 
 Volume: Compose named volume `dqa_pgdata`.
 
-## 12. Outstanding external blockers
+## 13. Outstanding external blockers
 
 This foundation does **not** make DQA ready for real DEMIS clinical use.
 
 Still required externally:
 1. Approved production authentication mechanism / IdentityProvider
 2. Confirmed DEMIS DBMS and concrete read-only driver requirements
+3. Approved TLS termination for real medical-data use
 
 Live execution also still requires the full production execution gate in `docs/architecture.md`.

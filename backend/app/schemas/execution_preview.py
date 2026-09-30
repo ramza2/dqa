@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MAX_SOURCE_NAME_LENGTH = 255
 MAX_ENVIRONMENT_LENGTH = 64
+# Bound request parameter map size (template parameter_schema is also bounded).
+MAX_REQUEST_PARAMETERS = 128
 
 ExecutionBlockerCode = Literal["DEMIS_ADAPTER_UNAVAILABLE"]
 
@@ -30,6 +32,15 @@ class ExecutionPreviewRequest(BaseModel):
         if not cleaned:
             raise ValueError("must not be blank")
         return cleaned
+
+    @field_validator("parameters")
+    @classmethod
+    def bound_parameter_map(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if len(value) > MAX_REQUEST_PARAMETERS:
+            raise ValueError(
+                f"parameters must contain at most {MAX_REQUEST_PARAMETERS} entries"
+            )
+        return value
 
 
 class ExecutionPreviewResponse(BaseModel):

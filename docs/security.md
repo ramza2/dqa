@@ -344,6 +344,37 @@ Production Compose foundation (`docker-compose.onprem.yml`):
 - `DQA_DB_PASSWORD` must be supplied explicitly (no weak Compose default)
 - `dqa-up.sh` refuses to start backend until Alembic revisions are at head
 
+## 14. Runtime edge hardening (Phase 1)
+
+Frontend nginx is an outer resource/attack-surface boundary only:
+
+- general `/api/` `client_max_body_size 2m`
+- Catalog `validate` / `import` raised to `55m` (backend archive limit remains 50 MiB)
+- explicit proxy/client send/read/header/body timeouts (not unlimited)
+- backend SQL/query timeouts remain authoritative
+- CSP + Permissions-Policy + nosniff / DENY frame / no-referrer
+- no HSTS here — TLS/HSTS belong at the approved TLS termination point
+- hashed `/assets/` immutable cache; `index.html` no-cache; no `proxy_cache`
+- `server_tokens off`; no X-DQA-Dev-* injection
+
+Production FastAPI docs exposure:
+- `APP_ENV=production` disables `/docs`, `/redoc`, `/openapi.json`
+- development/test keep docs
+- this is attack-surface reduction, not authentication
+
+Request-bound review (Phase 1):
+- recommendation / parameter extraction request text already length-bounded
+- execution preview/execute parameter maps bounded
+- connection profile mutation fields length-bounded
+- query template create/update/new-version text and list fields length-bounded
+- Catalog upload remains bounded by backend `max_archive_bytes`
+
+Rate limiting:
+- deferred pending confirmed internal concurrency / traffic profile
+- future policy should distinguish inexpensive reads, Catalog manage uploads,
+  LLM-backed endpoints, and query preview/execute
+
 Outstanding blockers outside this repository change:
 1. approved production IdentityProvider
 2. confirmed DEMIS DBMS / driver requirements
+3. approved TLS termination for real medical-data use
