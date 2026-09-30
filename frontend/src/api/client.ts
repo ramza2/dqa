@@ -10,7 +10,39 @@ export function getApiBaseUrl(): string {
   return configured.replace(/\/$/, "");
 }
 
-function buildUrl(path: string, query?: Record<string, string | number | boolean | undefined | null>): string {
+/** Build optional local-dev identity headers. Production builds never send them. */
+export function resolveDevAuthHeaders(env: {
+  DEV: boolean;
+  VITE_DQA_DEV_ACTOR?: string;
+  VITE_DQA_DEV_ROLES?: string;
+}): Record<string, string> {
+  if (!env.DEV) {
+    return {};
+  }
+  const actor = env.VITE_DQA_DEV_ACTOR?.trim();
+  const roles = env.VITE_DQA_DEV_ROLES?.trim();
+  const headers: Record<string, string> = {};
+  if (actor) {
+    headers["X-DQA-Dev-Actor"] = actor;
+  }
+  if (roles) {
+    headers["X-DQA-Dev-Roles"] = roles;
+  }
+  return headers;
+}
+
+function buildDevAuthHeaders(): Record<string, string> {
+  return resolveDevAuthHeaders({
+    DEV: import.meta.env.DEV,
+    VITE_DQA_DEV_ACTOR: import.meta.env.VITE_DQA_DEV_ACTOR,
+    VITE_DQA_DEV_ROLES: import.meta.env.VITE_DQA_DEV_ROLES,
+  });
+}
+
+function buildUrl(
+  path: string,
+  query?: Record<string, string | number | boolean | undefined | null>,
+): string {
   const base = getApiBaseUrl();
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const url = new URL(`${base}${normalizedPath}`, window.location.origin);
@@ -47,21 +79,52 @@ async function parseError(response: Response): Promise<CatalogApiError> {
   return new CatalogApiError(response.status, message, code);
 }
 
+function mergeRequestHeaders(init?: RequestInit, jsonBody?: boolean): Headers {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
+  if (jsonBody && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  const auth = buildDevAuthHeaders();
+  for (const [key, value] of Object.entries(auth)) {
+    if (!headers.has(key)) {
+      headers.set(key, value);
+    }
+  }
+  return headers;
+}
+
 export async function apiGet<T>(
   path: string,
   query?: Record<string, string | number | boolean | undefined | null>,
   init?: RequestInit,
 ): Promise<T> {
   const response = await fetch(buildUrl(path, query), {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
-      ...(init?.headers ?? {}),
-    },
     ...init,
+    method: "GET",
+    headers: mergeRequestHeaders(init),
   });
   if (!response.ok) {
     throw await parseError(response);
   }
   return (await response.json()) as T;
+}
+
+export async function apiPost<TRequest, TResponse>(
+  path: string,
+  body: TRequest,
+  init?: RequestInit,
+): Promise<TResponse> {
+  const response = await fetch(buildUrl(path), {
+    ...init,
+    method: "POST",
+    headers: mergeRequestHeaders(init, true),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return (await response.json()) as TResponse;
 }

@@ -214,14 +214,13 @@ Scope:
   no concrete adapter → DEMIS_ADAPTER_UNAVAILABLE
 
 ### PR 19 - Query Assistant frontend
+Status: landed (`feat/query-assistant-frontend`).
 Scope:
-- natural-language request
-- recommended template
-- parameters
-- execution preview
-- explicit execution action
-- result table
-- audit reference
+- in-app Query Assistant / Catalog Explorer navigation (default: Assistant)
+- natural-language recommendation → form metadata → optional AI extraction
+- parameter confirmation, execution preview, explicit execute, result + audit_id
+- live execute remains blocked until a concrete DEMIS adapter exists
+  (`execution_available=false` / `DEMIS_ADAPTER_UNAVAILABLE`)
 
 ## Phase 7 - Operations
 
