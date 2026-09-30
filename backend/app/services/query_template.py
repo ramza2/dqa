@@ -67,6 +67,8 @@ class _CurrentActive:
 def create_query_template(
     session: Session,
     request: QueryTemplateCreateRequest,
+    *,
+    actor: str | None = None,
 ) -> QueryTemplateDetail:
     """Create a template + version 1 DRAFT pinned to one Active Catalog snapshot."""
     snapshot = _require_active_snapshot(session, request.source_name)
@@ -110,7 +112,7 @@ def create_query_template(
         catalog_revision_id=snapshot.revision_id,
         catalog_fingerprint_constraint=snapshot.schema_fingerprint,
         approval_status=APPROVAL_DRAFT,
-        created_by=None,
+        created_by=actor,
         created_at=now,
         approved_by=None,
         approved_at=None,

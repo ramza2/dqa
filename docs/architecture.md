@@ -52,6 +52,43 @@ DEMIS Schema Analyzer
 
 ## 3. Logical components
 
+### 3.0 Authentication / RBAC
+
+Foundation for protecting selected application endpoints:
+
+```text
+Request
+  -> Identity Provider
+  -> AuthenticatedActor
+  -> Role / Permission resolver
+  -> authorization dependency
+  -> application service
+```
+
+Current provider:
+- `DQA_AUTH_PROVIDER=disabled` (default): protected routes fail closed (503)
+- `DQA_AUTH_PROVIDER=dev_headers`: development/test-only header assertion
+  (`X-DQA-Dev-Actor`, `X-DQA-Dev-Roles`); rejected outside `development`/`test`
+
+Routes authorize via permissions (`TEMPLATE_READ`, `TEMPLATE_AUTHOR`,
+`TEMPLATE_APPROVE`, `QUERY_OPERATE`, `AUDIT_READ`), not raw role strings.
+`administrator` resolves to all declared permissions.
+
+Authenticated `actor_id` is propagated into Query Template lifecycle metadata
+(`created_by`, `approved_by`, review-event `actor`).
+
+This PR prioritizes the roadmap authorization points for template author /
+approver / operator / auditor. Catalog import/activation, Catalog Explorer,
+and Connection Profile authorization remain follow-up hardening.
+Health endpoints remain unauthenticated.
+
+Authentication is not execution permission. Query execution still requires
+Connection Profile, SQL Safety, Active Catalog compatibility, read-only DEMIS
+access, and audit.
+
+Author vs approver permissions are separated; optional actor-level
+separation-of-duty policy may be added later.
+
 ### 3.1 Package Import / Validation
 
 Responsibilities:

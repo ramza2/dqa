@@ -15,12 +15,18 @@ _TEST_ENV = {
     "DQA_DB_NAME": "dqa",
     "DQA_DB_USER": "dqa",
     "DQA_DB_PASSWORD": "dqa",
+    "DQA_AUTH_PROVIDER": "dev_headers",
     "LLM_BASE_URL": "",
     "LLM_API_KEY": "",
     "LLM_MODEL": "",
     "LLM_TIMEOUT_SECONDS": "60",
     "LLM_CONNECT_TIMEOUT_SECONDS": "10",
     "LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST": "false",
+}
+
+_TEST_AUTH_HEADERS = {
+    "X-DQA-Dev-Actor": "test-admin",
+    "X-DQA-Dev-Roles": "administrator",
 }
 
 
@@ -48,7 +54,7 @@ def client(test_settings_env: dict[str, str]) -> TestClient:
 
     _clear_db_caches()
     application = create_app(init_db_on_startup=False)
-    with TestClient(application) as test_client:
+    with TestClient(application, headers=_TEST_AUTH_HEADERS) as test_client:
         yield test_client
     _clear_db_caches()
 
@@ -56,6 +62,30 @@ def client(test_settings_env: dict[str, str]) -> TestClient:
 @pytest.fixture()
 def db_client(test_settings_env: dict[str, str]) -> TestClient:
     """HTTP client for import/history integration tests (bootstraps DB schema)."""
+    from app.main import create_app
+
+    _clear_db_caches()
+    application = create_app(init_db_on_startup=True)
+    with TestClient(application, headers=_TEST_AUTH_HEADERS) as test_client:
+        yield test_client
+    _clear_db_caches()
+
+
+@pytest.fixture()
+def unauth_client(test_settings_env: dict[str, str]) -> TestClient:
+    """HTTP client without default auth headers (auth-focused tests)."""
+    from app.main import create_app
+
+    _clear_db_caches()
+    application = create_app(init_db_on_startup=False)
+    with TestClient(application) as test_client:
+        yield test_client
+    _clear_db_caches()
+
+
+@pytest.fixture()
+def unauth_db_client(test_settings_env: dict[str, str]) -> TestClient:
+    """DB-backed client without default auth headers."""
     from app.main import create_app
 
     _clear_db_caches()

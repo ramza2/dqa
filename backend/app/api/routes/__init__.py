@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    auth,
     catalog_active,
     catalog_imports,
     catalog_packages,
@@ -15,6 +16,7 @@ from app.api.routes import (
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(auth.router)
 api_router.include_router(catalog_packages.router)
 api_router.include_router(catalog_imports.router)
 # Register query routes before the bare /{source_name} summary route pattern group.

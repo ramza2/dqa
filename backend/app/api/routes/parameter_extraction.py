@@ -10,6 +10,8 @@ from app.adapters.parameter_extraction.errors import (
     ParameterExtractionError,
     ParameterExtractionErrorCode,
 )
+from app.auth.dependencies import require_permission
+from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.parameter_extraction import (
     ParameterExtractionRequest,
     ParameterExtractionResponse,
@@ -27,6 +29,9 @@ def extract_parameters(
     body: ParameterExtractionRequest,
     response: Response,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.QUERY_OPERATE)
+    ),
 ) -> ParameterExtractionResponse:
     """Extract declared parameter values for one eligible Query Template version.
 
