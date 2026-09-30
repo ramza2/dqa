@@ -288,6 +288,9 @@ export function useQueryAssistant() {
 
   const setParameterValue = useCallback(
     (name: string, value: unknown) => {
+      // Parameter edits supersede extraction/preview/execute operations that
+      // were started with the previous parameter state.
+      bumpGeneration();
       setParameterValues((prev) => {
         const next = { ...prev };
         if (value === undefined) {
@@ -304,15 +307,18 @@ export function useQueryAssistant() {
       });
       invalidatePreviewAndResult();
     },
-    [invalidatePreviewAndResult],
+    [bumpGeneration, invalidatePreviewAndResult],
   );
 
   const setSelectedEnvironment = useCallback(
     (value: string) => {
+      // Environment changes supersede preview/execute operations that were
+      // started against the previous execution target.
+      bumpGeneration();
       setEnvironment(value);
       invalidatePreviewAndResult();
     },
-    [invalidatePreviewAndResult],
+    [bumpGeneration, invalidatePreviewAndResult],
   );
 
   const runExtraction = useCallback(async () => {
