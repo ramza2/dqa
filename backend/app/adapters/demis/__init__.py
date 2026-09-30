@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from app.adapters.demis.credentials import CredentialMaterial, CredentialResolver
 from app.adapters.demis.errors import DemisAdapterError, DemisAdapterErrorCode
-from app.adapters.demis.factory import create_readonly_demis_adapter
+from app.adapters.demis.factory import (
+    create_readonly_demis_adapter,
+    is_concrete_demis_adapter_available,
+    required_adapter_config_present,
+)
 from app.adapters.demis.profile import ConnectionProfileSnapshot
 from app.adapters.demis.protocol import ReadOnlyDemisAdapter
 from app.adapters.demis.types import (
@@ -24,4 +28,6 @@ __all__ = [
     "ReadonlyQueryRequest",
     "ReadonlyQueryResult",
     "create_readonly_demis_adapter",
+    "is_concrete_demis_adapter_available",
+    "required_adapter_config_present",
 ]
