@@ -228,6 +228,7 @@ grep -q 'trap ' "${RESTORE}" || fail "restore must trap container temp cleanup"
 # DROP/CREATE must occur only after custom-format validation (ordering heuristic).
 python3 - <<'PY' || fail "restore must validate archive before DROP/CREATE"
 from pathlib import Path
+import re
 text = Path("scripts/dqa-restore.sh").read_text()
 idx_pgdmp = text.find("dqa_require_pg_custom_archive")
 idx_list = text.find("pg_restore --list")
@@ -238,6 +239,22 @@ assert idx_pgdmp < idx_drop and idx_list < idx_drop, (idx_pgdmp, idx_list, idx_d
 idx_restore = text.find("--single-transaction")
 idx_alembic = text.find("check_at_head")
 assert idx_restore > 0 and idx_alembic > idx_restore
+# Recreate SQL must use stdin heredoc — psql -c/--command does not interpolate :'var'.
+assert "<<'SQL'" in text, "recreate block must use single-quoted heredoc for psql stdin"
+if re.search(r"""--command=.*:'restore_db'""", text) or re.search(
+    r'''--command=.*:"restore_db"''', text
+):
+    raise AssertionError(
+        "recreate SQL must not pass :'restore_db'/:\"restore_db\" via psql --command"
+    )
+if re.search(r"""-c\s+.*:'restore_db'""", text) or re.search(
+    r'''-c\s+.*:"restore_db"''', text
+):
+    raise AssertionError(
+        "recreate SQL must not pass :'restore_db'/:\"restore_db\" via psql -c"
+    )
+assert ":'restore_db'" in text and ':"restore_db"' in text
+assert "--set=\"restore_db=" in text or "--set=restore_db=" in text
 print("restore_order_ok")
 PY
 # Never volume-wipe via compose down -v in restore/backup path (ignore comments).

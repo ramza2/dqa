@@ -119,7 +119,8 @@ fi
 # 6) Only after validation: terminate sessions and recreate DQA database.
 echo "Terminating sessions and recreating DQA database..."
 # Connect to the maintenance DB. Identifiers come only from configured env values.
-# Use psql variable quoting (string + identifier) — never pass DQA_DB_PASSWORD.
+# psql -c/--command does NOT interpolate :'var' / :"var"; feed SQL via stdin heredoc
+# so psql performs variable quoting. Never pass DQA_DB_PASSWORD.
 if ! dqa_db_exec \
   psql \
   --username="${db_user}" \
@@ -127,9 +128,16 @@ if ! dqa_db_exec \
   --set=ON_ERROR_STOP=1 \
   --set="restore_db=${db_name}" \
   --set="restore_owner=${db_user}" \
-  --command="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'restore_db' AND pid <> pg_backend_pid();" \
-  --command='DROP DATABASE IF EXISTS :"restore_db";' \
-  --command='CREATE DATABASE :"restore_db" OWNER :"restore_owner";'; then
+  <<'SQL'
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE datname = :'restore_db'
+  AND pid <> pg_backend_pid();
+
+DROP DATABASE IF EXISTS :"restore_db";
+CREATE DATABASE :"restore_db" OWNER :"restore_owner";
+SQL
+then
   echo "error: failed to recreate DQA database; restore aborted" >&2
   exit 1
 fi
