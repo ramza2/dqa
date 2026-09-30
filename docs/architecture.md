@@ -353,20 +353,30 @@ Optional result summarization may be added only after an explicit medical-data/d
 
 ### 3.11 Audit
 
-Record at minimum:
-- request/audit ID
-- actor identity when authentication is introduced
-- timestamp
-- active Catalog revision/fingerprint
-- Query Template ID/version
-- parameter names and safe values according to policy
-- execution target
-- status
-- elapsed time
-- row count
-- failure category
+Append-only Query Audit Events (`query_audit_events`) record request/execution
+metadata for historical reconstruction.
 
-Do not log full sensitive result sets by default.
+Record at minimum:
+- application `audit_id` (correlation across append-only rows)
+- actor identity
+- timestamp
+- active Catalog revision/fingerprint (immutable snapshot ids, no FK cascade)
+- Query Template ID/version ids
+- Connection Profile id
+- parameter names only (`parameter_logging_policy=NAMES_ONLY`)
+- sensitive parameter *names* (never values)
+- status / event_type
+- elapsed time / row count / boolean result truncation indicator
+- sanitized `failure_category`
+
+Read API: `GET /api/v1/audit-events` and `GET /api/v1/audit-events/{audit_id}`
+(protected by existing `AUDIT_READ`). No public create/update/delete.
+
+`CatalogActivationEvent` and `QueryTemplateReviewEvent` remain separate domain
+histories and are not replaced by this table.
+
+Do not log full sensitive result sets, SQL text, request text, credentials,
+prompts, or LLM responses. Live execution paths are not yet wired to the writer.
 
 ## 4. Initial technology choices
 

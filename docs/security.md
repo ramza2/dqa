@@ -187,14 +187,20 @@ Keep Parameter Extraction disabled (`false`) until that approval exists.
 
 ## 9. Audit and privacy
 
-Default audit should capture execution metadata, not complete query result data.
+Default audit captures execution metadata, not complete query result data.
 
-Parameter logging policy should distinguish:
-- safe operational parameter
-- sensitive medical/patient identifier
-- secret
+Current Query Audit foundation policy:
+- `parameter_logging_policy = NAMES_ONLY`
+- persist parameter names and sensitive parameter names only
+- never persist parameter values, hashes of values, SQL, request text, result
+  rows, exception bodies, credentials, host/DSN details, prompts, or LLM responses
+- `failure_category` is a sanitized bounded token only
+- audit identifiers for catalog/template/profile are immutable snapshots without
+  FK cascade deletion of history
+- read access requires `AUDIT_READ`; no public write API
 
-Sensitive parameter values should be masked or hashed according to future operational requirements.
+Future masking/hashing of parameter values remains out of scope until an
+explicit retention policy is approved.
 
 ## 10. Authentication and authorization
 
@@ -238,7 +244,7 @@ Not yet covered (follow-up):
 - Catalog Package import / activation admin authorization
 - Catalog Explorer admin surfaces
 - OIDC/OAuth2/JWT verification, user directory, MFA, sessions
-- full audit persistence
+- wiring audit writes into live execution (preview/execute)
 - live DEMIS connectivity / credential resolution / execution
 
 ## 11. Production checklist
