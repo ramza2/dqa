@@ -181,6 +181,24 @@ grep -q '\*\.dump\.sha256' "${GITIGNORE}" || fail ".gitignore must ignore *.dump
 grep -q 'pg_dump' "${BACKUP}" || fail "backup script must use pg_dump"
 grep -q -- '--format=custom\|-Fc' "${BACKUP}" || fail "backup script should prefer custom format"
 grep -q 'sha256sum' "${BACKUP}" || fail "backup script must produce SHA-256 sidecar"
+grep -q 'umask 077' "${BACKUP}" || fail "backup script must set umask 077"
+grep -q 'chmod 0700' "${BACKUP}" || fail "backup script must set backup directory mode 0700"
+grep -q 'chmod 0600' "${BACKUP}" || fail "backup script must set dump/sidecar mode 0600"
+grep -q 'dqa_require_pg_custom_archive\|PGDMP' "${BACKUP}" "${COMMON}" \
+  || fail "backup path should validate PostgreSQL custom-format (PGDMP)"
+# Relative backup paths resolve against repo root, not operator CWD.
+grep -q 'DQA_ROOT' "${COMMON}" || fail "dqa-common must define DQA_ROOT"
+grep -q 'dqa_backup_dir' "${COMMON}" || fail "missing dqa_backup_dir helper"
+python3 - <<'PY' || fail "dqa_backup_dir must normalize relative paths against DQA_ROOT"
+from pathlib import Path
+text = Path("scripts/dqa-common.sh").read_text()
+assert "dqa_backup_dir()" in text
+# Must treat absolute paths as unchanged and relative against DQA_ROOT.
+assert '== /*' in text or '/* ]]' in text
+assert "${DQA_ROOT}/" in text or '${DQA_ROOT}/' in text
+assert "operator CWD" in text or "not the operator" in text.lower() or "repository root" in text.lower()
+print("backup_dir_normalize_ok")
+PY
 # Must not echo DB password *values* (mentioning the var name in help text is OK).
 if grep -nE 'echo[[:space:]]+"\$\{?DQA_DB_PASSWORD|printf[[:space:]].*"\$\{?DQA_DB_PASSWORD|echo[[:space:]]+\$DQA_DB_PASSWORD' \
   "${BACKUP}" "${RESTORE}" "${COMMON}" >/dev/null; then
@@ -199,7 +217,29 @@ grep -q 'pg_restore' "${RESTORE}" || fail "restore script must use pg_restore"
 grep -q 'RESTORE' "${RESTORE}" || fail "restore script must require explicit RESTORE confirmation"
 grep -q 'sha256sum' "${RESTORE}" || fail "restore script must verify SHA-256"
 grep -q 'pg_restore --list' "${RESTORE}" || fail "restore should validate archive with pg_restore --list"
+grep -q 'dqa_require_pg_custom_archive\|PGDMP' "${RESTORE}" \
+  || fail "restore must fail closed on non-custom (non-PGDMP) archives"
+grep -q -- '--single-transaction' "${RESTORE}" || fail "restore must use --single-transaction"
+grep -q -- '--exit-on-error' "${RESTORE}" || fail "restore must use --exit-on-error"
+grep -q -- '--no-owner' "${RESTORE}" || fail "restore must use --no-owner"
+grep -q -- '--no-privileges' "${RESTORE}" || fail "restore must use --no-privileges"
 grep -q 'dqa_require_app_stopped_for_restore' "${RESTORE}" || fail "restore must refuse while app services run"
+grep -q 'trap ' "${RESTORE}" || fail "restore must trap container temp cleanup"
+# DROP/CREATE must occur only after custom-format validation (ordering heuristic).
+python3 - <<'PY' || fail "restore must validate archive before DROP/CREATE"
+from pathlib import Path
+text = Path("scripts/dqa-restore.sh").read_text()
+idx_pgdmp = text.find("dqa_require_pg_custom_archive")
+idx_list = text.find("pg_restore --list")
+idx_drop = text.find("DROP DATABASE")
+assert idx_pgdmp > 0 and idx_list > 0 and idx_drop > 0
+assert idx_pgdmp < idx_drop and idx_list < idx_drop, (idx_pgdmp, idx_list, idx_drop)
+# Alembic check only after pg_restore block
+idx_restore = text.find("--single-transaction")
+idx_alembic = text.find("check_at_head")
+assert idx_restore > 0 and idx_alembic > idx_restore
+print("restore_order_ok")
+PY
 # Never volume-wipe via compose down -v in restore/backup path (ignore comments).
 if grep -nE '^[^#]*\bdown[[:space:]].*-v|^[^#]*\bdown[[:space:]].*--volumes' "${RESTORE}" "${BACKUP}" >/dev/null; then
   fail "backup/restore must not use docker compose down -v"
@@ -246,6 +286,8 @@ if grep -RInE '@router\.delete\b|def delete_.*audit' "${ROOT}/backend/app/api/ro
 fi
 
 grep -q 'DQA_BACKUP_DIR' "${ENV_EXAMPLE}" || fail ".env.onprem.example should document DQA_BACKUP_DIR"
+grep -qi 'repository root\|repo root\|<repo>/backups' "${ENV_EXAMPLE}" \
+  || fail ".env.onprem.example should state ./backups means <repo>/backups"
 pass "backup/restore + audit retention static safety checks"
 
 # --- Optional Docker resolve checks (no pip; grep rendered YAML text) ---

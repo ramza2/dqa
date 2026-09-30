@@ -136,18 +136,44 @@ dqa_db_name() {
   dqa_env_value DQA_DB_NAME dqa
 }
 
-# Backup directory: DQA_BACKUP_DIR env, else .env.onprem, else ./backups
+# Resolve DQA_BACKUP_DIR against the repository root for relative paths.
+# Absolute paths are unchanged. Default: <repo>/backups
+# "./backups" always means "${DQA_ROOT}/backups", never the operator CWD.
 dqa_backup_dir() {
+  local raw=""
   if [[ -n "${DQA_BACKUP_DIR:-}" ]]; then
-    echo "${DQA_BACKUP_DIR}"
+    raw="${DQA_BACKUP_DIR}"
+  else
+    raw="$(dqa_env_value DQA_BACKUP_DIR "")"
+  fi
+  if [[ -z "${raw}" ]]; then
+    echo "${DQA_ROOT}/backups"
     return 0
   fi
-  local from_env
-  from_env="$(dqa_env_value DQA_BACKUP_DIR "")"
-  if [[ -n "${from_env}" ]]; then
-    echo "${from_env}"
-  else
-    echo "${DQA_ROOT}/backups"
+  if [[ "${raw}" == /* ]]; then
+    echo "${raw}"
+    return 0
+  fi
+  # Strip a single leading "./" for readability; keep other relative forms.
+  if [[ "${raw}" == ./* ]]; then
+    raw="${raw#./}"
+  fi
+  echo "${DQA_ROOT}/${raw}"
+}
+
+# Fail closed unless the file begins with the PostgreSQL custom-format magic "PGDMP".
+# pg_restore --list also accepts tar/directory archives; this rejects those.
+dqa_require_pg_custom_archive() {
+  local archive_path="$1"
+  local magic
+  if [[ ! -f "${archive_path}" ]]; then
+    echo "error: archive not found for custom-format check" >&2
+    exit 1
+  fi
+  magic="$(dd if="${archive_path}" bs=5 count=1 status=none 2>/dev/null || true)"
+  if [[ "${magic}" != "PGDMP" ]]; then
+    echo "error: archive is not a PostgreSQL custom-format (PGDMP) dump; restore/backup refused" >&2
+    exit 1
   fi
 }
 

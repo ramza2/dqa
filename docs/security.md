@@ -214,6 +214,10 @@ DQA PostgreSQL backup/restore (`scripts/dqa-backup.sh` / `scripts/dqa-restore.sh
 - backs up DQA application DB only (never DEMIS)
 - SHA-256 sidecar required for restore; explicit `RESTORE` confirmation token
 - refuse restore while backend/frontend are running
+- custom-format (`PGDMP`) validated before DROP/CREATE; atomic
+  `pg_restore --single-transaction --exit-on-error`
+- backup artifacts use restrictive permissions (`umask 077`, dir `0700`, files `0600`)
+- relative `DQA_BACKUP_DIR` resolves against repository root (`./backups` ⇒ `<repo>/backups`)
 - backups may include Catalog/template/audit operational metadata; store only
   in an approved protected location
 - this foundation does not encrypt backups and does not claim external-storage safety

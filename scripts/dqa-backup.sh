@@ -5,6 +5,9 @@
 #   ${DQA_BACKUP_DIR:-./backups}/dqa_<UTC-timestamp>.dump
 #   matching .sha256 sidecar
 #
+# Relative DQA_BACKUP_DIR values are resolved against the repository root
+# (./backups => <repo>/backups), not the operator CWD.
+#
 # Uses pg_dump -Fc inside the dqa-db container (no host PostgreSQL client).
 # Does not back up DEMIS. Does not echo secrets.
 set -euo pipefail
@@ -12,6 +15,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=dqa-common.sh
 source "${SCRIPT_DIR}/dqa-common.sh"
+
+# Restrictive permissions for operational/audit metadata in archives.
+umask 077
 
 dqa_preflight
 dqa_require_cmd sha256sum
@@ -21,12 +27,20 @@ dqa_require_migrations_at_head
 
 backup_dir="$(dqa_backup_dir)"
 mkdir -p "${backup_dir}"
+# Directory itself only — never recursively chmod unrelated existing content.
+chmod 0700 "${backup_dir}"
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 dump_name="dqa_${timestamp}.dump"
 dump_path="${backup_dir%/}/${dump_name}"
 checksum_path="${dump_path}.sha256"
 container_tmp="/tmp/${dump_name}"
+
+cleanup_backup_tmp() {
+  # Cleanup failure must not hide the primary backup outcome.
+  dqa_db_exec rm -f "${container_tmp}" >/dev/null 2>&1 || true
+}
+trap cleanup_backup_tmp EXIT
 
 db_user="$(dqa_db_user)"
 db_name="$(dqa_db_name)"
@@ -41,8 +55,9 @@ dqa_db_exec \
   --format=custom \
   --file="${container_tmp}"
 
-# Copy archive to the operator-controlled host directory, then remove temp file.
+# Copy archive to the operator-controlled host directory.
 dqa_compose cp "dqa-db:${container_tmp}" "${dump_path}"
+chmod 0600 "${dump_path}"
 dqa_db_exec rm -f "${container_tmp}"
 
 if [[ ! -s "${dump_path}" ]]; then
@@ -50,10 +65,10 @@ if [[ ! -s "${dump_path}" ]]; then
   exit 1
 fi
 
-# Validate archive type without restoring.
+# Fail closed: must be PostgreSQL custom format (PGDMP), then list TOC.
+dqa_require_pg_custom_archive "${dump_path}"
 dqa_compose cp "${dump_path}" "dqa-db:${container_tmp}"
 if ! dqa_db_exec pg_restore --list "${container_tmp}" >/dev/null; then
-  dqa_db_exec rm -f "${container_tmp}" || true
   echo "error: backup archive failed pg_restore --list validation" >&2
   exit 1
 fi
@@ -63,6 +78,10 @@ dqa_db_exec rm -f "${container_tmp}"
   cd "$(dirname "${dump_path}")"
   sha256sum "$(basename "${dump_path}")" >"$(basename "${checksum_path}")"
 )
+chmod 0600 "${checksum_path}"
+
+# Successful path: disable trap after explicit cleanup already done.
+trap - EXIT
 
 echo "Backup complete."
 echo "archive: ${dump_path}"

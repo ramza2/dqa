@@ -6,14 +6,20 @@
 # Usage:
 #   ./scripts/dqa-restore.sh /path/to/dqa_UTC.dump RESTORE
 #
+# Order:
+#   checksum → app stopped → DB healthy → copy archive →
+#   custom-format validation → DROP/CREATE → atomic pg_restore → Alembic head
+#
 # Safeguards:
 # - explicit RESTORE confirmation token (not interactive yes/no)
 # - SHA-256 sidecar required and verified
-# - pg_restore --list archive validation
+# - PGDMP custom-format magic + pg_restore --list
 # - refuse while backend/frontend/migrate are running
+# - pg_restore --single-transaction --exit-on-error (no partial schema)
 # - no docker compose down -v
 # - does not auto-start application services
 # - does not restore arbitrary SQL text via psql
+# - does not auto-run migrations after a failed/old restore
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,7 +63,7 @@ fi
 dqa_preflight
 dqa_require_cmd sha256sum
 
-# Verify checksum before touching the database.
+# 1) Verify checksum before touching the database.
 echo "Verifying SHA-256 sidecar..."
 (
   cd "$(dirname "${dump_path}")"
@@ -67,7 +73,10 @@ echo "Verifying SHA-256 sidecar..."
   exit 1
 }
 
+# 2) Refuse while application services hold DB sessions.
 dqa_require_app_stopped_for_restore
+
+# 3) Ensure dqa-db is healthy (does not start backend/frontend).
 dqa_ensure_db_healthy
 
 db_user="$(dqa_db_user)"
@@ -84,21 +93,34 @@ if [[ ! "${db_user}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
 fi
 
 container_tmp="/tmp/dqa_restore_$$.dump"
+container_tmp_present=0
 
+cleanup_restore_tmp() {
+  # Cleanup failure must not hide the primary restore failure.
+  if [[ "${container_tmp_present}" -eq 1 ]]; then
+    dqa_db_exec rm -f "${container_tmp}" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_restore_tmp EXIT
+
+# 4) Copy archive into dqa-db for validation/restore.
 echo "Copying archive into dqa-db for validation/restore..."
 dqa_compose cp "${dump_path}" "dqa-db:${container_tmp}"
+container_tmp_present=1
 
-echo "Validating pg_dump custom-format archive..."
+# 5) Custom-format / archive validation BEFORE any DROP/CREATE.
+echo "Validating PostgreSQL custom-format archive..."
+dqa_require_pg_custom_archive "${dump_path}"
 if ! dqa_db_exec pg_restore --list "${container_tmp}" >/dev/null; then
-  dqa_db_exec rm -f "${container_tmp}" || true
-  echo "error: archive is not a valid pg_dump custom-format file; restore refused" >&2
+  echo "error: archive failed pg_restore --list validation; restore refused" >&2
   exit 1
 fi
 
+# 6) Only after validation: terminate sessions and recreate DQA database.
 echo "Terminating sessions and recreating DQA database..."
 # Connect to the maintenance DB. Identifiers come only from configured env values.
 # Use psql variable quoting (string + identifier) — never pass DQA_DB_PASSWORD.
-dqa_db_exec \
+if ! dqa_db_exec \
   psql \
   --username="${db_user}" \
   --dbname=postgres \
@@ -107,25 +129,38 @@ dqa_db_exec \
   --set="restore_owner=${db_user}" \
   --command="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'restore_db' AND pid <> pg_backend_pid();" \
   --command='DROP DATABASE IF EXISTS :"restore_db";' \
-  --command='CREATE DATABASE :"restore_db" OWNER :"restore_owner";'
+  --command='CREATE DATABASE :"restore_db" OWNER :"restore_owner";'; then
+  echo "error: failed to recreate DQA database; restore aborted" >&2
+  exit 1
+fi
 
-echo "Restoring archive with pg_restore..."
+# 7) Atomic restore into the empty database.
+echo "Restoring archive with atomic pg_restore..."
 # Fresh empty database from DROP/CREATE; restore objects from custom-format archive.
+# --single-transaction + --exit-on-error: succeed fully or roll back restored objects.
 # Do not pipe untrusted SQL text through psql.
 if ! dqa_db_exec \
   pg_restore \
   --username="${db_user}" \
   --dbname="${db_name}" \
+  --single-transaction \
+  --exit-on-error \
   --no-owner \
+  --no-privileges \
   --role="${db_user}" \
   "${container_tmp}"; then
-  dqa_db_exec rm -f "${container_tmp}" || true
-  echo "error: pg_restore failed" >&2
+  echo "error: pg_restore failed; database left empty (transaction rolled back)" >&2
+  echo "Application was not started. Fix the archive, then retry restore." >&2
   exit 1
 fi
 
-dqa_db_exec rm -f "${container_tmp}"
+# Explicit cleanup before Alembic check; trap remains harmless if already gone.
+dqa_db_exec rm -f "${container_tmp}" >/dev/null 2>&1 || true
+container_tmp_present=0
+trap - EXIT
 
+# 8) Alembic head check only after successful pg_restore.
+# Do not auto-run migrations for a failed/old restore.
 echo "Checking Alembic migration head after restore..."
 if ! dqa_compose --profile migrate run --rm --no-deps migrate \
   python alembic/check_at_head.py; then

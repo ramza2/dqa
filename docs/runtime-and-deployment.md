@@ -177,18 +177,28 @@ Scope: **DQA PostgreSQL only**. DEMIS source databases are outside this workflow
 Backup (`./scripts/dqa-backup.sh`):
 - requires healthy `dqa-db` and Alembic at head
 - runs `pg_dump --format=custom` inside the `dqa-db` container (no host client)
-- writes `dqa_<UTC-timestamp>.dump` under `DQA_BACKUP_DIR` (default `./backups`)
+- writes `dqa_<UTC-timestamp>.dump` under `DQA_BACKUP_DIR` (default `<repo>/backups`)
+- relative `DQA_BACKUP_DIR` values resolve against the repository root
+  (`./backups` means `<repo>/backups`, not the operator CWD); absolute paths unchanged
+- sets `umask 077`, backup directory mode `0700`, dump/sidecar mode `0600`
+  (does not recursively chmod unrelated existing files)
 - writes matching `.sha256` sidecar
+- validates PostgreSQL custom-format magic (`PGDMP`) before treating the dump as good
 - filenames never include passwords, hostnames, usernames, DEMIS identifiers,
   or patient/query data identifiers
 
 Restore (`./scripts/dqa-restore.sh <dump> RESTORE`):
 - deliberately destructive; requires explicit `RESTORE` confirmation token
+- order: checksum → app stopped → DB healthy → copy → custom-format validation
+  → DROP/CREATE → atomic `pg_restore` → Alembic head check
 - verifies SHA-256 sidecar before touching data
-- validates archive with `pg_restore --list` (custom-format only; no arbitrary SQL via `psql`)
+- validates `PGDMP` magic plus `pg_restore --list` **before** DROP/CREATE
+- restores with `--single-transaction --exit-on-error --no-owner --no-privileges`
+  so a failed restore does not leave a partial application schema
 - refuses while `backend` / `frontend` / `migrate` are running
-- recreates the configured DQA database, restores, checks Alembic head
+- removes the container temp archive via `trap` on success and failure paths
 - does **not** auto-start application services
+- does **not** auto-run migrations after a failed/old restore
 - does **not** run `docker compose down -v`
 
 Recommended operator sequence:

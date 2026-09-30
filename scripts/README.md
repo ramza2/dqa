@@ -50,10 +50,12 @@ Rules:
 ./scripts/dqa-backup.sh
 ```
 
-Output defaults to `./backups/dqa_<UTC>.dump` (+ `.sha256`). Override with
-`DQA_BACKUP_DIR`. Archives may contain Catalog/template/audit operational
-metadata — store only in an approved protected location. This foundation does
-not encrypt backups.
+Output defaults to `<repo>/backups/dqa_<UTC>.dump` (+ `.sha256`). Override with
+`DQA_BACKUP_DIR`. Relative paths resolve against the repository root
+(`./backups` ⇒ `<repo>/backups`, not the shell CWD). Archives may contain
+Catalog/template/audit operational metadata — store only in an approved
+protected location. This foundation does not encrypt backups. Created
+artifacts use restrictive modes (`0700` backup dir, `0600` dump/sidecar).
 
 ### Recommended restore sequence
 
@@ -63,9 +65,11 @@ not encrypt backups.
 ./scripts/dqa-up.sh
 ```
 
-Restore refuses missing/mismatched checksums, invalid archives, missing
-`RESTORE` token, and running backend/frontend. It does not run
-`docker compose down -v`.
+Restore refuses missing/mismatched checksums, non-`PGDMP`/invalid archives,
+missing `RESTORE` token, and running backend/frontend. Validation happens
+before DROP/CREATE. `pg_restore` uses `--single-transaction --exit-on-error`
+so failures do not leave a partial schema. It does not run
+`docker compose down -v` and does not auto-migrate after a failed/old restore.
 
 Optional inspection:
 
