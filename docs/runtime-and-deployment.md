@@ -155,6 +155,10 @@ From repository root (requires Docker + `.env.onprem`):
 ./scripts/dqa-status.sh
 ./scripts/dqa-logs.sh
 ./scripts/dqa-down.sh
+./scripts/dqa-backup.sh
+./scripts/dqa-backup-list.sh
+./scripts/dqa-restore.sh /path/to/dqa_UTC.dump RESTORE
+./scripts/dqa-audit-retention-status.sh
 ./scripts/check-onprem-compose.sh   # static (+ optional Docker) regression checks
 ```
 
@@ -164,6 +168,70 @@ Behavior:
 - no hard-coded server IP
 - `down` does not delete the DB volume by default
 - no auto-prune
+- backup/restore never target DEMIS
+
+### DQA database backup / restore
+
+Scope: **DQA PostgreSQL only**. DEMIS source databases are outside this workflow.
+
+Backup (`./scripts/dqa-backup.sh`):
+- requires healthy `dqa-db` and Alembic at head
+- runs `pg_dump --format=custom` inside the `dqa-db` container (no host client)
+- writes `dqa_<UTC-timestamp>.dump` under `DQA_BACKUP_DIR` (default `<repo>/backups`)
+- relative `DQA_BACKUP_DIR` values resolve against the repository root
+  (`./backups` means `<repo>/backups`, not the operator CWD); absolute paths unchanged
+- sets `umask 077`, backup directory mode `0700`, dump/sidecar mode `0600`
+  (does not recursively chmod unrelated existing files)
+- writes matching `.sha256` sidecar
+- validates PostgreSQL custom-format magic (`PGDMP`) before treating the dump as good
+- filenames never include passwords, hostnames, usernames, DEMIS identifiers,
+  or patient/query data identifiers
+
+Restore (`./scripts/dqa-restore.sh <dump> RESTORE`):
+- deliberately destructive; requires explicit `RESTORE` confirmation token
+- order: checksum → app stopped → DB healthy → copy → custom-format validation
+  → DROP/CREATE → atomic `pg_restore` → Alembic head check
+- verifies SHA-256 sidecar before touching data
+- validates `PGDMP` magic plus `pg_restore --list` **before** DROP/CREATE
+- restores with `--single-transaction --exit-on-error --no-owner --no-privileges`
+  so a failed restore does not leave a partial application schema
+- refuses while `backend` / `frontend` / `migrate` are running
+- removes the container temp archive via `trap` on success and failure paths
+- does **not** auto-start application services
+- does **not** auto-run migrations after a failed/old restore
+- does **not** run `docker compose down -v`
+
+Recommended operator sequence:
+
+```bash
+./scripts/dqa-backup.sh
+# ...
+./scripts/dqa-down.sh
+./scripts/dqa-restore.sh ./backups/dqa_UTC.dump RESTORE
+./scripts/dqa-up.sh
+```
+
+Backup contents may include:
+- Catalog revisions and activation history
+- Query Templates / approvals
+- Connection Profile non-secret metadata (`credential_secret_ref` string only)
+- Query Audit Events
+- Alembic version metadata
+
+Backup contents must **not** include:
+- DEMIS DB contents or query result sets
+- DEMIS password values, LLM API keys, or env files
+
+Backup files may contain sensitive operational metadata and audit records.
+Store them only in an approved protected location. This foundation does **not**
+encrypt backups and does **not** claim they are safe for external/untrusted
+storage without an approved encryption policy.
+
+Backup retention is site policy. `dqa-backup-list.sh` is a dry-run listing
+helper only — it never deletes archives.
+
+Audit retention duration remains an external governance decision. See
+`docs/audit-retention-policy.md`. No automatic audit purge is implemented.
 
 ## 8. Development Compose
 
@@ -251,5 +319,6 @@ Still required externally:
 1. Approved production authentication mechanism / IdentityProvider
 2. Confirmed DEMIS DBMS and concrete read-only driver requirements
 3. Approved TLS termination for real medical-data use
+4. Approved audit/backup retention duration and storage/encryption policy
 
 Live execution also still requires the full production execution gate in `docs/architecture.md`.

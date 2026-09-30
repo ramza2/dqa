@@ -264,15 +264,26 @@ Scope:
 - HSTS deferred to approved TLS termination
 - no production IdP / DEMIS driver / frontend redesign
 
-### PR 22 - Hardening (follow-up)
+### PR 22 - DQA DB backup / restore + audit retention foundations
+Status: Draft PR (`feat/db-backup-audit-retention`).
+Scope:
+- operator `dqa-backup.sh` (`pg_dump -Fc` via `dqa-db`, SHA-256 sidecar, `DQA_BACKUP_DIR`)
+- fail-closed `dqa-restore.sh` (explicit `RESTORE` token, checksum, refuse while app up)
+- dry-run `dqa-backup-list.sh` (no automatic backup deletion)
+- audit retention policy document (append-only; duration not hardcoded; no auto purge)
+- read-only `dqa-audit-retention-status.sh` (oldest/newest/count only)
+- static regression checks for backup/restore safety boundaries
+- no production IdP / DEMIS adapter / public audit DELETE API
+
+### PR 23 - Hardening (follow-up)
 Scope:
 - rate/size policy tuning after concurrency requirements are confirmed
 - operational error handling expansion
 - security regression suite growth
-- backup/restore guidance
-- audit retention
+- approved purge tooling after retention policy confirmation
 - RBAC refinement (beyond Catalog)
 - data-egress policy enforcement
+- backup encryption after site key-management approval
 
 ## Exit criteria before real DEMIS use
 

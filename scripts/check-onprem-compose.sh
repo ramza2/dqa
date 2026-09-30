@@ -158,6 +158,155 @@ if grep -nE '^[[:space:]]*proxy_set_header[[:space:]]+X-DQA-Dev-' "${NGINX_CONF}
 fi
 pass "nginx hardening assertions (tokens/CSP/no-HSTS/no-proxy_cache/body limits/timeouts)"
 
+# --- Backup / restore + audit retention foundations ---
+BACKUP="${ROOT}/scripts/dqa-backup.sh"
+RESTORE="${ROOT}/scripts/dqa-restore.sh"
+BACKUP_LIST="${ROOT}/scripts/dqa-backup-list.sh"
+AUDIT_STATUS="${ROOT}/scripts/dqa-audit-retention-status.sh"
+GITIGNORE="${ROOT}/.gitignore"
+AUDIT_ROUTE="${ROOT}/backend/app/api/routes/audit_events.py"
+AUDIT_POLICY="${ROOT}/docs/audit-retention-policy.md"
+
+[[ -f "${BACKUP}" ]] || fail "missing dqa-backup.sh"
+[[ -f "${RESTORE}" ]] || fail "missing dqa-restore.sh"
+[[ -f "${BACKUP_LIST}" ]] || fail "missing dqa-backup-list.sh"
+[[ -f "${AUDIT_STATUS}" ]] || fail "missing dqa-audit-retention-status.sh"
+[[ -f "${AUDIT_POLICY}" ]] || fail "missing audit-retention-policy.md"
+
+# backups directory / dump patterns ignored
+grep -qE '(^|/ )backups/?$|^/backups/' "${GITIGNORE}" || fail ".gitignore must ignore backups/"
+grep -q '\*\.dump' "${GITIGNORE}" || fail ".gitignore must ignore *.dump"
+grep -q '\*\.dump\.sha256' "${GITIGNORE}" || fail ".gitignore must ignore *.dump.sha256"
+
+grep -q 'pg_dump' "${BACKUP}" || fail "backup script must use pg_dump"
+grep -q -- '--format=custom\|-Fc' "${BACKUP}" || fail "backup script should prefer custom format"
+grep -q 'sha256sum' "${BACKUP}" || fail "backup script must produce SHA-256 sidecar"
+grep -q 'umask 077' "${BACKUP}" || fail "backup script must set umask 077"
+grep -q 'chmod 0700' "${BACKUP}" || fail "backup script must set backup directory mode 0700"
+grep -q 'chmod 0600' "${BACKUP}" || fail "backup script must set dump/sidecar mode 0600"
+grep -q 'dqa_require_pg_custom_archive\|PGDMP' "${BACKUP}" "${COMMON}" \
+  || fail "backup path should validate PostgreSQL custom-format (PGDMP)"
+# Relative backup paths resolve against repo root, not operator CWD.
+grep -q 'DQA_ROOT' "${COMMON}" || fail "dqa-common must define DQA_ROOT"
+grep -q 'dqa_backup_dir' "${COMMON}" || fail "missing dqa_backup_dir helper"
+python3 - <<'PY' || fail "dqa_backup_dir must normalize relative paths against DQA_ROOT"
+from pathlib import Path
+text = Path("scripts/dqa-common.sh").read_text()
+assert "dqa_backup_dir()" in text
+# Must treat absolute paths as unchanged and relative against DQA_ROOT.
+assert '== /*' in text or '/* ]]' in text
+assert "${DQA_ROOT}/" in text or '${DQA_ROOT}/' in text
+assert "operator CWD" in text or "not the operator" in text.lower() or "repository root" in text.lower()
+print("backup_dir_normalize_ok")
+PY
+# Must not echo DB password *values* (mentioning the var name in help text is OK).
+if grep -nE 'echo[[:space:]]+"\$\{?DQA_DB_PASSWORD|printf[[:space:]].*"\$\{?DQA_DB_PASSWORD|echo[[:space:]]+\$DQA_DB_PASSWORD' \
+  "${BACKUP}" "${RESTORE}" "${COMMON}" >/dev/null; then
+  fail "backup/restore helpers must not echo DQA_DB_PASSWORD values"
+fi
+# Also refuse PGPASSWORD on process command lines in backup/restore scripts.
+if grep -nE 'PGPASSWORD=' "${BACKUP}" "${RESTORE}" >/dev/null; then
+  fail "backup/restore must not put PGPASSWORD on the process command line"
+fi
+# No DEMIS DB backup command in operator backup script
+if grep -nEi 'demis.*(pg_dump|dump)|pg_dump.*demis' "${BACKUP}" >/dev/null; then
+  fail "backup script must not back up DEMIS"
+fi
+
+grep -q 'pg_restore' "${RESTORE}" || fail "restore script must use pg_restore"
+grep -q 'RESTORE' "${RESTORE}" || fail "restore script must require explicit RESTORE confirmation"
+grep -q 'sha256sum' "${RESTORE}" || fail "restore script must verify SHA-256"
+grep -q 'pg_restore --list' "${RESTORE}" || fail "restore should validate archive with pg_restore --list"
+grep -q 'dqa_require_pg_custom_archive\|PGDMP' "${RESTORE}" \
+  || fail "restore must fail closed on non-custom (non-PGDMP) archives"
+grep -q -- '--single-transaction' "${RESTORE}" || fail "restore must use --single-transaction"
+grep -q -- '--exit-on-error' "${RESTORE}" || fail "restore must use --exit-on-error"
+grep -q -- '--no-owner' "${RESTORE}" || fail "restore must use --no-owner"
+grep -q -- '--no-privileges' "${RESTORE}" || fail "restore must use --no-privileges"
+grep -q 'dqa_require_app_stopped_for_restore' "${RESTORE}" || fail "restore must refuse while app services run"
+grep -q 'trap ' "${RESTORE}" || fail "restore must trap container temp cleanup"
+# DROP/CREATE must occur only after custom-format validation (ordering heuristic).
+python3 - <<'PY' || fail "restore must validate archive before DROP/CREATE"
+from pathlib import Path
+import re
+text = Path("scripts/dqa-restore.sh").read_text()
+idx_pgdmp = text.find("dqa_require_pg_custom_archive")
+idx_list = text.find("pg_restore --list")
+idx_drop = text.find("DROP DATABASE")
+assert idx_pgdmp > 0 and idx_list > 0 and idx_drop > 0
+assert idx_pgdmp < idx_drop and idx_list < idx_drop, (idx_pgdmp, idx_list, idx_drop)
+# Alembic check only after pg_restore block
+idx_restore = text.find("--single-transaction")
+idx_alembic = text.find("check_at_head")
+assert idx_restore > 0 and idx_alembic > idx_restore
+# Recreate SQL must use stdin heredoc — psql -c/--command does not interpolate :'var'.
+assert "<<'SQL'" in text, "recreate block must use single-quoted heredoc for psql stdin"
+if re.search(r"""--command=.*:'restore_db'""", text) or re.search(
+    r'''--command=.*:"restore_db"''', text
+):
+    raise AssertionError(
+        "recreate SQL must not pass :'restore_db'/:\"restore_db\" via psql --command"
+    )
+if re.search(r"""-c\s+.*:'restore_db'""", text) or re.search(
+    r'''-c\s+.*:"restore_db"''', text
+):
+    raise AssertionError(
+        "recreate SQL must not pass :'restore_db'/:\"restore_db\" via psql -c"
+    )
+assert ":'restore_db'" in text and ':"restore_db"' in text
+assert "--set=\"restore_db=" in text or "--set=restore_db=" in text
+print("restore_order_ok")
+PY
+# Never volume-wipe via compose down -v in restore/backup path (ignore comments).
+if grep -nE '^[^#]*\bdown[[:space:]].*-v|^[^#]*\bdown[[:space:]].*--volumes' "${RESTORE}" "${BACKUP}" >/dev/null; then
+  fail "backup/restore must not use docker compose down -v"
+fi
+# dqa-down must refuse --volumes (already covered earlier; restate for backup suite clarity)
+grep -q 'refusing destructive volume delete' "${DOWN}" \
+  || fail "dqa-down.sh must refuse --volumes"
+# Do not restore arbitrary SQL text through psql from the dump file
+if grep -nE 'psql[[:space:]].*<[[:space:]]*\$\{?dump|psql[[:space:]].*"\$\{?dump' "${RESTORE}" >/dev/null; then
+  fail "restore must not pipe dump file through psql"
+fi
+# No automatic deletion in backup list helper
+if grep -nE '\brm\b|\bunlink\b|\bdelete\b' "${BACKUP_LIST}" | grep -vE '^\s*#|never delete|no deletion|Does NOT delete' >/dev/null; then
+  # Allow comments; fail if an active rm/unlink appears
+  if grep -nE '^[^#]*\b(rm|unlink)\b' "${BACKUP_LIST}" >/dev/null; then
+    fail "backup-list helper must not delete files"
+  fi
+fi
+
+# Audit status: aggregates only; no actor/source/audit_id columns in SQL body
+python3 - <<'PY' || fail "audit retention status must not select sensitive row fields"
+from pathlib import Path
+import re
+text = Path("scripts/dqa-audit-retention-status.sh").read_text()
+# Extract SQL heredoc content only.
+m = re.search(r"<<'SQL'\n(.*?)SQL", text, re.S)
+assert m, "expected SQL heredoc in audit status script"
+sql = m.group(1).lower()
+for bad in ("actor_id", "source_name", "audit_id", "parameter_names", "parameter_values", "sql_text"):
+    assert bad not in sql, bad
+assert "min(created_at)" in sql
+assert "max(created_at)" in sql
+assert "count(" in sql
+print("audit_status_sql_ok")
+PY
+
+# No public audit delete/patch API
+if grep -nE '@router\.(delete|patch|put)\b|methods=\[.*DELETE|APIRouter.*delete' "${AUDIT_ROUTE}" >/dev/null; then
+  fail "audit route must not expose DELETE/PATCH/PUT"
+fi
+# Broader scan: no DELETE handlers under audit routes package
+if grep -RInE '@router\.delete\b|def delete_.*audit' "${ROOT}/backend/app/api/routes" --include='*audit*' >/dev/null; then
+  fail "no automatic/public audit DELETE API may exist"
+fi
+
+grep -q 'DQA_BACKUP_DIR' "${ENV_EXAMPLE}" || fail ".env.onprem.example should document DQA_BACKUP_DIR"
+grep -qi 'repository root\|repo root\|<repo>/backups' "${ENV_EXAMPLE}" \
+  || fail ".env.onprem.example should state ./backups means <repo>/backups"
+pass "backup/restore + audit retention static safety checks"
+
 # --- Optional Docker resolve checks (no pip; grep rendered YAML text) ---
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
   echo "SKIPPED: docker compose config (Docker unavailable)"

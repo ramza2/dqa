@@ -25,7 +25,11 @@ Operate on `docker-compose.onprem.yml` with a gitignored `.env.onprem`
 | `dqa-status.sh` | Compose ps + readiness checks |
 | `dqa-logs.sh` | Compose logs (no secret echoing) |
 | `dqa-down.sh` | stop services; preserves DB volume by default |
-| `check-onprem-compose.sh` | static (+ optional Docker) auth/port/migration regression checks |
+| `dqa-backup.sh` | DQA PostgreSQL `pg_dump -Fc` + SHA-256 sidecar (DEMIS not included) |
+| `dqa-backup-list.sh` | dry-run listing of local dump archives (never deletes) |
+| `dqa-restore.sh` | fail-closed restore (`RESTORE` token + checksum + app stopped) |
+| `dqa-audit-retention-status.sh` | aggregate audit window only (oldest/newest/count) |
+| `check-onprem-compose.sh` | static (+ optional Docker) auth/port/migration/backup regression checks |
 
 Shared helpers live in `dqa-common.sh` (including non-destructive migration head preflight).
 
@@ -36,6 +40,45 @@ Rules:
 - `down` does not delete volumes by default
 - production Compose hardcodes fail-closed auth; `.env.onprem` cannot enable `dev_headers`
 - unmigrated DB → `dqa-up.sh` fails before backend start
+- backup/restore targets **DQA PostgreSQL only** (never DEMIS)
+- restore does not auto-start application services
+- no automatic backup deletion; no automatic audit purge
+
+### Recommended backup sequence
+
+```bash
+./scripts/dqa-backup.sh
+```
+
+Output defaults to `<repo>/backups/dqa_<UTC>.dump` (+ `.sha256`). Override with
+`DQA_BACKUP_DIR`. Relative paths resolve against the repository root
+(`./backups` ⇒ `<repo>/backups`, not the shell CWD). Archives may contain
+Catalog/template/audit operational metadata — store only in an approved
+protected location. This foundation does not encrypt backups. Created
+artifacts use restrictive modes (`0700` backup dir, `0600` dump/sidecar).
+
+### Recommended restore sequence
+
+```bash
+./scripts/dqa-down.sh
+./scripts/dqa-restore.sh /path/to/dqa_UTC.dump RESTORE
+./scripts/dqa-up.sh
+```
+
+Restore refuses missing/mismatched checksums, non-`PGDMP`/invalid archives,
+missing `RESTORE` token, and running backend/frontend. Validation happens
+before DROP/CREATE. `pg_restore` uses `--single-transaction --exit-on-error`
+so failures do not leave a partial schema. It does not run
+`docker compose down -v` and does not auto-migrate after a failed/old restore.
+
+Optional inspection:
+
+```bash
+./scripts/dqa-backup-list.sh
+./scripts/dqa-audit-retention-status.sh
+```
+
+See `docs/runtime-and-deployment.md` and `docs/audit-retention-policy.md`.
 
 Optional development/LAN auth overlay:
 
@@ -45,7 +88,5 @@ docker compose -f docker-compose.onprem.yml -f docker-compose.onprem.dev.yml \
 ```
 
 Never enable `dev_headers` on a production host.
-
-See `docs/runtime-and-deployment.md`.
 
 Do not place credentials in scripts.
