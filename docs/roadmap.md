@@ -265,7 +265,7 @@ Scope:
 - no production IdP / DEMIS driver / frontend redesign
 
 ### PR 22 - DQA DB backup / restore + audit retention foundations
-Status: in progress (`feat/db-backup-audit-retention`).
+Status: Draft PR (`feat/db-backup-audit-retention`).
 Scope:
 - operator `dqa-backup.sh` (`pg_dump -Fc` via `dqa-db`, SHA-256 sidecar, `DQA_BACKUP_DIR`)
 - fail-closed `dqa-restore.sh` (explicit `RESTORE` token, checksum, refuse while app up)
