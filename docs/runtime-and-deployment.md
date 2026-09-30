@@ -155,6 +155,10 @@ From repository root (requires Docker + `.env.onprem`):
 ./scripts/dqa-status.sh
 ./scripts/dqa-logs.sh
 ./scripts/dqa-down.sh
+./scripts/dqa-backup.sh
+./scripts/dqa-backup-list.sh
+./scripts/dqa-restore.sh /path/to/dqa_UTC.dump RESTORE
+./scripts/dqa-audit-retention-status.sh
 ./scripts/check-onprem-compose.sh   # static (+ optional Docker) regression checks
 ```
 
@@ -164,6 +168,60 @@ Behavior:
 - no hard-coded server IP
 - `down` does not delete the DB volume by default
 - no auto-prune
+- backup/restore never target DEMIS
+
+### DQA database backup / restore
+
+Scope: **DQA PostgreSQL only**. DEMIS source databases are outside this workflow.
+
+Backup (`./scripts/dqa-backup.sh`):
+- requires healthy `dqa-db` and Alembic at head
+- runs `pg_dump --format=custom` inside the `dqa-db` container (no host client)
+- writes `dqa_<UTC-timestamp>.dump` under `DQA_BACKUP_DIR` (default `./backups`)
+- writes matching `.sha256` sidecar
+- filenames never include passwords, hostnames, usernames, DEMIS identifiers,
+  or patient/query data identifiers
+
+Restore (`./scripts/dqa-restore.sh <dump> RESTORE`):
+- deliberately destructive; requires explicit `RESTORE` confirmation token
+- verifies SHA-256 sidecar before touching data
+- validates archive with `pg_restore --list` (custom-format only; no arbitrary SQL via `psql`)
+- refuses while `backend` / `frontend` / `migrate` are running
+- recreates the configured DQA database, restores, checks Alembic head
+- does **not** auto-start application services
+- does **not** run `docker compose down -v`
+
+Recommended operator sequence:
+
+```bash
+./scripts/dqa-backup.sh
+# ...
+./scripts/dqa-down.sh
+./scripts/dqa-restore.sh ./backups/dqa_UTC.dump RESTORE
+./scripts/dqa-up.sh
+```
+
+Backup contents may include:
+- Catalog revisions and activation history
+- Query Templates / approvals
+- Connection Profile non-secret metadata (`credential_secret_ref` string only)
+- Query Audit Events
+- Alembic version metadata
+
+Backup contents must **not** include:
+- DEMIS DB contents or query result sets
+- DEMIS password values, LLM API keys, or env files
+
+Backup files may contain sensitive operational metadata and audit records.
+Store them only in an approved protected location. This foundation does **not**
+encrypt backups and does **not** claim they are safe for external/untrusted
+storage without an approved encryption policy.
+
+Backup retention is site policy. `dqa-backup-list.sh` is a dry-run listing
+helper only — it never deletes archives.
+
+Audit retention duration remains an external governance decision. See
+`docs/audit-retention-policy.md`. No automatic audit purge is implemented.
 
 ## 8. Development Compose
 
@@ -251,5 +309,6 @@ Still required externally:
 1. Approved production authentication mechanism / IdentityProvider
 2. Confirmed DEMIS DBMS and concrete read-only driver requirements
 3. Approved TLS termination for real medical-data use
+4. Approved audit/backup retention duration and storage/encryption policy
 
 Live execution also still requires the full production execution gate in `docs/architecture.md`.

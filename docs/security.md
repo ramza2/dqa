@@ -202,6 +202,24 @@ Current Query Audit foundation policy:
 Future masking/hashing of parameter values remains out of scope until an
 explicit retention policy is approved.
 
+Audit retention operational boundaries (see `docs/audit-retention-policy.md`):
+- audit events remain append-only during normal application operation
+- retention duration is **not** hardcoded (site/project policy not confirmed)
+- no public DELETE/PATCH audit API; no automatic purge in this foundation
+- any future purge must be offline/privileged, based on `created_at`, and
+  recorded externally — never `query_operator` accessible
+- operators may inspect aggregates only via `scripts/dqa-audit-retention-status.sh`
+
+DQA PostgreSQL backup/restore (`scripts/dqa-backup.sh` / `scripts/dqa-restore.sh`):
+- backs up DQA application DB only (never DEMIS)
+- SHA-256 sidecar required for restore; explicit `RESTORE` confirmation token
+- refuse restore while backend/frontend are running
+- backups may include Catalog/template/audit operational metadata; store only
+  in an approved protected location
+- this foundation does not encrypt backups and does not claim external-storage safety
+  without an approved encryption policy
+- no automatic backup deletion
+
 ## 10. Authentication and authorization
 
 Authentication ("who") and authorization ("may this actor do this") are separated.
@@ -387,3 +405,4 @@ Outstanding blockers outside this repository change:
 1. approved production IdentityProvider
 2. confirmed DEMIS DBMS / driver requirements
 3. approved TLS termination for real medical-data use
+4. approved audit/backup retention duration and storage/encryption policy
