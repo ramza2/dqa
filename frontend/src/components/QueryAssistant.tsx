@@ -2,7 +2,9 @@ import { useQueryAssistant } from "../hooks/useQueryAssistant";
 import type { ExecutionFormParameter } from "../types/queryAssistant";
 import {
   blockerMessage,
+  findEnumOptionIndex,
   formatCellValue,
+  isUnsetParameterValue,
   listInputDisplayValue,
 } from "../utils/queryAssistant";
 
@@ -50,6 +52,8 @@ function ParameterField({
   ) : null;
 
   if (param.type === "boolean") {
+    const selectValue =
+      value === true ? "true" : value === false ? "false" : "";
     return (
       <label className="param-field" htmlFor={id}>
         <span className="param-label">
@@ -59,11 +63,19 @@ function ParameterField({
         </span>
         <select
           id={id}
-          value={value === true ? "true" : "false"}
-          onChange={(event) => onChange(event.target.value === "true")}
+          value={selectValue}
+          onChange={(event) => {
+            const next = event.target.value;
+            if (next === "") {
+              onChange(undefined);
+              return;
+            }
+            onChange(next === "true");
+          }}
         >
-          <option value="false">false</option>
+          <option value="">선택</option>
           <option value="true">true</option>
+          <option value="false">false</option>
         </select>
         {param.description ? (
           <span className="param-help">{param.description}</span>
@@ -73,6 +85,8 @@ function ParameterField({
   }
 
   if (param.type === "enum") {
+    const allowed = param.allowed_values ?? [];
+    const selectedIndex = findEnumOptionIndex(allowed, value);
     return (
       <label className="param-field" htmlFor={id}>
         <span className="param-label">
@@ -82,12 +96,19 @@ function ParameterField({
         </span>
         <select
           id={id}
-          value={value === null || value === undefined ? "" : String(value)}
-          onChange={(event) => onChange(event.target.value)}
+          value={selectedIndex >= 0 ? String(selectedIndex) : ""}
+          onChange={(event) => {
+            const raw = event.target.value;
+            if (raw === "") {
+              onChange(undefined);
+              return;
+            }
+            onChange(allowed[Number.parseInt(raw, 10)]);
+          }}
         >
           <option value="">선택</option>
-          {(param.allowed_values ?? []).map((item) => (
-            <option key={String(item)} value={String(item)}>
+          {allowed.map((item, index) => (
+            <option key={`${index}:${typeof item}`} value={String(index)}>
               {String(item)}
             </option>
           ))}
@@ -108,7 +129,10 @@ function ParameterField({
           id={id}
           type={param.sensitive ? "password" : "text"}
           value={listInputDisplayValue(value)}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            const next = event.target.value;
+            onChange(next === "" ? undefined : next);
+          }}
           placeholder="쉼표로 구분"
           autoComplete="off"
         />
@@ -141,17 +165,22 @@ function ParameterField({
         id={id}
         type={inputType}
         step={param.type === "decimal" ? "any" : param.type === "integer" ? "1" : undefined}
-        value={value === null || value === undefined ? "" : String(value)}
+        value={isUnsetParameterValue(value) ? "" : String(value)}
         onChange={(event) => {
+          const next = event.target.value;
+          if (next === "") {
+            onChange(undefined);
+            return;
+          }
           if (param.type === "integer") {
-            onChange(event.target.value === "" ? "" : Number.parseInt(event.target.value, 10));
+            onChange(Number.parseInt(next, 10));
             return;
           }
           if (param.type === "decimal") {
-            onChange(event.target.value === "" ? "" : Number(event.target.value));
+            onChange(Number(next));
             return;
           }
-          onChange(event.target.value);
+          onChange(next);
         }}
         autoComplete="off"
       />

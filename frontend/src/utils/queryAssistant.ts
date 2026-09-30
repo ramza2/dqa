@@ -50,6 +50,15 @@ export function isEgressNotAllowed(error: unknown): boolean {
   return code === "PARAMETER_EXTRACTION_EGRESS_NOT_ALLOWED" || code.includes("EGRESS_NOT_ALLOWED");
 }
 
+/** True when the operator has not supplied a value (and no invented default). */
+export function isUnsetParameterValue(raw: unknown): boolean {
+  return raw === undefined || raw === null || raw === "";
+}
+
+/**
+ * Initialize form values from backend metadata defaults only.
+ * Never invent false / [] when no default is present.
+ */
 export function defaultsFromFormParameters(
   parameters: ExecutionFormParameter[],
 ): Record<string, unknown> {
@@ -57,18 +66,49 @@ export function defaultsFromFormParameters(
   for (const param of parameters) {
     if (param.default !== undefined && param.default !== null) {
       values[param.name] = param.default;
-    } else if (param.type === "boolean") {
-      values[param.name] = false;
-    } else if (param.type === "string_list" || param.type === "integer_list") {
-      values[param.name] = [];
-    } else {
-      values[param.name] = "";
     }
   }
   return values;
 }
 
-/** Convert form state into API parameter payload (omit blank optional strings). */
+function parseStringList(raw: unknown): string[] | null {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => String(item));
+  }
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseIntegerList(raw: unknown): number[] | null {
+  if (Array.isArray(raw)) {
+    return raw.map((item) =>
+      typeof item === "number" ? item : Number.parseInt(String(item), 10),
+    );
+  }
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => Number.parseInt(item, 10));
+}
+
+/** Convert form state into API parameter payload (omit blank optional values). */
 export function buildParameterPayload(
   parameters: ExecutionFormParameter[],
   values: Record<string, unknown>,
@@ -76,54 +116,60 @@ export function buildParameterPayload(
   const payload: Record<string, unknown> = {};
   for (const param of parameters) {
     const raw = values[param.name];
+
     if (param.type === "boolean") {
-      payload[param.name] = Boolean(raw);
+      if (isUnsetParameterValue(raw)) {
+        // Required blank stays missing; optional blank is omitted.
+        continue;
+      }
+      payload[param.name] = raw === true;
       continue;
     }
+
     if (param.type === "integer") {
-      if (raw === "" || raw === null || raw === undefined) {
-        if (param.required) {
-          payload[param.name] = raw;
-        }
+      if (isUnsetParameterValue(raw)) {
         continue;
       }
       payload[param.name] = typeof raw === "number" ? raw : Number.parseInt(String(raw), 10);
       continue;
     }
+
     if (param.type === "decimal") {
-      if (raw === "" || raw === null || raw === undefined) {
-        if (param.required) {
-          payload[param.name] = raw;
-        }
+      if (isUnsetParameterValue(raw)) {
         continue;
       }
       payload[param.name] = typeof raw === "number" ? raw : Number(raw);
       continue;
     }
+
     if (param.type === "string_list") {
-      payload[param.name] = Array.isArray(raw)
-        ? raw
-        : String(raw ?? "")
-            .split(",")
-            .map((item) => item.trim())
-            .filter(Boolean);
-      continue;
-    }
-    if (param.type === "integer_list") {
-      const list = Array.isArray(raw)
-        ? raw
-        : String(raw ?? "")
-            .split(",")
-            .map((item) => item.trim())
-            .filter(Boolean)
-            .map((item) => Number.parseInt(item, 10));
+      const list = parseStringList(raw);
+      if (list === null || list.length === 0) {
+        continue;
+      }
       payload[param.name] = list;
       continue;
     }
-    if (raw === "" || raw === null || raw === undefined) {
-      if (param.required) {
-        payload[param.name] = raw ?? "";
+
+    if (param.type === "integer_list") {
+      const list = parseIntegerList(raw);
+      if (list === null || list.length === 0) {
+        continue;
       }
+      payload[param.name] = list;
+      continue;
+    }
+
+    if (param.type === "enum") {
+      if (isUnsetParameterValue(raw)) {
+        continue;
+      }
+      // Preserve exact JSON type from allowed_values selection.
+      payload[param.name] = raw;
+      continue;
+    }
+
+    if (isUnsetParameterValue(raw)) {
       continue;
     }
     payload[param.name] = raw;
@@ -135,7 +181,7 @@ export function listInputDisplayValue(value: unknown): string {
   if (Array.isArray(value)) {
     return value.map((item) => String(item)).join(", ");
   }
-  if (value === null || value === undefined) {
+  if (isUnsetParameterValue(value)) {
     return "";
   }
   return String(value);
@@ -162,4 +208,9 @@ export function stableParametersKey(parameters: Record<string, unknown>): string
     normalized[key] = parameters[key];
   }
   return JSON.stringify(normalized);
+}
+
+/** Selected enum option index for exact-type mapping (string "1" vs number 1). */
+export function findEnumOptionIndex(allowedValues: unknown[], value: unknown): number {
+  return allowedValues.findIndex((item) => Object.is(item, value));
 }

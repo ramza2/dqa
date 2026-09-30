@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
@@ -405,7 +405,9 @@ describe("QueryAssistant", () => {
     expect(wardInput).toHaveAttribute("type", "password");
     expect(screen.getByLabelText(/시작일/)).toHaveValue("2024-01-01");
     expect(screen.getByLabelText(/^활성/)).toHaveValue("true");
-    expect(screen.getByLabelText(/^종류/)).toHaveValue("A");
+    // Enum options use stable indexes so exact JSON types are preserved.
+    expect(screen.getByLabelText(/^종류/)).toHaveValue("0");
+    expect(screen.getByLabelText(/^종류/)).toHaveDisplayValue("A");
 
     expect(screen.getByTestId("env-blockers")).toHaveTextContent(
       "DEMIS 실행 어댑터가 아직 구성되지 않았습니다.",
@@ -600,6 +602,154 @@ describe("QueryAssistant", () => {
     );
     expect(screen.queryByTestId("recommended-template")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/병동 코드/)).not.toBeInTheDocument();
+    restore();
+  });
+
+  it("request text edit invalidates recommendation/form/preview/result but keeps text", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(assistantHandlers({ preview: availablePreview }));
+    render(<QueryAssistant />);
+    await recommendHappyPath(user);
+    expect(screen.getByTestId("recommended-template")).toBeInTheDocument();
+    const requestBox = screen.getByLabelText("자연어 조회 요청");
+    await user.type(requestBox, " (수정)");
+    expect(requestBox).toHaveValue("병동 조회해줘 (수정)");
+    expect(screen.queryByTestId("recommended-template")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/병동 코드/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("preview-summary")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("audit-id")).not.toBeInTheDocument();
+    restore();
+  });
+
+  it("required boolean without default starts unselected and preserves false", async () => {
+    const user = userEvent.setup();
+    const formWithoutBoolDefault: ExecutionFormResponse = {
+      ...formResponse,
+      parameters: formResponse.parameters.map((item) =>
+        item.name === "active" ? { ...item, default: null } : item,
+      ),
+    };
+    const restore = installFetchMock(assistantHandlers({ form: formWithoutBoolDefault }));
+    render(<QueryAssistant />);
+    await recommendHappyPath(user);
+    const active = screen.getByLabelText(/^활성/);
+    expect(active).toHaveValue("");
+    await user.selectOptions(active, "false");
+    expect(active).toHaveValue("false");
+    restore();
+  });
+
+  it("typed enum selection submits exact JSON types in preview payload", async () => {
+    const user = userEvent.setup();
+    const previewCapture: { body: Record<string, unknown> | null } = { body: null };
+    const typedForm: ExecutionFormResponse = {
+      ...formResponse,
+      parameters: [
+        {
+          name: "code",
+          label: "코드",
+          description: null,
+          type: "enum",
+          required: true,
+          default: null,
+          allowed_values: [1, "1"],
+          pattern: null,
+          min: null,
+          max: null,
+          min_items: null,
+          max_items: null,
+          sensitive: false,
+        },
+      ],
+      environments: [
+        {
+          environment: "dev",
+          execution_available: false,
+          execution_blockers: ["DEMIS_ADAPTER_UNAVAILABLE"],
+        },
+      ],
+    };
+    const handlers = assistantHandlers({ form: typedForm, preview: unavailablePreview });
+    handlers.unshift((url, init) => {
+      if (url.pathname.endsWith("/query-executions/preview") && init?.method === "POST") {
+        previewCapture.body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return jsonResponse({
+          ...unavailablePreview,
+          resolved_parameters: previewCapture.body.parameters as Record<string, unknown>,
+          sensitive_parameter_names: [],
+        });
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    render(<QueryAssistant />);
+    await screen.findByLabelText("Active Catalog source");
+    await user.selectOptions(
+      screen.getByLabelText("Active Catalog source"),
+      activeSource.source_name,
+    );
+    await user.type(screen.getByLabelText("자연어 조회 요청"), "병동 조회해줘");
+    await user.click(screen.getByRole("button", { name: "조회 방법 찾기" }));
+    expect(await screen.findByTestId("recommended-template")).toBeInTheDocument();
+    const codeSelect = await screen.findByLabelText(/^코드/);
+
+    // Option labels both display as "1"; drive the stable index value directly.
+    fireEvent.change(codeSelect, { target: { value: "0" } });
+    await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+    await screen.findByTestId("preview-summary");
+    expect((previewCapture.body?.parameters as Record<string, unknown>).code).toBe(1);
+    expect(typeof (previewCapture.body?.parameters as Record<string, unknown>).code).toBe(
+      "number",
+    );
+
+    fireEvent.change(codeSelect, { target: { value: "1" } });
+    await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+    await screen.findByTestId("preview-summary");
+    expect((previewCapture.body?.parameters as Record<string, unknown>).code).toBe("1");
+    expect(typeof (previewCapture.body?.parameters as Record<string, unknown>).code).toBe(
+      "string",
+    );
+    restore();
+  });
+
+  it("ignores stale execute response after source change", async () => {
+    const user = userEvent.setup();
+    const pending = {
+      resolve: null as null | ((value: Response) => void),
+    };
+    const pendingExecute = new Promise<Response>((resolve) => {
+      pending.resolve = resolve;
+    });
+    const handlers = assistantHandlers({
+      actives: [activeSource, secondSource],
+      preview: availablePreview,
+    });
+    handlers.unshift((url, init) => {
+      if (url.pathname.endsWith("/query-executions/preview") && init?.method === "POST") {
+        return jsonResponse(availablePreview);
+      }
+      if (url.pathname.endsWith("/query-executions/execute") && init?.method === "POST") {
+        return pendingExecute;
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    render(<QueryAssistant />);
+    await recommendHappyPath(user);
+    await user.type(screen.getByLabelText(/병동 코드/), "A01");
+    await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+    await screen.findByTestId("preview-summary");
+    await user.click(screen.getByRole("button", { name: "조회 실행" }));
+    await user.selectOptions(
+      screen.getByLabelText("Active Catalog source"),
+      secondSource.source_name,
+    );
+    expect(screen.queryByTestId("recommended-template")).not.toBeInTheDocument();
+    pending.resolve?.(jsonResponse(executeResponse));
+    await waitFor(() => {
+      expect(screen.queryByTestId("audit-id")).not.toBeInTheDocument();
+      expect(screen.queryByText("ok")).not.toBeInTheDocument();
+    });
     restore();
   });
 });

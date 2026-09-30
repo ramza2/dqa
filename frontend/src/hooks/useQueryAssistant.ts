@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listActiveCatalogs } from "../api/catalog";
 import {
   executeQuery,
@@ -33,12 +33,14 @@ export interface AssistantErrorState {
 }
 
 export function useQueryAssistant() {
+  const workflowGeneration = useRef(0);
+
   const [sources, setSources] = useState<CatalogActiveSummary[]>([]);
   const [sourcesState, setSourcesState] = useState<LoadState>("idle");
   const [sourcesError, setSourcesError] = useState<AssistantErrorState | null>(null);
   const [selectedSource, setSelectedSource] = useState<string>("");
 
-  const [requestText, setRequestText] = useState("");
+  const [requestText, setRequestTextState] = useState("");
   const [recommendation, setRecommendation] =
     useState<TemplateRecommendationResponse | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<RecommendedTemplate | null>(
@@ -69,7 +71,16 @@ export function useQueryAssistant() {
   const [executeState, setExecuteState] = useState<LoadState>("idle");
   const [executeError, setExecuteError] = useState<AssistantErrorState | null>(null);
 
-  const clearDownstreamFromSource = useCallback(() => {
+  const bumpGeneration = useCallback(() => {
+    workflowGeneration.current += 1;
+    return workflowGeneration.current;
+  }, []);
+
+  const isCurrentGeneration = useCallback((generation: number) => {
+    return generation === workflowGeneration.current;
+  }, []);
+
+  const clearDownstreamWorkflow = useCallback(() => {
     setRecommendation(null);
     setSelectedCandidate(null);
     setRecommendState("idle");
@@ -93,6 +104,11 @@ export function useQueryAssistant() {
     setExecuteError(null);
   }, []);
 
+  const clearDownstreamFromSource = useCallback(() => {
+    bumpGeneration();
+    clearDownstreamWorkflow();
+  }, [bumpGeneration, clearDownstreamWorkflow]);
+
   const invalidatePreviewAndResult = useCallback(() => {
     setPreview(null);
     setPreviewSnapshot(null);
@@ -102,6 +118,41 @@ export function useQueryAssistant() {
     setExecuteState("idle");
     setExecuteError(null);
   }, []);
+
+  const setRequestText = useCallback(
+    (text: string) => {
+      setRequestTextState(text);
+      const hasWorkflow =
+        recommendation !== null ||
+        selectedCandidate !== null ||
+        form !== null ||
+        preview !== null ||
+        result !== null ||
+        recommendState === "loading" ||
+        formState === "loading" ||
+        previewState === "loading" ||
+        executeState === "loading" ||
+        extractState === "loading";
+      if (hasWorkflow) {
+        bumpGeneration();
+        clearDownstreamWorkflow();
+      }
+    },
+    [
+      bumpGeneration,
+      clearDownstreamWorkflow,
+      executeState,
+      extractState,
+      form,
+      formState,
+      preview,
+      previewState,
+      recommendState,
+      recommendation,
+      result,
+      selectedCandidate,
+    ],
+  );
 
   const loadSources = useCallback(async () => {
     setSourcesState("loading");
@@ -133,7 +184,8 @@ export function useQueryAssistant() {
   );
 
   const loadFormForCandidate = useCallback(
-    async (candidate: RecommendedTemplate, sourceName: string) => {
+    async (candidate: RecommendedTemplate, sourceName: string, generation?: number) => {
+      const opGeneration = generation ?? bumpGeneration();
       setSelectedCandidate(candidate);
       setForm(null);
       setFormState("loading");
@@ -152,6 +204,9 @@ export function useQueryAssistant() {
           template_id: candidate.template_id,
           version_id: candidate.version_id,
         });
+        if (!isCurrentGeneration(opGeneration)) {
+          return;
+        }
         setForm(metadata);
         setParameterValues(defaultsFromFormParameters(metadata.parameters));
         const available = metadata.environments.find((item) => item.execution_available);
@@ -159,17 +214,21 @@ export function useQueryAssistant() {
         setEnvironment(preferred?.environment ?? "");
         setFormState("idle");
       } catch (error) {
+        if (!isCurrentGeneration(opGeneration)) {
+          return;
+        }
         setFormState("error");
         setFormError(formatAssistantError(error));
       }
     },
-    [invalidatePreviewAndResult],
+    [bumpGeneration, invalidatePreviewAndResult, isCurrentGeneration],
   );
 
   const submitRecommendation = useCallback(async () => {
     if (!selectedSource || !requestText.trim() || recommendState === "loading") {
       return;
     }
+    const opGeneration = bumpGeneration();
     setRecommendState("loading");
     setRecommendError(null);
     setRecommendation(null);
@@ -188,17 +247,29 @@ export function useQueryAssistant() {
         source_name: selectedSource,
         request_text: requestText.trim(),
       });
+      if (!isCurrentGeneration(opGeneration)) {
+        return;
+      }
       setRecommendation(response);
       setRecommendState("idle");
       if (!response.needs_clarification && response.recommended_template) {
-        await loadFormForCandidate(response.recommended_template, selectedSource);
+        await loadFormForCandidate(
+          response.recommended_template,
+          selectedSource,
+          opGeneration,
+        );
       }
     } catch (error) {
+      if (!isCurrentGeneration(opGeneration)) {
+        return;
+      }
       setRecommendState("error");
       setRecommendError(formatAssistantError(error));
     }
   }, [
+    bumpGeneration,
     invalidatePreviewAndResult,
+    isCurrentGeneration,
     loadFormForCandidate,
     recommendState,
     requestText,
@@ -217,7 +288,15 @@ export function useQueryAssistant() {
 
   const setParameterValue = useCallback(
     (name: string, value: unknown) => {
-      setParameterValues((prev) => ({ ...prev, [name]: value }));
+      setParameterValues((prev) => {
+        const next = { ...prev };
+        if (value === undefined) {
+          delete next[name];
+        } else {
+          next[name] = value;
+        }
+        return next;
+      });
       setDirtyParams((prev) => {
         const next = new Set(prev);
         next.add(name);
@@ -245,6 +324,7 @@ export function useQueryAssistant() {
     ) {
       return;
     }
+    const opGeneration = bumpGeneration();
     setExtractState("loading");
     setExtractError(null);
     setExtractInfo(null);
@@ -256,6 +336,9 @@ export function useQueryAssistant() {
         version_id: selectedCandidate.version_id,
         request_text: requestText.trim(),
       });
+      if (!isCurrentGeneration(opGeneration)) {
+        return;
+      }
       setParameterValues((prev) => {
         const next = { ...prev };
         for (const [name, value] of Object.entries(response.resolved_parameters)) {
@@ -275,6 +358,9 @@ export function useQueryAssistant() {
       }
       setExtractState("idle");
     } catch (error) {
+      if (!isCurrentGeneration(opGeneration)) {
+        return;
+      }
       if (isEgressNotAllowed(error)) {
         setExtractState("idle");
         setExtractInfo(
@@ -286,9 +372,11 @@ export function useQueryAssistant() {
       setExtractError(formatAssistantError(error));
     }
   }, [
+    bumpGeneration,
     dirtyParams,
     extractState,
     invalidatePreviewAndResult,
+    isCurrentGeneration,
     requestText,
     selectedCandidate,
     selectedSource,
@@ -325,6 +413,7 @@ export function useQueryAssistant() {
     ) {
       return;
     }
+    const opGeneration = bumpGeneration();
     setPreviewState("loading");
     setPreviewError(null);
     setResult(null);
@@ -341,6 +430,9 @@ export function useQueryAssistant() {
         version_id: selectedCandidate.version_id,
         parameters,
       });
+      if (!isCurrentGeneration(opGeneration)) {
+        return;
+      }
       setPreview(response);
       setPreviewSnapshot(
         [
@@ -352,14 +444,19 @@ export function useQueryAssistant() {
       );
       setPreviewState("idle");
     } catch (error) {
+      if (!isCurrentGeneration(opGeneration)) {
+        return;
+      }
       setPreview(null);
       setPreviewSnapshot(null);
       setPreviewState("error");
       setPreviewError(formatAssistantError(error));
     }
   }, [
+    bumpGeneration,
     environment,
     form?.parameters,
+    isCurrentGeneration,
     parameterValues,
     previewState,
     selectedCandidate,
@@ -377,6 +474,7 @@ export function useQueryAssistant() {
     if (!canExecute || !selectedSource || !selectedCandidate || !environment || !preview) {
       return;
     }
+    const opGeneration = bumpGeneration();
     setExecuteState("loading");
     setExecuteError(null);
     try {
@@ -391,17 +489,25 @@ export function useQueryAssistant() {
         version_id: selectedCandidate.version_id,
         parameters,
       });
+      if (!isCurrentGeneration(opGeneration)) {
+        return;
+      }
       setResult(response);
       setExecuteState("idle");
     } catch (error) {
+      if (!isCurrentGeneration(opGeneration)) {
+        return;
+      }
       setResult(null);
       setExecuteState("error");
       setExecuteError(formatAssistantError(error));
     }
   }, [
+    bumpGeneration,
     canExecute,
     environment,
     form?.parameters,
+    isCurrentGeneration,
     parameterValues,
     preview,
     selectedCandidate,

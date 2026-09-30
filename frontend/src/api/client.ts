@@ -2,6 +2,9 @@ import { CatalogApiError, type ApiErrorBody } from "../types/catalog";
 
 const DEFAULT_API_BASE = "/api/v1";
 
+const DEV_IDENTITY_HEADER_ACTOR = "X-DQA-Dev-Actor";
+const DEV_IDENTITY_HEADER_ROLES = "X-DQA-Dev-Roles";
+
 export function getApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL?.trim();
   if (!configured) {
@@ -23,17 +26,58 @@ export function resolveDevAuthHeaders(env: {
   const roles = env.VITE_DQA_DEV_ROLES?.trim();
   const headers: Record<string, string> = {};
   if (actor) {
-    headers["X-DQA-Dev-Actor"] = actor;
+    headers[DEV_IDENTITY_HEADER_ACTOR] = actor;
   }
   if (roles) {
-    headers["X-DQA-Dev-Roles"] = roles;
+    headers[DEV_IDENTITY_HEADER_ROLES] = roles;
   }
   return headers;
 }
 
-function buildDevAuthHeaders(): Record<string, string> {
-  return resolveDevAuthHeaders({
+/**
+ * Merge request headers and enforce production stripping of X-DQA-Dev-* identity
+ * headers even when callers supply them via RequestInit.
+ */
+export function finalizeRequestHeaders(
+  init: RequestInit | undefined,
+  options: {
+    DEV: boolean;
+    jsonBody?: boolean;
+    VITE_DQA_DEV_ACTOR?: string;
+    VITE_DQA_DEV_ROLES?: string;
+  },
+): Headers {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
+  if (options.jsonBody && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (!options.DEV) {
+    headers.delete(DEV_IDENTITY_HEADER_ACTOR);
+    headers.delete(DEV_IDENTITY_HEADER_ROLES);
+    return headers;
+  }
+
+  const auth = resolveDevAuthHeaders({
+    DEV: true,
+    VITE_DQA_DEV_ACTOR: options.VITE_DQA_DEV_ACTOR,
+    VITE_DQA_DEV_ROLES: options.VITE_DQA_DEV_ROLES,
+  });
+  for (const [key, value] of Object.entries(auth)) {
+    if (!headers.has(key)) {
+      headers.set(key, value);
+    }
+  }
+  return headers;
+}
+
+function mergeRequestHeaders(init?: RequestInit, jsonBody?: boolean): Headers {
+  return finalizeRequestHeaders(init, {
     DEV: import.meta.env.DEV,
+    jsonBody,
     VITE_DQA_DEV_ACTOR: import.meta.env.VITE_DQA_DEV_ACTOR,
     VITE_DQA_DEV_ROLES: import.meta.env.VITE_DQA_DEV_ROLES,
   });
@@ -77,23 +121,6 @@ async function parseError(response: Response): Promise<CatalogApiError> {
     // Keep status-based message when body is not JSON.
   }
   return new CatalogApiError(response.status, message, code);
-}
-
-function mergeRequestHeaders(init?: RequestInit, jsonBody?: boolean): Headers {
-  const headers = new Headers(init?.headers);
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
-  if (jsonBody && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  const auth = buildDevAuthHeaders();
-  for (const [key, value] of Object.entries(auth)) {
-    if (!headers.has(key)) {
-      headers.set(key, value);
-    }
-  }
-  return headers;
 }
 
 export async function apiGet<T>(
