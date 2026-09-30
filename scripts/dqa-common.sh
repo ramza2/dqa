@@ -109,3 +109,75 @@ dqa_require_migrations_at_head() {
     exit 1
   fi
 }
+
+dqa_env_value() {
+  local key="$1"
+  local default_value="${2:-}"
+  local line value
+  line="$(grep -E "^${key}=" "${DQA_ENV_FILE}" | tail -n 1 || true)"
+  if [[ -z "${line}" ]]; then
+    echo "${default_value}"
+    return 0
+  fi
+  value="${line#*=}"
+  if [[ "${value}" == \"*\" && "${value}" == *\" ]]; then
+    value="${value:1:-1}"
+  elif [[ "${value}" == \'*\' && "${value}" == *\' ]]; then
+    value="${value:1:-1}"
+  fi
+  if [[ -z "${value}" ]]; then
+    echo "${default_value}"
+  else
+    echo "${value}"
+  fi
+}
+
+dqa_db_name() {
+  dqa_env_value DQA_DB_NAME dqa
+}
+
+# Backup directory: DQA_BACKUP_DIR env, else .env.onprem, else ./backups
+dqa_backup_dir() {
+  if [[ -n "${DQA_BACKUP_DIR:-}" ]]; then
+    echo "${DQA_BACKUP_DIR}"
+    return 0
+  fi
+  local from_env
+  from_env="$(dqa_env_value DQA_BACKUP_DIR "")"
+  if [[ -n "${from_env}" ]]; then
+    echo "${from_env}"
+  else
+    echo "${DQA_ROOT}/backups"
+  fi
+}
+
+dqa_service_is_running() {
+  local service="$1"
+  local running
+  running="$(dqa_compose ps --status running --services 2>/dev/null || true)"
+  printf '%s\n' "${running}" | grep -qx "${service}"
+}
+
+# Refuse when application containers that hold DB sessions are up.
+dqa_require_app_stopped_for_restore() {
+  local blockers=()
+  if dqa_service_is_running backend; then
+    blockers+=("backend")
+  fi
+  if dqa_service_is_running frontend; then
+    blockers+=("frontend")
+  fi
+  if dqa_service_is_running migrate; then
+    blockers+=("migrate")
+  fi
+  if ((${#blockers[@]} > 0)); then
+    echo "error: refuse restore while application services are running: ${blockers[*]}" >&2
+    echo "Stop them first with: ./scripts/dqa-down.sh" >&2
+    exit 1
+  fi
+}
+
+# Run a command inside dqa-db without printing connection secrets.
+dqa_db_exec() {
+  dqa_compose exec -T dqa-db "$@"
+}
