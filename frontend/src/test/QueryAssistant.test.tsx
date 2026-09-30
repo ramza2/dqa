@@ -712,6 +712,125 @@ describe("QueryAssistant", () => {
     restore();
   });
 
+  it("ignores stale extraction after operator edits a parameter", async () => {
+    const user = userEvent.setup();
+    const pending = {
+      resolve: null as null | ((value: Response) => void),
+    };
+    const pendingExtraction = new Promise<Response>((resolve) => {
+      pending.resolve = resolve;
+    });
+    const handlers = assistantHandlers();
+    handlers.unshift((url, init) => {
+      if (url.pathname.endsWith("/query-parameters/extract") && init?.method === "POST") {
+        return pendingExtraction;
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    render(<QueryAssistant />);
+    await recommendHappyPath(user);
+
+    await user.click(screen.getByRole("button", { name: "AI로 조건 채우기" }));
+    const wardInput = screen.getByLabelText(/병동 코드/);
+    await user.type(wardInput, "B02");
+
+    pending.resolve?.(
+      jsonResponse({
+        source_name: activeSource.source_name,
+        catalog_revision_id: 1,
+        schema_fingerprint: activeSource.schema_fingerprint,
+        template_id: 10,
+        version_id: 20,
+        version: 2,
+        needs_clarification: false,
+        clarification_question: null,
+        resolved_parameters: { ward_cd: "A01" },
+        issues: [],
+        sensitive_parameter_names: ["ward_cd"],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(wardInput).toHaveValue("B02");
+    });
+    restore();
+  });
+
+  it("ignores stale preview after parameter changes while preview is pending", async () => {
+    const user = userEvent.setup();
+    const pending = {
+      resolve: null as null | ((value: Response) => void),
+    };
+    const pendingPreview = new Promise<Response>((resolve) => {
+      pending.resolve = resolve;
+    });
+    const handlers = assistantHandlers();
+    handlers.unshift((url, init) => {
+      if (url.pathname.endsWith("/query-executions/preview") && init?.method === "POST") {
+        return pendingPreview;
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    render(<QueryAssistant />);
+    await recommendHappyPath(user);
+
+    const wardInput = screen.getByLabelText(/병동 코드/);
+    await user.type(wardInput, "A01");
+    await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+
+    await user.clear(wardInput);
+    await user.type(wardInput, "B02");
+    pending.resolve?.(jsonResponse(availablePreview));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("preview-summary")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "조회 실행" })).toBeDisabled();
+    });
+    restore();
+  });
+
+  it("ignores stale execute response after parameter changes while execute is pending", async () => {
+    const user = userEvent.setup();
+    const pending = {
+      resolve: null as null | ((value: Response) => void),
+    };
+    const pendingExecute = new Promise<Response>((resolve) => {
+      pending.resolve = resolve;
+    });
+    const handlers = assistantHandlers({ preview: availablePreview });
+    handlers.unshift((url, init) => {
+      if (url.pathname.endsWith("/query-executions/preview") && init?.method === "POST") {
+        return jsonResponse(availablePreview);
+      }
+      if (url.pathname.endsWith("/query-executions/execute") && init?.method === "POST") {
+        return pendingExecute;
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    render(<QueryAssistant />);
+    await recommendHappyPath(user);
+
+    const wardInput = screen.getByLabelText(/병동 코드/);
+    await user.type(wardInput, "A01");
+    await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+    await screen.findByTestId("preview-summary");
+    await user.click(screen.getByRole("button", { name: "조회 실행" }));
+
+    await user.clear(wardInput);
+    await user.type(wardInput, "B02");
+    pending.resolve?.(jsonResponse(executeResponse));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("audit-id")).not.toBeInTheDocument();
+      expect(screen.queryByText("ok")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "조회 실행" })).toBeDisabled();
+    });
+    restore();
+  });
+
   it("ignores stale execute response after source change", async () => {
     const user = userEvent.setup();
     const pending = {
