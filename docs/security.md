@@ -227,13 +227,19 @@ Protected in this foundation:
 - Query Template registry / approval / review-event read
 - Template Recommendation
 - Parameter Extraction
+- Connection Profile management (`CONNECTION_PROFILE_MANAGE`, administrator only)
+
+Connection Profile rules:
+- credentials are referenced, never stored as secret values
+- diagnostics are configuration-level only (no live DEMIS connection test)
+- Catalog activation does not auto-create or mutate Connection Profiles
 
 Not yet covered (follow-up):
-- Catalog Package import / activation
+- Catalog Package import / activation admin authorization
 - Catalog Explorer admin surfaces
-- Connection Profile authorization
 - OIDC/OAuth2/JWT verification, user directory, MFA, sessions
 - full audit persistence
+- live DEMIS connectivity / credential resolution / execution
 
 ## 11. Production checklist
 

@@ -79,7 +79,7 @@ Authenticated `actor_id` is propagated into Query Template lifecycle metadata
 
 This PR prioritizes the roadmap authorization points for template author /
 approver / operator / auditor. Catalog import/activation, Catalog Explorer,
-and Connection Profile authorization remain follow-up hardening.
+and Catalog Explorer authorization remain follow-up hardening.
 Health endpoints remain unauthenticated.
 
 Authentication is not execution permission. Query execution still requires
@@ -131,7 +131,17 @@ Responsibilities:
 - expose sanitized connection diagnostics
 - support explicit enable/disable state
 
+Implemented management API (`/api/v1/connection-profiles`):
+- create / list / get / patch
+- enable / disable (no delete; state is preserved)
+- configuration-level sanitized diagnostics (`live_connection_tested=false`)
+- unique `(source_name, environment)`
+- `credential_secret_ref` stores a secret-store/env reference only
+- password / token / full DSN values are never persisted or returned
+- protected by `CONNECTION_PROFILE_MANAGE` (administrator only)
+
 Activation of a Catalog revision does not automatically create or modify a live connection profile.
+Live DEMIS connection tests and query execution are out of scope for this foundation.
 
 Before execution, DQA must verify that:
 - the selected Query Template is compatible with the active Catalog
