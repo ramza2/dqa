@@ -159,15 +159,20 @@ Scope:
 ## Phase 6 - Read-only execution
 
 ### PR 17 - DEMIS read-only adapter
+Status: foundation contracts landed (`app/adapters/demis`); concrete DBMS
+adapter still blocked on confirmed DEMIS requirements.
 Scope:
-- DBMS-neutral adapter interface
+- DBMS-neutral adapter interface (`diagnostics`, `execute_readonly`)
+- credential resolver protocol (no secret-store implementation yet)
+- Connection Profile snapshot eligibility (enabled + target metadata + credential ref)
+- production factory fail-closed (`UNSUPPORTED_DBMS`); no DQA PG fallback
+- test/fake adapter only (never production-selectable)
 - first concrete DBMS implementation only after actual DEMIS requirements are confirmed
-- read-only session/transaction
-- timeout
-- bound parameters
-- row limit
-- connection diagnostics
+- read-only session/transaction (documented for future drivers)
+- timeout / bound parameters / row limit request contract
+- sanitized connection diagnostics (`live_connection_tested=false` until a driver exists)
 - least-privilege assumptions documented
+- no public execution API; not wired to recommendation / extraction / audit yet
 
 ### PR 18 - Execution preview and execution service
 Scope:

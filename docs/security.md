@@ -245,7 +245,9 @@ Not yet covered (follow-up):
 - Catalog Explorer admin surfaces
 - OIDC/OAuth2/JWT verification, user directory, MFA, sessions
 - wiring audit writes into live execution (preview/execute)
-- live DEMIS connectivity / credential resolution / execution
+- concrete DEMIS DBMS driver / live connectivity (blocked on confirmed requirements)
+- production credential secret-store resolver
+- public query execution API
 
 ## 11. Production checklist
 
@@ -263,3 +265,17 @@ Before real DEMIS access:
 - execution audit persistence enabled before live queries
 - package import/activation authorization defined
 - LLM result-data egress disabled unless explicitly approved
+- concrete DEMIS read-only adapter selected only after DBMS/driver requirements are confirmed
+
+## 12. DEMIS read-only adapter boundary
+
+Foundation (`app/adapters/demis`):
+- DBMS-neutral protocol and DTOs only; no concrete DEMIS driver package
+- DQA PostgreSQL/`psycopg` must never be used as the DEMIS adapter
+- fake/test adapters are test-only and cannot be selected by the production factory
+- credential values, host/port/username/database, DSN, and result rows must never
+  appear in logs, exceptions, or public API payloads
+- adapter assumes SQL Safety already passed and must not weaken it
+- DB least privilege remains mandatory outside application controls
+- Connection Profile diagnostics remain configuration-level until a concrete
+  adapter can set `live_connection_tested`

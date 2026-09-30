@@ -323,17 +323,48 @@ The safety gate runs even for approved templates.
 
 ### 3.9 Read-only DEMIS Adapter
 
-The adapter interface is DBMS-neutral.
-The first concrete DBMS implementation must be selected after the actual DEMIS connection requirements are confirmed.
+Foundation package: `app/adapters/demis` (DBMS-neutral contracts only).
 
-Responsibilities:
+The adapter interface is DBMS-neutral.
+**A concrete DBMS adapter is blocked until actual DEMIS DBMS/driver
+requirements are confirmed.** Do not assume Oracle, PostgreSQL, MySQL, or any
+other DEMIS driver; do not reuse DQA PostgreSQL/`psycopg` as the DEMIS adapter.
+
+Implemented in this foundation:
+- `ReadOnlyDemisAdapter` protocol: `diagnostics(...)`, `execute_readonly(...)`
+- request DTO: approved SQL text + bound parameter map + `timeout_seconds` + `row_limit`
+- result DTO: `columns`, `rows`, `row_count`, `truncated`, `elapsed_ms`
+- sanitized diagnostics DTO (no host/port/user/DSN/credential ref)
+- `CredentialResolver` protocol (`credential_secret_ref` → opaque runtime material)
+- production factory `create_readonly_demis_adapter(...)` consuming an enabled
+  Connection Profile snapshot + credential resolver (fail-closed)
+- test-only fake adapter / fake resolver (never selectable via production factory)
+
+Responsibilities (contract / future concrete adapters):
 - connection lifecycle
 - read-only session/transaction where supported
-- bound parameter execution
+- bound parameter execution only (no value interpolation into SQL)
 - statement timeout
 - result row cap
+- one execution request per call (no multi-statement bypass)
 - normalized result metadata
-- sanitized errors
+- sanitized errors / bounded failure categories
+- least-privilege DEMIS account remains mandatory outside the adapter
+
+The adapter must not:
+- generate or modify SQL
+- accept natural-language input
+- own Query Template approval
+- call LLM
+- write audit events
+- log, persist, or put result rows into exceptions
+- fall back silently to DQA PostgreSQL
+
+Factory behavior without a registered concrete driver: validate profile
+eligibility (enabled, target metadata, credential ref *presence*), reject
+forbidden fake/test kinds, then raise `UNSUPPORTED_DBMS` **before** calling
+`CredentialResolver.resolve`. Credentials are resolved only after a concrete
+adapter is selected.
 
 No query generation occurs here.
 
