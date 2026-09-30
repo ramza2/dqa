@@ -65,3 +65,47 @@ dqa_preflight() {
   dqa_require_env_key DQA_DB_PASSWORD
   dqa_require_env_key DQA_LAN_BIND_IP
 }
+
+dqa_db_user() {
+  local line value
+  line="$(grep -E '^DQA_DB_USER=' "${DQA_ENV_FILE}" | tail -n 1 || true)"
+  value="${line#*=}"
+  if [[ -z "${value}" ]]; then
+    echo "dqa"
+  else
+    echo "${value}"
+  fi
+}
+
+# Start dqa-db only and wait until healthy. Does not start backend/frontend.
+dqa_ensure_db_healthy() {
+  echo "Ensuring dqa-db is up..."
+  dqa_compose up -d dqa-db
+
+  echo "Waiting for dqa-db health..."
+  local attempts=0
+  local db_user
+  db_user="$(dqa_db_user)"
+  until dqa_compose exec -T dqa-db pg_isready -U "${db_user}" >/dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    if (( attempts >= 36 )); then
+      echo "error: dqa-db not healthy within timeout" >&2
+      exit 1
+    fi
+    sleep 2
+  done
+}
+
+# Non-destructive Alembic head check. Never auto-upgrades.
+# Fail closed when alembic_version is absent or not equal to every script head.
+dqa_require_migrations_at_head() {
+  echo "Checking Alembic migration state (non-destructive)..."
+  # Ensure the migrate/backend image exists so the check can run Alembic APIs.
+  dqa_compose build migrate >/dev/null
+
+  if ! dqa_compose --profile migrate run --rm --no-deps migrate \
+    python alembic/check_at_head.py; then
+    echo "Database migration is required. Run ./scripts/dqa-migrate.sh first." >&2
+    exit 1
+  fi
+}

@@ -20,19 +20,22 @@ Operate on `docker-compose.onprem.yml` with a gitignored `.env.onprem`
 
 | Script | Purpose |
 |--------|---------|
-| `dqa-migrate.sh` | `alembic upgrade head` via one-shot migrate profile |
-| `dqa-up.sh` | validate config, build, up `--remove-orphans`, wait for health |
+| `dqa-migrate.sh` | start DB only, then `alembic upgrade head` (explicit; no backend) |
+| `dqa-up.sh` | validate config, require Alembic at head, then build/up; no auto-migrate |
 | `dqa-status.sh` | Compose ps + readiness checks |
 | `dqa-logs.sh` | Compose logs (no secret echoing) |
 | `dqa-down.sh` | stop services; preserves DB volume by default |
+| `check-onprem-compose.sh` | static (+ optional Docker) auth/port/migration regression checks |
 
-Shared helpers live in `dqa-common.sh`.
+Shared helpers live in `dqa-common.sh` (including non-destructive migration head preflight).
 
 Rules:
 - no hard-coded server IP
 - no secrets printed
 - no auto-prune
 - `down` does not delete volumes by default
+- production Compose hardcodes fail-closed auth; `.env.onprem` cannot enable `dev_headers`
+- unmigrated DB → `dqa-up.sh` fails before backend start
 
 Optional development/LAN auth overlay:
 

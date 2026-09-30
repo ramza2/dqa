@@ -11,9 +11,14 @@
 #                                                                  v
 #                                                               dqa-db
 #
-# Defaults:
+# Hardcoded production auth boundary (NOT overridable via .env.onprem):
 #   - APP_ENV=production
 #   - DQA_AUTH_PROVIDER=disabled  (protected APIs fail closed until an approved IdP exists)
+#
+# Development/LAN auth requires the explicit overlay:
+#   docker-compose.onprem.dev.yml
+#
+# Other defaults:
 #   - DQA PostgreSQL has NO host port publication
 #   - backend is NOT published to the LAN
 #   - no Traefik / public DNS requirement
@@ -68,7 +73,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      APP_ENV: ${APP_ENV:-production}
+      # Same production APP_ENV principle as backend (not .env-overridable).
+      APP_ENV: production
       DQA_DB_HOST: dqa-db
       DQA_DB_PORT: 5432
       DQA_DB_NAME: ${DQA_DB_NAME:-dqa}
@@ -87,7 +93,10 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      APP_ENV: ${APP_ENV:-production}
+      # Hardcoded fail-closed production auth. NOT consumed from .env.onprem.
+      # Development auth requires docker-compose.onprem.dev.yml overlay.
+      APP_ENV: production
+      DQA_AUTH_PROVIDER: disabled
       APP_NAME: ${APP_NAME:-DEMIS Query Assistant}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DQA_DB_HOST: dqa-db
@@ -95,8 +104,6 @@ services:
       DQA_DB_NAME: ${DQA_DB_NAME:-dqa}
       DQA_DB_USER: ${DQA_DB_USER:-dqa}
       DQA_DB_PASSWORD: ${DQA_DB_PASSWORD:?Set DQA_DB_PASSWORD in .env.onprem}
-      # Production foundation: fail closed on protected APIs until an approved IdP exists.
-      DQA_AUTH_PROVIDER: ${DQA_AUTH_PROVIDER:-disabled}
       DQA_DEMIS_CREDENTIAL_ENV_PREFIX: ${DQA_DEMIS_CREDENTIAL_ENV_PREFIX:-DEMIS_SECRET_}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}

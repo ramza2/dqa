@@ -33,8 +33,8 @@ Env template: `.env.onprem.example` → gitignored `.env.onprem`
 
 | Setting | Value |
 |---------|-------|
-| `APP_ENV` | `production` |
-| `DQA_AUTH_PROVIDER` | `disabled` |
+| `APP_ENV` | **hardcoded** `production` in Compose (not overridable via `.env.onprem`) |
+| `DQA_AUTH_PROVIDER` | **hardcoded** `disabled` in Compose (not overridable via `.env.onprem`) |
 | LAN entry | frontend only |
 | Backend / DB host ports | none |
 
@@ -42,19 +42,21 @@ Expected auth behavior:
 - `/health` and `/health/ready` work
 - protected APIs fail closed with `AUTH_PROVIDER_NOT_CONFIGURED` (503)
 - this is an intentional blocker until an approved production IdentityProvider exists
+- changing `.env.onprem` cannot enable development auth
 
 Do not invent JWT/OIDC/SSO/reverse-proxy auth in this foundation.
 
 ### Mode B — development / LAN integration
 
-Optional overlay: `docker-compose.onprem.dev.yml`
+Optional overlay: `docker-compose.onprem.dev.yml` (required for development auth)
 
 | Setting | Value |
 |---------|-------|
-| `APP_ENV` | `development` |
-| `DQA_AUTH_PROVIDER` | `dev_headers` |
+| `APP_ENV` | `development` (overlay override) |
+| `DQA_AUTH_PROVIDER` | `dev_headers` (overlay override) |
 
 Rules:
+- production Compose hardcodes fail-closed auth; development auth requires the explicit overlay
 - never enable `dev_headers` in production Compose
 - never put actor/role values into production configuration
 - production SPA builds never inject `VITE_DQA_DEV_*`
@@ -103,6 +105,9 @@ Development Compose (`docker-compose.dev.yml`):
 Production Compose requires an explicitly supplied `DQA_DB_PASSWORD` and fails if absent.
 Do not default production DB passwords to `dqa` or `change-me`.
 
+`APP_ENV` / `DQA_AUTH_PROVIDER` are not operator knobs in `.env.onprem` for Mode A.
+Production Compose hardcodes them; the development overlay is the only supported auth override path.
+
 Do not commit real DB passwords, API keys, LLM endpoints when sensitive, DEMIS passwords, or credential secret values.
 
 ## 6. Schema migrations
@@ -113,6 +118,22 @@ Production migration mechanism:
 ./scripts/dqa-migrate.sh
 # equivalent: docker compose ... --profile migrate run --rm migrate
 # runs: alembic upgrade head
+```
+
+`dqa-up.sh` does **not** auto-run migrations. It starts `dqa-db`, then runs a
+non-destructive Alembic head check (`backend/alembic/check_at_head.py`). If the
+database is not at every current Alembic head (including a fresh DB with no
+`alembic_version`), it fails closed with:
+
+```text
+Database migration is required. Run ./scripts/dqa-migrate.sh first.
+```
+
+Recommended operational sequence:
+
+```bash
+./scripts/dqa-migrate.sh
+./scripts/dqa-up.sh
 ```
 
 Do not rely on `create_all` as the documented production migration mechanism for new tables.
@@ -134,6 +155,7 @@ From repository root (requires Docker + `.env.onprem`):
 ./scripts/dqa-status.sh
 ./scripts/dqa-logs.sh
 ./scripts/dqa-down.sh
+./scripts/check-onprem-compose.sh   # static (+ optional Docker) regression checks
 ```
 
 Behavior:

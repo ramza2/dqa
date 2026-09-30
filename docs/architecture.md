@@ -546,7 +546,8 @@ Deployment:
 - Docker Compose internal/on-premise foundation (`docker-compose.onprem.yml`)
 - LAN entry via frontend only (`DQA_LAN_BIND_IP` + `DQA_FRONTEND_PORT`)
 - backend and DQA PostgreSQL stay on Compose networks (DB on an internal network; no host DB port)
-- production auth defaults to `DQA_AUTH_PROVIDER=disabled` (fail closed) until an approved IdP exists
+- production Compose hardcodes `APP_ENV=production` + `DQA_AUTH_PROVIDER=disabled` (fail closed; not `.env`-overridable) until an approved IdP exists
+- development auth requires explicit `docker-compose.onprem.dev.yml` overlay
 - public DNS / external Traefik optional, not required by the core architecture
 - see `docs/runtime-and-deployment.md` for Mode A/B and migration workflow
 

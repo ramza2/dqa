@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Validate Compose config, build images, and start the on-prem stack.
+# Validate Compose config, enforce migrate-before-backend, then start the stack.
 # Does not delete volumes. Does not auto-prune.
+# Does NOT run alembic upgrade — migration remains an explicit operator action.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,6 +12,11 @@ dqa_preflight
 
 echo "Validating Compose configuration..."
 dqa_compose config >/dev/null
+
+# create_all() still bootstraps historical tables on backend start.
+# Require Alembic-managed revisions to be at head before backend comes up.
+dqa_ensure_db_healthy
+dqa_require_migrations_at_head
 
 echo "Building and starting services (remove-orphans)..."
 dqa_compose up -d --build --remove-orphans
@@ -47,6 +53,6 @@ frontend_port="${frontend_port:-8080}"
 
 echo "DQA on-prem stack is up."
 echo "Frontend (LAN entry): http://${bind_ip}:${frontend_port}"
-echo "Note: APP_ENV=production + DQA_AUTH_PROVIDER=disabled => protected APIs fail closed."
-echo "Run ./scripts/dqa-migrate.sh before first use (or after pulling new Alembic revisions)."
+echo "Note: production Compose hardcodes APP_ENV=production + DQA_AUTH_PROVIDER=disabled (fail closed)."
+echo "Development auth requires the explicit docker-compose.onprem.dev.yml overlay."
 dqa_compose ps

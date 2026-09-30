@@ -94,13 +94,15 @@ Start here:
 ## On-prem deployment (foundation)
 
 Production/on-prem Compose keeps the frontend as the LAN entrypoint and leaves
-backend + DQA PostgreSQL internal. Auth defaults to fail-closed
-(`DQA_AUTH_PROVIDER=disabled`) until an approved IdentityProvider exists.
+backend + DQA PostgreSQL internal. Production Compose **hardcodes**
+`APP_ENV=production` and `DQA_AUTH_PROVIDER=disabled` (`.env.onprem` cannot
+enable development auth). Development auth requires the explicit
+`docker-compose.onprem.dev.yml` overlay.
 
 ```bash
 cp .env.onprem.example .env.onprem   # set DQA_DB_PASSWORD and bind IP
-./scripts/dqa-migrate.sh
-./scripts/dqa-up.sh
+./scripts/dqa-migrate.sh             # required before first up
+./scripts/dqa-up.sh                  # refuses to start backend until Alembic is at head
 ./scripts/dqa-status.sh
 ```
 

@@ -217,9 +217,10 @@ Config:
 - `DQA_AUTH_PROVIDER` default `disabled` (fail-closed on protected endpoints: 503)
 - `dev_headers` is allowed only when `APP_ENV` is `development` or `test`
 - enabling `dev_headers` under production fails closed (503)
-- on-prem production Compose (`docker-compose.onprem.yml`) keeps `disabled`
-- optional `docker-compose.onprem.dev.yml` overlay enables `dev_headers` for
-  development/LAN integration only — never production
+- on-prem production Compose (`docker-compose.onprem.yml`) **hardcodes**
+  `APP_ENV=production` and `DQA_AUTH_PROVIDER=disabled` (not overridable via `.env.onprem`)
+- development auth requires the explicit `docker-compose.onprem.dev.yml` overlay
+  (`APP_ENV=development`, `DQA_AUTH_PROVIDER=dev_headers`) — never production
 - production SPA builds must never inject `VITE_DQA_DEV_ACTOR` / `VITE_DQA_DEV_ROLES`
 
 HTTP mapping:
@@ -329,11 +330,14 @@ Production Compose foundation (`docker-compose.onprem.yml`):
 - frontend is the only LAN-facing service
 - backend listens on the Compose network only (not published to host/LAN)
 - DQA PostgreSQL has no host port; attached to an internal Compose network
-- `DQA_AUTH_PROVIDER=disabled` by default (protected APIs fail closed)
-- no `dev_headers`, no DEMIS fake adapter selection, no Traefik by default
+- `APP_ENV=production` and `DQA_AUTH_PROVIDER=disabled` are hardcoded in Compose
+  (`.env.onprem` cannot enable development auth)
+- development auth is opt-in only via `docker-compose.onprem.dev.yml`
+- no DEMIS fake adapter selection, no Traefik by default
 - do not expose `5432` or `8000` on `0.0.0.0`
 - real `.env.onprem` is gitignored; only `.env.onprem.example` is committed
 - `DQA_DB_PASSWORD` must be supplied explicitly (no weak Compose default)
+- `dqa-up.sh` refuses to start backend until Alembic revisions are at head
 
 Outstanding blockers outside this repository change:
 1. approved production IdentityProvider
