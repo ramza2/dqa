@@ -369,6 +369,15 @@ Request-bound review (Phase 1):
 - query template create/update/new-version text and list fields length-bounded
 - Catalog upload remains bounded by backend `max_archive_bytes`
 
+Query execution limits (authoritative):
+- each approved Query Template defines `row_limit` and `timeout_seconds`
+- application hard maximums are currently `timeout_seconds <= 300` and
+  `row_limit <= 10_000` (`app.adapters.demis.types.MAX_TIMEOUT_SECONDS` /
+  `MAX_ROW_LIMIT`)
+- execution eligibility validates these limits server-side
+- do not advertise unused `QUERY_DEFAULT_*` / `QUERY_MAX_*` environment knobs;
+  site-wide tighter limits require an explicit future policy feature
+
 Rate limiting:
 - deferred pending confirmed internal concurrency / traffic profile
 - future policy should distinguish inexpensive reads, Catalog manage uploads,

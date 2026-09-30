@@ -223,6 +223,14 @@ Rate limiting is deferred until hospital/internal concurrency expectations are
 confirmed. Future limits should distinguish inexpensive reads, Catalog uploads,
 LLM-backed endpoints, and query preview/execute.
 
+Query execution limits are not configured by `QUERY_DEFAULT_*` / `QUERY_MAX_*`
+environment variables (those knobs are unused and must not be advertised in
+on-prem Compose / `.env.onprem.example`). Authoritative behavior:
+- each approved Query Template defines `row_limit` and `timeout_seconds`
+- hard maximums: timeout <= 300 seconds, row_limit <= 10_000
+- execution eligibility validates limits server-side
+- future site-wide tighter limits require an explicit policy feature
+
 ## 12. Persistence
 
 DQA PostgreSQL stores:

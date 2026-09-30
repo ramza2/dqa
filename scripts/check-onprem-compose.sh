@@ -96,6 +96,16 @@ fi
 grep -qi 'HARDCODED' "${ENV_EXAMPLE}" || fail ".env.onprem.example should state auth is hardcoded in Compose"
 pass ".env.onprem.example does not expose APP_ENV/DQA_AUTH_PROVIDER as production knobs"
 
+# --- Do not advertise unused QUERY_* env knobs (no Settings consumers) ---
+if grep -nE 'QUERY_(DEFAULT|MAX)_(TIMEOUT_SECONDS|ROW_LIMIT)' "${ONPREM}" "${ENV_EXAMPLE}" >/dev/null; then
+  fail "on-prem Compose/.env.onprem.example must not advertise unused QUERY_* variables"
+fi
+# Also keep .env.example consistent (local placeholder).
+if grep -nE 'QUERY_(DEFAULT|MAX)_(TIMEOUT_SECONDS|ROW_LIMIT)' "${ROOT}/.env.example" >/dev/null; then
+  fail ".env.example must not advertise unused QUERY_* variables"
+fi
+pass "unused QUERY_* env knobs are not advertised"
+
 # --- Migration order helpers ---
 grep -q 'dqa_require_migrations_at_head' "${COMMON}" || fail "missing dqa_require_migrations_at_head"
 grep -q 'dqa_require_migrations_at_head' "${UP}" || fail "dqa-up.sh must call migration preflight"
