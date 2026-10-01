@@ -403,6 +403,11 @@ Preview may succeed while live execution remains blocked:
 Preview does **not** resolve credentials, instantiate a live adapter, execute
 SQL, call LLM, return SQL/host/user/DSN, or write audit events.
 `row_limit` / `timeout_seconds` come only from the approved template version.
+Application hard maximums are currently `timeout_seconds <= 300` and
+`row_limit <= 10_000` (`MAX_TIMEOUT_SECONDS` / `MAX_ROW_LIMIT` in
+`app.adapters.demis.types`); eligibility validates these server-side.
+Unused `QUERY_DEFAULT_*` / `QUERY_MAX_*` environment variables are not
+supported runtime knobs.
 Responses that include resolved parameter values use `Cache-Control: no-store, private`.
 
 ### 3.9.1b Execution form metadata

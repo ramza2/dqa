@@ -155,6 +155,10 @@ From repository root (requires Docker + `.env.onprem`):
 ./scripts/dqa-status.sh
 ./scripts/dqa-logs.sh
 ./scripts/dqa-down.sh
+./scripts/dqa-backup.sh
+./scripts/dqa-backup-list.sh
+./scripts/dqa-restore.sh /path/to/dqa_UTC.dump RESTORE
+./scripts/dqa-audit-retention-status.sh
 ./scripts/check-onprem-compose.sh   # static (+ optional Docker) regression checks
 ```
 
@@ -164,6 +168,70 @@ Behavior:
 - no hard-coded server IP
 - `down` does not delete the DB volume by default
 - no auto-prune
+- backup/restore never target DEMIS
+
+### DQA database backup / restore
+
+Scope: **DQA PostgreSQL only**. DEMIS source databases are outside this workflow.
+
+Backup (`./scripts/dqa-backup.sh`):
+- requires healthy `dqa-db` and Alembic at head
+- runs `pg_dump --format=custom` inside the `dqa-db` container (no host client)
+- writes `dqa_<UTC-timestamp>.dump` under `DQA_BACKUP_DIR` (default `<repo>/backups`)
+- relative `DQA_BACKUP_DIR` values resolve against the repository root
+  (`./backups` means `<repo>/backups`, not the operator CWD); absolute paths unchanged
+- sets `umask 077`, backup directory mode `0700`, dump/sidecar mode `0600`
+  (does not recursively chmod unrelated existing files)
+- writes matching `.sha256` sidecar
+- validates PostgreSQL custom-format magic (`PGDMP`) before treating the dump as good
+- filenames never include passwords, hostnames, usernames, DEMIS identifiers,
+  or patient/query data identifiers
+
+Restore (`./scripts/dqa-restore.sh <dump> RESTORE`):
+- deliberately destructive; requires explicit `RESTORE` confirmation token
+- order: checksum → app stopped → DB healthy → copy → custom-format validation
+  → DROP/CREATE → atomic `pg_restore` → Alembic head check
+- verifies SHA-256 sidecar before touching data
+- validates `PGDMP` magic plus `pg_restore --list` **before** DROP/CREATE
+- restores with `--single-transaction --exit-on-error --no-owner --no-privileges`
+  so a failed restore does not leave a partial application schema
+- refuses while `backend` / `frontend` / `migrate` are running
+- removes the container temp archive via `trap` on success and failure paths
+- does **not** auto-start application services
+- does **not** auto-run migrations after a failed/old restore
+- does **not** run `docker compose down -v`
+
+Recommended operator sequence:
+
+```bash
+./scripts/dqa-backup.sh
+# ...
+./scripts/dqa-down.sh
+./scripts/dqa-restore.sh ./backups/dqa_UTC.dump RESTORE
+./scripts/dqa-up.sh
+```
+
+Backup contents may include:
+- Catalog revisions and activation history
+- Query Templates / approvals
+- Connection Profile non-secret metadata (`credential_secret_ref` string only)
+- Query Audit Events
+- Alembic version metadata
+
+Backup contents must **not** include:
+- DEMIS DB contents or query result sets
+- DEMIS password values, LLM API keys, or env files
+
+Backup files may contain sensitive operational metadata and audit records.
+Store them only in an approved protected location. This foundation does **not**
+encrypt backups and does **not** claim they are safe for external/untrusted
+storage without an approved encryption policy.
+
+Backup retention is site policy. `dqa-backup-list.sh` is a dry-run listing
+helper only — it never deletes archives.
+
+Audit retention duration remains an external governance decision. See
+`docs/audit-retention-policy.md`. No automatic audit purge is implemented.
 
 ## 8. Development Compose
 
@@ -199,7 +267,39 @@ Frontend healthcheck verifies the nginx HTTP serving endpoint.
 
 DEMIS adapter absence and LLM unavailability are capability/dependency diagnostics, not container health failures.
 
-## 11. Persistence
+## 11. Frontend nginx edge policy
+
+The production frontend image uses nginx as the LAN entrypoint:
+
+- general `/api/` body limit: `2m`
+- Catalog package `validate` / `import`: `55m` (outer bound only; backend archive
+  limit remains 50 MiB)
+- explicit `proxy_send_timeout` / `proxy_read_timeout` / `client_*_timeout` /
+  `send_timeout` (conservative; not unlimited)
+- backend remains authoritative for SQL/query timeouts and Catalog archive limits
+- CSP (`default-src 'self'`, no `unsafe-eval`, no CDN hosts) + Permissions-Policy
+- `index.html` no-cache; hashed `/assets/` immutable long cache
+- no `proxy_cache`
+- `server_tokens off`
+- no X-DQA-Dev-* identity header injection
+- HSTS not enabled here — configure at the approved TLS termination point
+
+Production backend also disables public OpenAPI docs (`/docs`, `/redoc`,
+`/openapi.json`) when `APP_ENV=production`.
+
+Rate limiting is deferred until hospital/internal concurrency expectations are
+confirmed. Future limits should distinguish inexpensive reads, Catalog uploads,
+LLM-backed endpoints, and query preview/execute.
+
+Query execution limits are not configured by `QUERY_DEFAULT_*` / `QUERY_MAX_*`
+environment variables (those knobs are unused and must not be advertised in
+on-prem Compose / `.env.onprem.example`). Authoritative behavior:
+- each approved Query Template defines `row_limit` and `timeout_seconds`
+- hard maximums: timeout <= 300 seconds, row_limit <= 10_000
+- execution eligibility validates limits server-side
+- future site-wide tighter limits require an explicit policy feature
+
+## 12. Persistence
 
 DQA PostgreSQL stores:
 - imported Catalog revisions
@@ -211,12 +311,14 @@ DQA PostgreSQL stores:
 
 Volume: Compose named volume `dqa_pgdata`.
 
-## 12. Outstanding external blockers
+## 13. Outstanding external blockers
 
 This foundation does **not** make DQA ready for real DEMIS clinical use.
 
 Still required externally:
 1. Approved production authentication mechanism / IdentityProvider
 2. Confirmed DEMIS DBMS and concrete read-only driver requirements
+3. Approved TLS termination for real medical-data use
+4. Approved audit/backup retention duration and storage/encryption policy
 
 Live execution also still requires the full production execution gate in `docs/architecture.md`.

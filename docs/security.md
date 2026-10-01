@@ -202,6 +202,28 @@ Current Query Audit foundation policy:
 Future masking/hashing of parameter values remains out of scope until an
 explicit retention policy is approved.
 
+Audit retention operational boundaries (see `docs/audit-retention-policy.md`):
+- audit events remain append-only during normal application operation
+- retention duration is **not** hardcoded (site/project policy not confirmed)
+- no public DELETE/PATCH audit API; no automatic purge in this foundation
+- any future purge must be offline/privileged, based on `created_at`, and
+  recorded externally — never `query_operator` accessible
+- operators may inspect aggregates only via `scripts/dqa-audit-retention-status.sh`
+
+DQA PostgreSQL backup/restore (`scripts/dqa-backup.sh` / `scripts/dqa-restore.sh`):
+- backs up DQA application DB only (never DEMIS)
+- SHA-256 sidecar required for restore; explicit `RESTORE` confirmation token
+- refuse restore while backend/frontend are running
+- custom-format (`PGDMP`) validated before DROP/CREATE; atomic
+  `pg_restore --single-transaction --exit-on-error`
+- backup artifacts use restrictive permissions (`umask 077`, dir `0700`, files `0600`)
+- relative `DQA_BACKUP_DIR` resolves against repository root (`./backups` ⇒ `<repo>/backups`)
+- backups may include Catalog/template/audit operational metadata; store only
+  in an approved protected location
+- this foundation does not encrypt backups and does not claim external-storage safety
+  without an approved encryption policy
+- no automatic backup deletion
+
 ## 10. Authentication and authorization
 
 Authentication ("who") and authorization ("may this actor do this") are separated.
@@ -344,6 +366,47 @@ Production Compose foundation (`docker-compose.onprem.yml`):
 - `DQA_DB_PASSWORD` must be supplied explicitly (no weak Compose default)
 - `dqa-up.sh` refuses to start backend until Alembic revisions are at head
 
+## 14. Runtime edge hardening (Phase 1)
+
+Frontend nginx is an outer resource/attack-surface boundary only:
+
+- general `/api/` `client_max_body_size 2m`
+- Catalog `validate` / `import` raised to `55m` (backend archive limit remains 50 MiB)
+- explicit proxy/client send/read/header/body timeouts (not unlimited)
+- backend SQL/query timeouts remain authoritative
+- CSP + Permissions-Policy + nosniff / DENY frame / no-referrer
+- no HSTS here — TLS/HSTS belong at the approved TLS termination point
+- hashed `/assets/` immutable cache; `index.html` no-cache; no `proxy_cache`
+- `server_tokens off`; no X-DQA-Dev-* injection
+
+Production FastAPI docs exposure:
+- `APP_ENV=production` disables `/docs`, `/redoc`, `/openapi.json`
+- development/test keep docs
+- this is attack-surface reduction, not authentication
+
+Request-bound review (Phase 1):
+- recommendation / parameter extraction request text already length-bounded
+- execution preview/execute parameter maps bounded
+- connection profile mutation fields length-bounded
+- query template create/update/new-version text and list fields length-bounded
+- Catalog upload remains bounded by backend `max_archive_bytes`
+
+Query execution limits (authoritative):
+- each approved Query Template defines `row_limit` and `timeout_seconds`
+- application hard maximums are currently `timeout_seconds <= 300` and
+  `row_limit <= 10_000` (`app.adapters.demis.types.MAX_TIMEOUT_SECONDS` /
+  `MAX_ROW_LIMIT`)
+- execution eligibility validates these limits server-side
+- do not advertise unused `QUERY_DEFAULT_*` / `QUERY_MAX_*` environment knobs;
+  site-wide tighter limits require an explicit future policy feature
+
+Rate limiting:
+- deferred pending confirmed internal concurrency / traffic profile
+- future policy should distinguish inexpensive reads, Catalog manage uploads,
+  LLM-backed endpoints, and query preview/execute
+
 Outstanding blockers outside this repository change:
 1. approved production IdentityProvider
 2. confirmed DEMIS DBMS / driver requirements
+3. approved TLS termination for real medical-data use
+4. approved audit/backup retention duration and storage/encryption policy

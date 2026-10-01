@@ -22,9 +22,12 @@ RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime
 
-# Remove default site; ship a minimal SPA + /api reverse-proxy config.
+# Ship hardened main config + SPA site + shared proxy params.
+# Never inject VITE_DQA_DEV_* identity headers in this reverse proxy.
 RUN rm -f /etc/nginx/conf.d/default.conf
+COPY nginx.main.conf /etc/nginx/nginx.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY dqa_proxy_params.conf /etc/nginx/dqa_proxy_params.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80

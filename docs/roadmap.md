@@ -250,15 +250,40 @@ Scope:
 - `query_operator` retains Catalog read for Query Assistant source discovery
 - no production IdP / DEMIS adapter / frontend redesign / rate limiting
 
-### PR 21 - Hardening
+### PR 21 - Runtime security hardening (Phase 1)
+Status: landed (`feat/runtime-security-hardening`).
 Scope:
-- rate/size limits
-- operational error handling
-- security regression suite
-- backup/restore guidance
-- audit retention
+- nginx outer body-size limits (2m general; 55m Catalog validate/import)
+- proxy/client timeout boundaries (backend query timeouts remain authoritative)
+- CSP / Permissions-Policy / cache hygiene / `server_tokens off`
+- production FastAPI `/docs` `/redoc` `/openapi.json` disabled
+- error-sanitization regressions for representative secret markers
+- request-field bound review for high-risk JSON endpoints
+- on-prem checker no longer pip-installs dependencies
+- rate limiting deferred pending traffic/concurrency requirements
+- HSTS deferred to approved TLS termination
+- no production IdP / DEMIS driver / frontend redesign
+
+### PR 22 - DQA DB backup / restore + audit retention foundations
+Status: Draft PR (`feat/db-backup-audit-retention`).
+Scope:
+- operator `dqa-backup.sh` (`pg_dump -Fc` via `dqa-db`, SHA-256 sidecar, `DQA_BACKUP_DIR`)
+- fail-closed `dqa-restore.sh` (explicit `RESTORE` token, checksum, refuse while app up)
+- dry-run `dqa-backup-list.sh` (no automatic backup deletion)
+- audit retention policy document (append-only; duration not hardcoded; no auto purge)
+- read-only `dqa-audit-retention-status.sh` (oldest/newest/count only)
+- static regression checks for backup/restore safety boundaries
+- no production IdP / DEMIS adapter / public audit DELETE API
+
+### PR 23 - Hardening (follow-up)
+Scope:
+- rate/size policy tuning after concurrency requirements are confirmed
+- operational error handling expansion
+- security regression suite growth
+- approved purge tooling after retention policy confirmation
 - RBAC refinement (beyond Catalog)
 - data-egress policy enforcement
+- backup encryption after site key-management approval
 
 ## Exit criteria before real DEMIS use
 

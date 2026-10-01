@@ -286,6 +286,14 @@
   gap: 0.3rem;
 }
 
+.chip-row-spaced {
+  margin-top: 0.35rem;
+}
+
+.pane-status {
+  padding: 0.85rem;
+}
+
 .placeholder {
   color: var(--muted);
   font-size: 0.9rem;
