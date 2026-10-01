@@ -110,6 +110,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-60}
       LLM_CONNECT_TIMEOUT_SECONDS: ${LLM_CONNECT_TIMEOUT_SECONDS:-10}
+      LLM_ENABLE_THINKING: ${LLM_ENABLE_THINKING:-false}
     networks:
       - edge
       - data
