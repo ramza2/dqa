@@ -207,8 +207,8 @@ def test_happy_preview_no_demis_call(
     assert body["sensitive_parameter_names"] == ["ward_cd"]
     assert body["row_limit"] == 50
     assert body["timeout_seconds"] == 15
-    assert body["execution_available"] is False
-    assert body["execution_blockers"] == ["DEMIS_ADAPTER_UNAVAILABLE"]
+    assert body["execution_available"] is True
+    assert body["execution_blockers"] == []
     assert "sql_text" not in body
     assert "host" not in body
     assert "username" not in body
@@ -518,8 +518,8 @@ def test_no_credential_resolver_or_adapter_execute(
         version_id=fixture["version_id"],
         parameters={"ward_cd": "A01"},
     )
-    assert result.execution_available is False
-    assert result.execution_blockers == ["DEMIS_ADAPTER_UNAVAILABLE"]
+    assert result.execution_available is True
+    assert result.execution_blockers == []
 
 
 @pytest.mark.parametrize(

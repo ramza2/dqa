@@ -170,7 +170,7 @@ def test_unsupported_dbms_does_not_resolve_credentials() -> None:
     resolver = _TrackingCredentialResolver({"env:DEMIS_SECRET_PASSWORD": "test-secret-value"})
     with pytest.raises(DemisAdapterError) as exc:
         create_readonly_demis_adapter(
-            _eligible_snapshot(dbms_type="oracle"),
+            _eligible_snapshot(dbms_type="unknown_dbms"),
             credential_resolver=resolver,
         )
     assert exc.value.code == DemisAdapterErrorCode.UNSUPPORTED_DBMS
@@ -194,11 +194,41 @@ def test_fake_adapter_kinds_do_not_resolve_credentials() -> None:
 def test_unsupported_dbms_fail_closed() -> None:
     with pytest.raises(DemisAdapterError) as exc:
         create_readonly_demis_adapter(
-            _eligible_snapshot(dbms_type="oracle"),
+            _eligible_snapshot(dbms_type="unknown_dbms"),
             credential_resolver=_resolver(),
         )
     assert exc.value.code == DemisAdapterErrorCode.UNSUPPORTED_DBMS
     assert exc.value.failure_category == DemisAdapterErrorCode.UNSUPPORTED_DBMS
+
+
+def test_oracle_is_concrete_adapter_available() -> None:
+    from app.adapters.demis import is_concrete_demis_adapter_available
+
+    assert is_concrete_demis_adapter_available("oracle") is True
+    assert is_concrete_demis_adapter_available("ORACLE") is True
+    assert is_concrete_demis_adapter_available("unknown_dbms") is False
+    assert is_concrete_demis_adapter_available("postgresql") is False
+    for kind in ("fake", "test", "mock", "memory"):
+        assert is_concrete_demis_adapter_available(kind) is False
+
+
+def test_oracle_factory_resolves_credentials_then_builds_adapter() -> None:
+    resolver = _TrackingCredentialResolver({"env:DEMIS_SECRET_PASSWORD": "test-secret-value"})
+    adapter = create_readonly_demis_adapter(
+        _eligible_snapshot(dbms_type="oracle"),
+        credential_resolver=resolver,
+    )
+    assert resolver.resolve_calls == ["env:DEMIS_SECRET_PASSWORD"]
+    from app.adapters.demis.oracle import OracleReadOnlyDemisAdapter
+
+    assert isinstance(adapter, OracleReadOnlyDemisAdapter)
+    diag = adapter.diagnostics()
+    assert diag.configured is True
+    assert diag.dbms_type == "oracle"
+    assert diag.live_connection_tested is False
+    dumped = diag.model_dump()
+    for forbidden in ("host", "port", "username", "password", "dsn", "credential"):
+        assert forbidden not in dumped
 
 
 def test_fake_adapter_not_selectable_via_production_factory() -> None:
@@ -350,3 +380,213 @@ def test_protocol_surface_has_diagnostics_and_execute() -> None:
     assert callable(adapter.execute_readonly)
     diag = adapter.diagnostics()
     assert diag.live_connection_tested is False
+
+
+class _FakeOracleCursor:
+    def __init__(self, rows: list[tuple[object, ...]], columns: list[str]) -> None:
+        self.executed: list[tuple[str, object]] = []
+        self.description = [(name,) for name in columns]
+        self._rows = list(rows)
+        self.closed = False
+
+    def execute(self, sql: str, parameters: object = None) -> None:
+        self.executed.append((sql, parameters))
+
+    def fetchmany(self, size: int) -> list[tuple[object, ...]]:
+        return self._rows[:size]
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FakeOracleConnection:
+    def __init__(self, cursor: _FakeOracleCursor) -> None:
+        self._cursor = cursor
+        self.autocommit = True
+        self.call_timeout = 0
+        self.rollback_calls = 0
+        self.closed = False
+        self.connect_kwargs: dict[str, object] | None = None
+
+    def cursor(self) -> _FakeOracleCursor:
+        return self._cursor
+
+    def rollback(self) -> None:
+        self.rollback_calls += 1
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _oracle_adapter_with_fake(
+    *,
+    rows: list[tuple[object, ...]] | None = None,
+    columns: list[str] | None = None,
+    connect_error: BaseException | None = None,
+    execute_error_on: str | None = None,
+    execute_error: BaseException | None = None,
+):
+    from app.adapters.demis.oracle import OracleReadOnlyDemisAdapter
+
+    fake_cursor = _FakeOracleCursor(
+        rows or [("A01", "Ward A"), ("B02", "Ward B"), ("C03", "Ward C")],
+        columns or ["WARD_CD", "WARD_NM"],
+    )
+    fake_conn = _FakeOracleConnection(fake_cursor)
+
+    def _connect(**kwargs: object) -> _FakeOracleConnection:
+        fake_conn.connect_kwargs = dict(kwargs)
+        if connect_error is not None:
+            raise connect_error
+        return fake_conn
+
+    # Optionally fail during cursor.execute for a specific SQL phase.
+    original_execute = fake_cursor.execute
+
+    def _execute(sql: str, parameters: object = None) -> None:
+        original_execute(sql, parameters)
+        if execute_error is None or execute_error_on is None:
+            return
+        if execute_error_on == "read_only" and sql.upper().startswith("SET TRANSACTION"):
+            raise execute_error
+        if execute_error_on == "execute" and not sql.upper().startswith("SET TRANSACTION"):
+            raise execute_error
+
+    fake_cursor.execute = _execute  # type: ignore[method-assign]
+
+    adapter = OracleReadOnlyDemisAdapter(
+        profile=_eligible_snapshot(),
+        credential=_resolver().resolve("env:DEMIS_SECRET_PASSWORD"),
+        connect=_connect,
+    )
+    return adapter, fake_conn, fake_cursor
+
+
+def test_oracle_bound_sql_and_read_only_order() -> None:
+    adapter, fake_conn, fake_cursor = _oracle_adapter_with_fake()
+    sql = "SELECT ward_cd, ward_nm FROM wards WHERE ward_cd = :ward_cd"
+    params = {"ward_cd": "A01"}
+    result = adapter.execute_readonly(
+        ReadonlyQueryRequest(
+            sql_text=sql,
+            parameters=params,
+            timeout_seconds=7,
+            row_limit=2,
+        )
+    )
+
+    assert fake_conn.autocommit is False
+    assert fake_conn.call_timeout == 7000
+    assert fake_conn.connect_kwargs is not None
+    assert fake_conn.connect_kwargs["user"] == "dqa_ro"
+    assert fake_conn.connect_kwargs["host"] == "demis.internal.example"
+    assert fake_conn.connect_kwargs["port"] == 1521
+    assert fake_conn.connect_kwargs["service_name"] == "DEMIS"
+    assert fake_conn.connect_kwargs["password"] == "test-secret-value"
+    assert "dsn" not in fake_conn.connect_kwargs
+
+    assert len(fake_cursor.executed) == 2
+    assert fake_cursor.executed[0][0] == "SET TRANSACTION READ ONLY"
+    assert fake_cursor.executed[1] == (sql, params)
+    assert result.row_count == 2
+    assert result.truncated is True
+    assert result.columns == ["WARD_CD", "WARD_NM"]
+    assert fake_cursor.closed is True
+    assert fake_conn.rollback_calls >= 1
+    assert fake_conn.closed is True
+
+
+def test_oracle_connect_failure_maps_and_cleans_up() -> None:
+    class _Boom(Exception):
+        pass
+
+    adapter, fake_conn, fake_cursor = _oracle_adapter_with_fake(
+        connect_error=_Boom("ORA-SECRET host=demis.internal.example user=dqa_ro")
+    )
+    with pytest.raises(DemisAdapterError) as exc:
+        adapter.execute_readonly(
+            ReadonlyQueryRequest(
+                sql_text="SELECT 1 FROM dual",
+                parameters={},
+                timeout_seconds=5,
+                row_limit=10,
+            )
+        )
+    assert exc.value.code == DemisAdapterErrorCode.CONNECTION_FAILED
+    text = str(exc.value) + repr(exc.value)
+    assert "demis.internal.example" not in text
+    assert "dqa_ro" not in text
+    assert "test-secret-value" not in text
+    assert "ORA-SECRET" not in text
+    assert exc.value.__cause__ is None
+
+
+def test_oracle_timeout_and_execution_failure_mapping() -> None:
+    class _TimeoutErr(Exception):
+        pass
+
+    adapter, fake_conn, _cursor = _oracle_adapter_with_fake(
+        execute_error_on="execute",
+        execute_error=_TimeoutErr("call timeout exceeded"),
+    )
+    with pytest.raises(DemisAdapterError) as timeout_exc:
+        adapter.execute_readonly(
+            ReadonlyQueryRequest(
+                sql_text="SELECT 1 FROM dual",
+                parameters={},
+                timeout_seconds=3,
+                row_limit=10,
+            )
+        )
+    assert timeout_exc.value.code == DemisAdapterErrorCode.TIMEOUT
+    assert fake_conn.rollback_calls >= 1
+    assert fake_conn.closed is True
+    assert "timeout exceeded" not in str(timeout_exc.value)
+
+    class _ExecErr(Exception):
+        pass
+
+    adapter2, fake_conn2, _cursor2 = _oracle_adapter_with_fake(
+        execute_error_on="execute",
+        execute_error=_ExecErr("ORA-00942 table SECRET_TABLE"),
+    )
+    with pytest.raises(DemisAdapterError) as exec_exc:
+        adapter2.execute_readonly(
+            ReadonlyQueryRequest(
+                sql_text="SELECT secret_col FROM SECRET_TABLE WHERE id = :id",
+                parameters={"id": "P-999"},
+                timeout_seconds=3,
+                row_limit=10,
+            )
+        )
+    assert exec_exc.value.code == DemisAdapterErrorCode.EXECUTION_FAILED
+    text = str(exec_exc.value) + repr(exec_exc.value)
+    assert "SECRET_TABLE" not in text
+    assert "P-999" not in text
+    assert "secret_col" not in text
+    assert fake_conn2.closed is True
+
+
+def test_oracle_success_path_omits_sensitive_data_from_repr_and_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    adapter, _conn, _cursor = _oracle_adapter_with_fake(
+        rows=[("P-HIDDEN", "SENSITIVE_NOTE_VALUE")],
+        columns=["PATIENT_ID", "NOTE"],
+    )
+    with caplog.at_level(logging.DEBUG):
+        result = adapter.execute_readonly(
+            ReadonlyQueryRequest(
+                sql_text="SELECT patient_id, note FROM notes WHERE id = :id",
+                parameters={"id": 1},
+                timeout_seconds=5,
+                row_limit=10,
+            )
+        )
+        logging.getLogger("test.oracle").info("result=%r adapter=%r", result, adapter)
+    joined = "\n".join(record.getMessage() for record in caplog.records)
+    assert "SENSITIVE_NOTE_VALUE" not in joined
+    assert "P-HIDDEN" not in joined
+    assert "test-secret-value" not in joined
+    assert "demis.internal.example" not in joined
+    assert result.row_count == 1

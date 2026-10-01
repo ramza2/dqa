@@ -334,11 +334,13 @@ The safety gate runs even for approved templates.
 Foundation package: `app/adapters/demis` (DBMS-neutral contracts only).
 
 The adapter interface is DBMS-neutral.
-**A concrete DBMS adapter is blocked until actual DEMIS DBMS/driver
-requirements are confirmed.** Do not assume Oracle, PostgreSQL, MySQL, or any
-other DEMIS driver; do not reuse DQA PostgreSQL/`psycopg` as the DEMIS adapter.
+**Oracle (`dbms_type=oracle`) is registered as a concrete production adapter**
+using python-oracledb thin mode (`OracleReadOnlyDemisAdapter`). Other DBMS types
+remain fail-closed. Do not reuse DQA PostgreSQL/`psycopg` as the DEMIS adapter.
+This registration does **not** claim live DEMIS/mock network connectivity has
+been validated in an operator environment.
 
-Implemented in this foundation:
+Implemented:
 - `ReadOnlyDemisAdapter` protocol: `diagnostics(...)`, `execute_readonly(...)`
 - request DTO: approved SQL text + bound parameter map + `timeout_seconds` + `row_limit`
 - result DTO: `columns`, `rows`, `row_count`, `truncated`, `elapsed_ms`
@@ -348,13 +350,14 @@ Implemented in this foundation:
   gated by `DQA_DEMIS_CREDENTIAL_ENV_PREFIX` (default `DEMIS_SECRET_`)
 - `create_credential_resolver(settings)` factory for the production resolver boundary
 - production factory `create_readonly_demis_adapter(...)` consuming an enabled
-  Connection Profile snapshot + credential resolver (fail-closed)
+  Connection Profile snapshot + credential resolver (fail-closed for unsupported DBMS)
+- Oracle thin-mode concrete adapter (bound parameters, `SET TRANSACTION READ ONLY`,
+  call timeout, row_limit+1 truncation, sanitized errors; no Instant Client)
 - test-only fake adapter / fake resolver (never selectable via production factory)
 
 Credentials are never resolved during Connection Profile CRUD/diagnostics or
 execution preview. Resolver invocation remains behind concrete adapter selection;
-with no registered DEMIS driver the adapter factory still returns
-`UNSUPPORTED_DBMS` without reading environment secrets.
+unsupported DBMS still returns `UNSUPPORTED_DBMS` without reading environment secrets.
 
 Responsibilities (contract / future concrete adapters):
 - connection lifecycle
@@ -376,11 +379,11 @@ The adapter must not:
 - log, persist, or put result rows into exceptions
 - fall back silently to DQA PostgreSQL
 
-Factory behavior without a registered concrete driver: validate profile
-eligibility (enabled, target metadata, credential ref *presence*), reject
-forbidden fake/test kinds, then raise `UNSUPPORTED_DBMS` **before** calling
-`CredentialResolver.resolve`. Credentials are resolved only after a concrete
-adapter is selected.
+Factory behavior for unsupported DBMS: validate profile eligibility (enabled,
+target metadata, credential ref *presence*), reject forbidden fake/test kinds,
+then raise `UNSUPPORTED_DBMS` **before** calling `CredentialResolver.resolve`.
+Credentials are resolved only after a concrete adapter (currently Oracle) is
+selected.
 
 No query generation occurs here.
 
@@ -395,10 +398,11 @@ APPROVED+enabled, Active Catalog revision/fingerprint match, SQL Safety PASS,
 parameter schema + undeclared-key rejection + deterministic validation, and an
 enabled Connection Profile with complete non-secret adapter metadata.
 
-Preview may succeed while live execution remains blocked:
+Preview may succeed while live execution remains blocked for unsupported DBMS:
 - `execution_available=false`
 - `execution_blockers` may include `DEMIS_ADAPTER_UNAVAILABLE`
-  until a concrete DEMIS DBMS adapter is confirmed/implemented
+  when no concrete adapter is registered for the profile `dbms_type`
+  (Oracle is registered; other DBMS types remain unavailable)
 
 Preview does **not** resolve credentials, instantiate a live adapter, execute
 SQL, call LLM, return SQL/host/user/DSN, or write audit events.
@@ -475,10 +479,12 @@ rows, row_count, truncated, elapsed_ms. It never returns SQL, host/port,
 username, database/service name, credential ref/value, DSN, or raw driver
 errors. Headers: `Cache-Control: no-store, private` and `Pragma: no-cache`.
 
-**Production live DEMIS execution remains unavailable** until a concrete DEMIS
-DBMS adapter exists. With no registered driver, production execute fails closed
+**Oracle is production-selectable** via the registered thin-mode adapter when
+the Connection Profile `dbms_type` is `oracle` and credentials resolve. Live
+connectivity still depends on operator network/secret wiring and is not claimed
+validated by this repository change alone. Unsupported DBMS types fail closed
 after eligibility (`DEMIS_ADAPTER_UNAVAILABLE`) before credential resolution.
-Fake/test adapters are injectable only at the Python test boundary.
+Fake/test adapters remain injectable only at the Python test boundary.
 
 Result privacy: rows may contain medical/sensitive data; they are never logged,
 never persisted, never placed in exceptions, never sent to an LLM, and

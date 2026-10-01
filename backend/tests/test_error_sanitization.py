@@ -212,7 +212,7 @@ def test_execution_unavailable_error_sanitized(
             "name": "sanitize-profile",
             "source_name": SOURCE_NAME,
             "environment": "prod",
-            "dbms_type": "oracle",
+            "dbms_type": "unknown_dbms",
             "host": "demis.example.internal",
             "port": 1521,
             "database_name": "FREEPDB1",

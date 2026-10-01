@@ -236,9 +236,10 @@ def test_form_happy_path_parameters_and_environments(
     envs = {item["environment"]: item for item in body["environments"]}
     assert set(envs) == {"dev", "qa"}
     assert "staging" not in envs
-    assert envs["dev"]["execution_available"] is False
-    assert envs["dev"]["execution_blockers"] == ["DEMIS_ADAPTER_UNAVAILABLE"]
-    assert envs["qa"]["execution_blockers"] == ["DEMIS_ADAPTER_UNAVAILABLE"]
+    assert envs["dev"]["execution_available"] is True
+    assert envs["dev"]["execution_blockers"] == []
+    assert envs["qa"]["execution_available"] is True
+    assert envs["qa"]["execution_blockers"] == []
 
     text = response.text
     assert "sql_text" not in body

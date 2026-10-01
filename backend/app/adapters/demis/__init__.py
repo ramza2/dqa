@@ -1,4 +1,4 @@
-"""DEMIS read-only adapter foundation (DBMS-neutral; no concrete driver yet)."""
+"""DEMIS read-only adapter boundary (DBMS-neutral contracts + Oracle thin adapter)."""
 
 from __future__ import annotations
 

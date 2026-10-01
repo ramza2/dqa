@@ -30,7 +30,7 @@ backend/
       catalog/
       connection_profile/
       db/
-      demis/          # DBMS-neutral read-only DEMIS boundary (no concrete driver yet)
+      demis/          # read-only DEMIS boundary (Oracle thin adapter + contracts)
       llm/
   tests/
 ```
@@ -53,9 +53,15 @@ Do not create SQL with user-value string concatenation.
 
 All executable Query Templates must pass a centralized safety validator before reaching the adapter.
 
-Do not add a concrete DEMIS DBMS driver until requirements are confirmed.
 Do not reuse the DQA PostgreSQL/`psycopg` stack as the DEMIS adapter.
 Fake/test adapters are for tests only and must not be production-selectable.
+
+Oracle (`dbms_type=oracle`) is the first production-selectable concrete adapter
+(`OracleReadOnlyDemisAdapter`, python-oracledb thin mode only — no Instant Client).
+Live mock/network/secret wiring remains an operator concern; this package does not
+claim end-to-end DEMIS connectivity is validated in deployment.
+Unsupported DBMS types remain fail-closed. Never resolve credentials before a
+concrete adapter is selected.
 
 Production credential resolution uses `EnvironmentCredentialResolver` (`env:` only)
 gated by `DQA_DEMIS_CREDENTIAL_ENV_PREFIX`. Do not resolve credentials from

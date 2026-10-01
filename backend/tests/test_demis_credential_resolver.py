@@ -203,7 +203,7 @@ def test_unsupported_dbms_does_not_invoke_env_resolver() -> None:
     resolver.resolve = resolve
     with pytest.raises(DemisAdapterError) as exc:
         create_readonly_demis_adapter(
-            _eligible_snapshot(dbms_type="oracle"),
+            _eligible_snapshot(dbms_type="unknown_dbms"),
             credential_resolver=resolver,
         )
     assert exc.value.code == DemisAdapterErrorCode.UNSUPPORTED_DBMS
@@ -358,7 +358,8 @@ def test_execution_preview_does_not_resolve_secret(
         },
     )
     assert preview.status_code == 200, preview.text
-    assert preview.json()["execution_available"] is False
+    # Oracle is concrete-selectable; preview still must not resolve secrets.
+    assert preview.json()["execution_available"] is True
     assert SECRET_VALUE not in preview.text
     assert ALLOWED_REF not in preview.text
     resolve.assert_not_called()
