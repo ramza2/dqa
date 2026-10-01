@@ -159,21 +159,28 @@ Scope:
 ## Phase 6 - Read-only execution
 
 ### PR 17 - DEMIS read-only adapter
-Status: foundation contracts landed (`app/adapters/demis`); concrete DBMS
-adapter still blocked on confirmed DEMIS requirements.
+Status: foundation contracts landed; Oracle thin-mode concrete adapter added
+in a follow-up PR (`feat/oracle-readonly-adapter`).
 Scope:
 - DBMS-neutral adapter interface (`diagnostics`, `execute_readonly`)
 - credential resolver protocol
 - production `EnvironmentCredentialResolver` (`env:` + dedicated prefix boundary)
 - Connection Profile snapshot eligibility (enabled + target metadata + credential ref)
-- production factory fail-closed (`UNSUPPORTED_DBMS`); no DQA PG fallback
+- production factory fail-closed for unsupported DBMS; no DQA PG fallback
 - test/fake adapter only (never production-selectable)
-- first concrete DBMS implementation only after actual DEMIS requirements are confirmed
-- read-only session/transaction (documented for future drivers)
-- timeout / bound parameters / row limit request contract
-- sanitized connection diagnostics (`live_connection_tested=false` until a driver exists)
+- read-only session/transaction / timeout / bound parameters / row limit contract
+- sanitized connection diagnostics (`live_connection_tested=false` until probed)
 - least-privilege assumptions documented
-- no public execution API; not wired to recommendation / extraction / audit yet
+
+### PR 17c - Oracle read-only concrete adapter
+Status: landed (`OracleReadOnlyDemisAdapter`, python-oracledb thin mode).
+Scope:
+- register `oracle` in the production concrete adapter factory
+- bound SQL + parameters; `SET TRANSACTION READ ONLY` before SELECT
+- call timeout; row_limit+1 truncation; rollback/close cleanup
+- sanitized CONNECTION_FAILED / TIMEOUT / EXECUTION_FAILED mapping
+- no Instant Client / thick mode; no live mock network wiring in-repo
+- fake/test/mock/memory remain non-selectable
 
 ### PR 17b - Environment credential resolver
 Status: landed on top of adapter foundation / preview.

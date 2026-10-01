@@ -234,6 +234,10 @@ def test_production_execute_fail_closed_without_adapter(
     fixture = _setup_eligible(db_session, db_client, fingerprint="fp-prod-deny")
     resolve = MagicMock(side_effect=AssertionError("resolve must not be called"))
     monkeypatch.setattr(
+        "app.services.execution_eligibility.is_concrete_demis_adapter_available",
+        lambda dbms_type: False,
+    )
+    monkeypatch.setattr(
         "app.adapters.demis.env_credentials.EnvironmentCredentialResolver.resolve",
         resolve,
         raising=False,
@@ -822,9 +826,14 @@ def test_final_audit_failure_suppresses_result_rows(
 
 
 def test_durable_audit_survives_request_error_rollback(
-    db_session: Session, db_client: TestClient
+    db_session: Session, db_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fixture = _setup_eligible(db_session, db_client, fingerprint="fp-durable")
+    # Force the no-concrete-adapter DENIED path (Oracle is otherwise selectable).
+    monkeypatch.setattr(
+        "app.services.execution_eligibility.is_concrete_demis_adapter_available",
+        lambda dbms_type: False,
+    )
     response = db_client.post(EXECUTE_PATH, json=_execute_body(fixture))
     assert response.status_code == 503
     # Request dependency rolled back, but durable writer committed.

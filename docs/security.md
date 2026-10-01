@@ -311,7 +311,8 @@ Execution form metadata rules:
 
 Not yet covered (follow-up):
 - OIDC/OAuth2/JWT verification, user directory, MFA, sessions
-- concrete DEMIS DBMS driver / live connectivity (blocked on confirmed requirements)
+- concrete DEMIS DBMS driver / live connectivity (Oracle thin adapter is
+  registered; live mock/network/secret wiring remains operator-side)
 - production credential secret-store resolver (beyond env-prefix boundary)
 - production IdentityProvider (Catalog RBAC closes authorization gaps only)
 ## 11. Production checklist
@@ -331,11 +332,12 @@ Before real DEMIS access:
 - package import/activation authorization defined
 - LLM result-data egress disabled unless explicitly approved
 - concrete DEMIS read-only adapter selected only after DBMS/driver requirements are confirmed
+  (Oracle thin adapter is now registered; live wiring remains operator-side)
 
 ## 12. DEMIS read-only adapter boundary
 
 Foundation (`app/adapters/demis`):
-- DBMS-neutral protocol and DTOs only; no concrete DEMIS driver package
+- DBMS-neutral protocol/DTOs plus production-selectable Oracle thin adapter
 - DQA PostgreSQL/`psycopg` must never be used as the DEMIS adapter
 - fake/test adapters are test-only and cannot be selected by the production factory
 - first production credential source: `EnvironmentCredentialResolver` (`env:` only)
@@ -348,8 +350,8 @@ Foundation (`app/adapters/demis`):
 - adapter assumes SQL Safety already passed and must not weaken it
 - DB least privilege remains mandatory outside application controls
 - Connection Profile diagnostics remain configuration-level until a concrete
-  adapter can set `live_connection_tested`
-- concrete DEMIS DBMS adapter remains unavailable until requirements are confirmed
+  adapter sets `live_connection_tested` after an explicit probe
+- Oracle adapter registration does not by itself prove live DEMIS connectivity
 
 ## 13. On-prem deployment exposure
 

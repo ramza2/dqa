@@ -82,9 +82,11 @@ Live DEMIS DB remains external and is reached through an operator-managed Connec
 LLM endpoint remains external unless future requirements change.
 Query result rows are not sent to the LLM by default.
 
-Absence of a concrete DEMIS DBMS adapter is an application capability state
-(`DEMIS_ADAPTER_UNAVAILABLE` / `execution_available=false`). It must not fail
-container liveness/readiness.
+Absence of a concrete DEMIS DBMS adapter for the selected profile is an
+application capability state (`DEMIS_ADAPTER_UNAVAILABLE` /
+`execution_available=false`). Oracle thin-mode adapter registration does not
+by itself fail container liveness/readiness, and does not claim live DEMIS
+connectivity has been operator-validated.
 
 ## 4. Network exposure rules
 

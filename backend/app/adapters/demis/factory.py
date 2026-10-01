@@ -10,9 +10,8 @@ from app.adapters.demis.protocol import ReadOnlyDemisAdapter
 # Explicitly rejected adapter kinds that must never be selected in production.
 _FORBIDDEN_PRODUCTION_KINDS = frozenset({"fake", "test", "mock", "memory"})
 
-# Concrete DEMIS adapter registry. Empty until DBMS/driver requirements confirm
-# an implementation. Recognition of a label is not the same as support.
-_REGISTERED_CONCRETE_DBMS: frozenset[str] = frozenset()
+# Concrete DEMIS adapter registry. Only confirmed DBMS implementations.
+_REGISTERED_CONCRETE_DBMS: frozenset[str] = frozenset({"oracle"})
 
 
 def create_readonly_demis_adapter(
@@ -22,13 +21,12 @@ def create_readonly_demis_adapter(
 ) -> ReadOnlyDemisAdapter:
     """Build a live-capable read-only DEMIS adapter from a validated profile.
 
-    Fail-closed rules for this foundation:
+    Fail-closed rules:
     - disabled profiles are rejected
     - required non-secret target metadata must be present
     - ``credential_secret_ref`` presence is required at profile validation
     - credentials are resolved only after a concrete adapter is selected
-    - no concrete DBMS driver is registered yet → ``UNSUPPORTED_DBMS``
-      (without calling ``CredentialResolver.resolve``)
+    - unsupported DBMS → ``UNSUPPORTED_DBMS`` without calling ``CredentialResolver``
     - fake/test adapters are never selectable through this factory
     - never falls back to DQA PostgreSQL / psycopg
     """
@@ -160,11 +158,12 @@ def _build_registered_adapter(
     profile: ConnectionProfileSnapshot,
     material: CredentialMaterial,
 ) -> ReadOnlyDemisAdapter:
-    """Construct a registered concrete adapter.
+    """Construct a registered concrete adapter after credential resolution."""
+    if dbms == "oracle":
+        from app.adapters.demis.oracle import OracleReadOnlyDemisAdapter
 
-    Unreachable while ``_REGISTERED_CONCRETE_DBMS`` is empty. Kept so credential
-    resolution stays behind a real adapter selection gate.
-    """
+        return OracleReadOnlyDemisAdapter(profile=profile, credential=material)
+
     # material/profile retained for future driver wiring; never log secrets.
     _ = (dbms, profile, material)
     raise DemisAdapterError(
