@@ -154,11 +154,14 @@ export const emptyCategories: CatalogCategoryListResponse = {
   items: [],
 };
 
-type Handler = (url: URL) => Response | null | Promise<Response | null>;
+type Handler = (
+  url: URL,
+  init?: RequestInit,
+) => Response | null | Promise<Response | null>;
 
 export function installFetchMock(handlers: Handler[]): () => void {
   const original = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
       typeof input === "string"
         ? new URL(input, "http://localhost")
@@ -166,7 +169,7 @@ export function installFetchMock(handlers: Handler[]): () => void {
           ? input
           : new URL(input.url, "http://localhost");
     for (const handler of handlers) {
-      const result = await handler(url);
+      const result = await handler(url, init);
       if (result) {
         return result;
       }

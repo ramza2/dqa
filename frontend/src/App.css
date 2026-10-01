@@ -311,3 +311,235 @@
 .fingerprint-btn:hover {
   text-decoration: underline;
 }
+
+.app-top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 1.25rem;
+  background: #0f172a;
+  color: #f8fafc;
+  flex-wrap: wrap;
+}
+
+.app-top-nav-brand {
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.app-top-nav-tabs {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.nav-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+.nav-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.nav-tab.active {
+  background: #fff;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.qa-shell .app-header {
+  align-items: stretch;
+}
+
+.source-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 420px;
+}
+
+.source-field .label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.qa-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem 1.25rem 1.75rem;
+  max-width: 1100px;
+}
+
+.qa-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.qa-panel h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.qa-panel h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.qa-panel textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55rem 0.65rem;
+  resize: vertical;
+  min-height: 96px;
+  background: #fff;
+}
+
+.qa-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.qa-actions .muted,
+.muted {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.qa-actions button,
+.qa-panel button {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+
+.qa-actions button:disabled,
+.qa-panel button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.qa-actions button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.qa-template-card,
+.qa-template-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.qa-template-title {
+  font-weight: 650;
+}
+
+.qa-candidates ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.candidate {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.candidate.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.param-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.param-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.param-help {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.required-mark {
+  color: var(--danger);
+}
+
+.param-field input,
+.param-field select {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.55rem;
+  background: #fff;
+}
+
+.qa-param-summary {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.qa-result-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.qa-result-table {
+  margin: 0;
+  min-width: 480px;
+}
+
+@media (max-width: 960px) {
+  .qa-layout {
+    padding: 0.85rem;
+  }
+
+  .app-top-nav {
+    align-items: flex-start;
+  }
+}
+
