@@ -39,6 +39,16 @@ VITE_DQA_DEV_ACTOR=query-operator VITE_DQA_DEV_ROLES=query_operator npm run dev
 Production builds strip `X-DQA-Dev-*` headers and must never inject
 `VITE_DQA_DEV_ACTOR` / `VITE_DQA_DEV_ROLES`.
 
+On-prem LAN integration (DEV overlay only — never production):
+
+```bash
+docker compose -f docker-compose.onprem.yml -f docker-compose.onprem.dev.yml \
+  --env-file .env.onprem up -d --build
+```
+
+Uses `frontend/Dockerfile.dev` (Vite on `0.0.0.0:80`) while keeping the same
+host publish `${DQA_LAN_BIND_IP}:${DQA_FRONTEND_PORT}:80`.
+
 ## Production Docker image
 
 ```bash

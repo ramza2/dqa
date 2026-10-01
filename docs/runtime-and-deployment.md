@@ -54,13 +54,18 @@ Optional overlay: `docker-compose.onprem.dev.yml` (required for development auth
 |---------|-------|
 | `APP_ENV` | `development` (overlay override) |
 | `DQA_AUTH_PROVIDER` | `dev_headers` (overlay override) |
+| frontend image | Vite DEV (`frontend/Dockerfile.dev`), not production nginx |
+| browser identity | `VITE_DQA_DEV_ACTOR` / `VITE_DQA_DEV_ROLES` (overlay only) |
+| API proxy | `VITE_DEV_PROXY_TARGET=http://backend:8000` |
+| LAN URL | unchanged: `${DQA_LAN_BIND_IP}:${DQA_FRONTEND_PORT}` → container `:80` |
 
 Rules:
 - production Compose hardcodes fail-closed auth; development auth requires the explicit overlay
 - never enable `dev_headers` in production Compose
 - never put actor/role values into production configuration
 - production SPA builds never inject `VITE_DQA_DEV_*`
-- Mode B API clients must supply `X-DQA-Dev-Actor` / `X-DQA-Dev-Roles`
+- Mode B is LAN development / integration testing only — never for production
+- Mode B browser UI uses the overlay Vite DEV server so `X-DQA-Dev-*` headers are applied
 
 Local Vite development against `docker-compose.dev.yml` remains supported separately.
 
