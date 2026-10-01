@@ -1,8 +1,8 @@
-"""Query execution preview + execute APIs."""
+"""Query execution preview + execute + form metadata APIs."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.adapters.db.deps import get_db_session
@@ -15,15 +15,42 @@ from app.adapters.execution.errors import (
 )
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
+from app.schemas.execution_form import ExecutionFormResponse
 from app.schemas.execution_preview import (
     ExecutionPreviewRequest,
     ExecutionPreviewResponse,
 )
 from app.schemas.query_execution import QueryExecutionRequest, QueryExecutionResponse
+from app.services.execution_form import get_execution_form_metadata
 from app.services.execution_preview import preview_query_execution
 from app.services.query_execution import execute_query
 
 router = APIRouter(prefix="/api/v1/query-executions", tags=["query-executions"])
+
+
+@router.get("/form", response_model=ExecutionFormResponse)
+def execution_form_metadata(
+    response: Response,
+    source_name: str = Query(min_length=1, max_length=255),
+    template_id: int = Query(gt=0),
+    version_id: int = Query(gt=0),
+    session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.QUERY_OPERATE)
+    ),
+) -> ExecutionFormResponse:
+    """QUERY_OPERATE-safe parameter + environment metadata for Query Assistant."""
+    response.headers["Cache-Control"] = "no-store, private"
+    response.headers["Pragma"] = "no-cache"
+    try:
+        return get_execution_form_metadata(
+            session,
+            source_name=source_name,
+            template_id=template_id,
+            version_id=version_id,
+        )
+    except ExecutionPreviewError as exc:
+        raise _eligibility_http_error(exc) from None
 
 
 @router.post("/preview", response_model=ExecutionPreviewResponse)

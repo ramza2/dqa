@@ -204,6 +204,15 @@ Scope:
 - fake adapter only via Python test DI (never HTTP/config/env selectable)
 - result rows never persisted/logged/LLM-egressed
 
+### PR 18c - Execution form metadata
+Status: landed (`GET /api/v1/query-executions/form`).
+Scope:
+- QUERY_OPERATE-safe parameter + environment projection for Query Assistant
+- no TEMPLATE_READ / CONNECTION_PROFILE_MANAGE grant
+- no credentials / DEMIS / SQL execution / LLM / audit writes
+- enabled environments only; incomplete → CONNECTION_PROFILE_INCOMPLETE;
+  no concrete adapter → DEMIS_ADAPTER_UNAVAILABLE
+
 ### PR 19 - Query Assistant frontend
 Scope:
 - natural-language request

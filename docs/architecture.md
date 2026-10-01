@@ -397,6 +397,34 @@ SQL, call LLM, return SQL/host/user/DSN, or write audit events.
 `row_limit` / `timeout_seconds` come only from the approved template version.
 Responses that include resolved parameter values use `Cache-Control: no-store, private`.
 
+### 3.9.1b Execution form metadata
+
+`GET /api/v1/query-executions/form` (requires `QUERY_OPERATE`) returns a narrow
+execution-oriented projection for Query Assistant after template recommendation:
+approved template identity, safe parameter definitions (including schema
+`default` / `sensitive`, never runtime values), and enabled environments with
+`execution_available` / sanitized blockers.
+
+Query Assistant may obtain this metadata through `QUERY_OPERATE` without
+`TEMPLATE_READ` or `CONNECTION_PROFILE_MANAGE`.
+
+Eligibility (no parameter values required): template exists / source match /
+current version / enabled + APPROVED / Active Catalog revision+fingerprint /
+SQL Safety PASS / `sql_text` within `MAX_SQL_TEXT_LENGTH` / parameter schema
+parses.
+
+Environment discovery loads Connection Profiles internally by `source_name`:
+- disabled profiles are omitted
+- enabled incomplete profiles are returned with
+  `execution_available=false` and `CONNECTION_PROFILE_INCOMPLETE`
+- complete profiles without a concrete DEMIS adapter use
+  `DEMIS_ADAPTER_UNAVAILABLE`
+
+Never returns SQL, host/port/dbms/username/database, credential refs, profile
+ids, approval notes, or author metadata. Does not resolve credentials, create
+adapters, execute SQL, call LLM, or write audit. Headers:
+`Cache-Control: no-store, private` and `Pragma: no-cache`.
+
 ### 3.9.2 Query execution orchestration
 
 `POST /api/v1/query-executions/execute` (requires `QUERY_OPERATE`) is the

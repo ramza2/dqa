@@ -65,6 +65,11 @@ Query execution (`POST /api/v1/query-executions/execute`) re-runs eligibility,
 writes durable audit on an independent DB session, and fail-closes when no
 concrete DEMIS adapter exists. Never log/persist/LLM-egress result rows.
 
+Form metadata (`GET /api/v1/query-executions/form`) is a QUERY_OPERATE projection
+for parameter/environment UI without TEMPLATE_READ or profile-management grants.
+It must not resolve credentials, connect to DEMIS, execute SQL, call LLM, or
+write execution audit.
+
 ## Catalog Package
 
 Treat imported Catalog Package data and live DEMIS connectivity as separate concerns.
