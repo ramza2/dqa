@@ -1,7 +1,7 @@
 """Credential resolver boundary for live DEMIS adapter construction.
 
-Actual secret-store implementations are out of scope. Callers supply a
-resolver that maps ``credential_secret_ref`` to opaque runtime material.
+Production ``env:`` resolution is provided by ``EnvironmentCredentialResolver``.
+Additional secret-store implementations may satisfy the same protocol later.
 Credential values must never be logged, persisted, put in errors, or returned
 through public APIs.
 """
@@ -29,7 +29,7 @@ class CredentialMaterial:
         return self._secret
 
     def __repr__(self) -> str:
-        return f"CredentialMaterial(secret_ref=<redacted>, configured=True)"
+        return "CredentialMaterial(secret_ref=<redacted>, configured=True)"
 
     def __str__(self) -> str:
         return "CredentialMaterial(<redacted>)"
@@ -42,6 +42,7 @@ class CredentialResolver(Protocol):
         """Resolve ``credential_secret_ref`` without logging secret values.
 
         Must raise ``DemisAdapterError`` with ``CREDENTIAL_UNAVAILABLE`` when
-        the reference cannot be resolved. Must not echo the secret or DSN.
+        the reference cannot be resolved. Must not echo the secret, reference,
+        environment variable name, or DSN.
         """
         ...

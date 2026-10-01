@@ -56,6 +56,12 @@ class Settings(BaseSettings):
         default="disabled",
         alias="DQA_AUTH_PROVIDER",
     )
+    # Dedicated env-var prefix for DEMIS Connection Profile credential refs
+    # (``env:<NAME>``). Only names starting with this prefix may be resolved.
+    dqa_demis_credential_env_prefix: str = Field(
+        default="DEMIS_SECRET_",
+        alias="DQA_DEMIS_CREDENTIAL_ENV_PREFIX",
+    )
 
     @property
     def sqlalchemy_database_url(self) -> URL:

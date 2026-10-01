@@ -57,6 +57,10 @@ Do not add a concrete DEMIS DBMS driver until requirements are confirmed.
 Do not reuse the DQA PostgreSQL/`psycopg` stack as the DEMIS adapter.
 Fake/test adapters are for tests only and must not be production-selectable.
 
+Production credential resolution uses `EnvironmentCredentialResolver` (`env:` only)
+gated by `DQA_DEMIS_CREDENTIAL_ENV_PREFIX`. Do not resolve credentials from
+Connection Profile CRUD, diagnostics, or execution preview.
+
 ## Catalog Package
 
 Treat imported Catalog Package data and live DEMIS connectivity as separate concerns.

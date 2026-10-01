@@ -36,14 +36,14 @@ def _eligible_snapshot(**overrides: object) -> ConnectionProfileSnapshot:
         "port": 1521,
         "database_name": "DEMIS",
         "username": "dqa_ro",
-        "credential_secret_ref": "env:DEMIS_DB_PASSWORD",
+        "credential_secret_ref": "env:DEMIS_SECRET_PASSWORD",
     }
     body.update(overrides)
     return ConnectionProfileSnapshot.model_validate(body)
 
 
 def _resolver() -> FakeCredentialResolver:
-    return FakeCredentialResolver({"env:DEMIS_DB_PASSWORD": "test-secret-value"})
+    return FakeCredentialResolver({"env:DEMIS_SECRET_PASSWORD": "test-secret-value"})
 
 
 def test_readonly_request_contract_bounds() -> None:
@@ -144,7 +144,7 @@ def test_disabled_profile_rejected() -> None:
 
 
 def test_missing_credential_reference_rejected() -> None:
-    resolver = _TrackingCredentialResolver({"env:DEMIS_DB_PASSWORD": "test-secret-value"})
+    resolver = _TrackingCredentialResolver({"env:DEMIS_SECRET_PASSWORD": "test-secret-value"})
     with pytest.raises(DemisAdapterError) as exc:
         create_readonly_demis_adapter(
             _eligible_snapshot(credential_secret_ref=None),
@@ -155,7 +155,7 @@ def test_missing_credential_reference_rejected() -> None:
 
 
 def test_incomplete_target_metadata_rejected() -> None:
-    resolver = _TrackingCredentialResolver({"env:DEMIS_DB_PASSWORD": "test-secret-value"})
+    resolver = _TrackingCredentialResolver({"env:DEMIS_SECRET_PASSWORD": "test-secret-value"})
     with pytest.raises(DemisAdapterError) as exc:
         create_readonly_demis_adapter(
             _eligible_snapshot(host=None, port=None),
@@ -167,7 +167,7 @@ def test_incomplete_target_metadata_rejected() -> None:
 
 
 def test_unsupported_dbms_does_not_resolve_credentials() -> None:
-    resolver = _TrackingCredentialResolver({"env:DEMIS_DB_PASSWORD": "test-secret-value"})
+    resolver = _TrackingCredentialResolver({"env:DEMIS_SECRET_PASSWORD": "test-secret-value"})
     with pytest.raises(DemisAdapterError) as exc:
         create_readonly_demis_adapter(
             _eligible_snapshot(dbms_type="oracle"),
@@ -180,7 +180,7 @@ def test_unsupported_dbms_does_not_resolve_credentials() -> None:
 def test_fake_adapter_kinds_do_not_resolve_credentials() -> None:
     for kind in ("fake", "test", "mock", "memory"):
         resolver = _TrackingCredentialResolver(
-            {"env:DEMIS_DB_PASSWORD": "test-secret-value"}
+            {"env:DEMIS_SECRET_PASSWORD": "test-secret-value"}
         )
         with pytest.raises(DemisAdapterError) as exc:
             create_readonly_demis_adapter(
@@ -272,7 +272,7 @@ def test_credentials_host_user_dsn_never_in_factory_errors() -> None:
     sensitive_user = "secret_ro_user"
     sensitive_db = "SECRET_SERVICE"
     secret = "super-secret-password-xyz"
-    resolver = FakeCredentialResolver({"env:DEMIS_DB_PASSWORD": secret})
+    resolver = FakeCredentialResolver({"env:DEMIS_SECRET_PASSWORD": secret})
     snapshot = _eligible_snapshot(
         host=sensitive_host,
         username=sensitive_user,
@@ -286,11 +286,11 @@ def test_credentials_host_user_dsn_never_in_factory_errors() -> None:
     assert sensitive_user not in text
     assert sensitive_db not in text
     assert secret not in text
-    assert "env:DEMIS_DB_PASSWORD" not in text
+    assert "env:DEMIS_SECRET_PASSWORD" not in text
 
 
 def test_credential_material_repr_redacts_secret() -> None:
-    material = _resolver().resolve("env:DEMIS_DB_PASSWORD")
+    material = _resolver().resolve("env:DEMIS_SECRET_PASSWORD")
     assert "test-secret-value" not in repr(material)
     assert "test-secret-value" not in str(material)
     assert material.get_secret() == "test-secret-value"

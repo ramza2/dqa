@@ -124,7 +124,7 @@ def _ensure_profile(db_client: TestClient, **overrides: Any) -> dict[str, Any]:
         "port": 1521,
         "database_name": "DEMIS",
         "username": "dqa_ro",
-        "credential_secret_ref": "env:DEMIS_DB_PASSWORD",
+        "credential_secret_ref": "env:DEMIS_SECRET_PASSWORD",
     }
     body.update(overrides)
     # Drop keys explicitly set to None so optional fields stay unset.
@@ -215,7 +215,7 @@ def test_happy_preview_no_demis_call(
     assert "credential_secret_ref" not in body
     assert "demis.internal.example" not in response.text
     assert "dqa_ro" not in response.text
-    assert "env:DEMIS_DB_PASSWORD" not in response.text
+    assert "env:DEMIS_SECRET_PASSWORD" not in response.text
     assert response.headers["cache-control"] == "no-store, private"
 
 
@@ -434,7 +434,7 @@ def test_connection_profile_incomplete(
         == ExecutionPreviewErrorCode.CONNECTION_PROFILE_INCOMPLETE
     )
     assert "demis.internal.example" not in incomplete.text
-    assert "env:DEMIS_DB_PASSWORD" not in incomplete.text
+    assert "env:DEMIS_SECRET_PASSWORD" not in incomplete.text
 
 
 def test_caller_cannot_inject_sql_catalog_profile_limits() -> None:
@@ -620,7 +620,7 @@ def test_errors_and_logs_do_not_leak_secrets(
     assert response.status_code == 200
     joined = "\n".join(record.getMessage() for record in caplog.records)
     assert "demis.internal.example" not in joined
-    assert "env:DEMIS_DB_PASSWORD" not in joined
+    assert "env:DEMIS_SECRET_PASSWORD" not in joined
     assert "SELECT ward_cd" not in joined
 
 
