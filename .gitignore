@@ -222,3 +222,5 @@ __marimo__/
 /backups/
 *.dump
 *.dump.sha256
+
+demis_catalog_package_oracle_demis_mock_v2.zip
