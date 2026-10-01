@@ -32,7 +32,13 @@ def create_app(*, init_db_on_startup: bool = True) -> FastAPI:
 
 @asynccontextmanager
 async def _db_lifespan(_application: FastAPI):
-    """Initialize application schema on startup (no Alembic yet)."""
+    """Initialize application schema on startup.
+
+    Alembic (`alembic upgrade head`) is the preferred path for migration-owned
+    tables. ``create_all`` remains for historical catalog/template bootstrap
+    until full migration ownership covers those tables. Prefer migrate-then-start
+    on fresh databases (see docs/runtime-and-deployment.md).
+    """
     init_db_schema()
     yield
 

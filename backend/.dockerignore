@@ -13,3 +13,6 @@ tests/
 !README.md
 .env
 .env.*
+
+# Keep Alembic migration assets in the image build context.
+# Do not add rules that exclude alembic/ or alembic.ini.

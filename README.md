@@ -28,7 +28,7 @@ The imported and activated Catalog Package is the schema source of truth.
 - DQA DB: PostgreSQL
 - LLM: OpenAI-compatible provider abstraction
 - DEMIS connectivity: dedicated read-only DB adapter
-- Deployment target: Docker Compose + external Traefik
+- Deployment target: Docker Compose internal/on-premise (LAN frontend; Traefik optional)
 
 ## Repository layout
 
@@ -87,8 +87,29 @@ Start here:
 4. [Query Template Design](docs/query-template-design.md)
 5. [Security](docs/security.md)
 6. [Roadmap](docs/roadmap.md)
-7. [Runtime and Deployment](docs/runtime-and-deployment.md)\n8. [Cursor Handoff Guide](docs/cursor-handoff.md)
+7. [Runtime and Deployment](docs/runtime-and-deployment.md)
+8. [Cursor Handoff Guide](docs/cursor-handoff.md)
 9. [Bootstrap Design Review](docs/design-review.md)
+
+## On-prem deployment (foundation)
+
+Production/on-prem Compose keeps the frontend as the LAN entrypoint and leaves
+backend + DQA PostgreSQL internal. Production Compose **hardcodes**
+`APP_ENV=production` and `DQA_AUTH_PROVIDER=disabled` (`.env.onprem` cannot
+enable development auth). Development auth requires the explicit
+`docker-compose.onprem.dev.yml` overlay.
+
+```bash
+cp .env.onprem.example .env.onprem   # set DQA_DB_PASSWORD and bind IP
+./scripts/dqa-migrate.sh             # required before first up
+./scripts/dqa-up.sh                  # refuses to start backend until Alembic is at head
+./scripts/dqa-status.sh
+```
+
+See [Runtime and Deployment](docs/runtime-and-deployment.md) for Mode A/B,
+migration caveats, and outstanding blockers (production IdP + DEMIS DBMS).
+
+Do not treat this foundation as readiness for real DEMIS clinical use.
 
 ## Development workflow
 

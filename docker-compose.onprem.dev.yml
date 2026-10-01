@@ -1,0 +1,24 @@
+# Optional development / LAN-integration overlay for the on-prem stack.
+#
+# NEVER use this overlay for production.
+# This is the ONLY supported way to enable development auth against the on-prem stack.
+# Production Compose hardcodes APP_ENV=production + DQA_AUTH_PROVIDER=disabled;
+# .env.onprem cannot override those values.
+#
+# This overlay sets:
+#   APP_ENV=development
+#   DQA_AUTH_PROVIDER=dev_headers
+#
+# Usage:
+#   docker compose -f docker-compose.onprem.yml -f docker-compose.onprem.dev.yml --env-file .env.onprem up -d
+#
+# Notes:
+# - Production SPA builds never inject VITE_DQA_DEV_* headers.
+# - API clients (curl / scripts / Vite DEV server) must supply X-DQA-Dev-* headers.
+# - Do not put real actor/role values into production Compose or .env.onprem.
+
+services:
+  backend:
+    environment:
+      APP_ENV: development
+      DQA_AUTH_PROVIDER: dev_headers
