@@ -296,22 +296,21 @@ def test_credential_material_repr_redacts_secret() -> None:
     assert material.get_secret() == "test-secret-value"
 
 
-def test_no_public_execution_route_registered() -> None:
+def test_no_demis_http_surface_registered() -> None:
     from app.main import create_app
 
     app = create_app(init_db_on_startup=False)
     paths = set(app.openapi()["paths"].keys())
-    # Live execute / DEMIS adapter HTTP surfaces remain forbidden.
-    # Preview (`/api/v1/query-executions/preview`) is a separate eligibility API.
+    # Orchestrated execute is allowed; direct DEMIS adapter HTTP surfaces are not.
+    assert "/api/v1/query-executions/execute" in paths
+    assert "/api/v1/query-executions/preview" in paths
     forbidden_exact = {
-        "/api/v1/query-executions/execute",
         "/api/v1/demis",
         "/api/v1/readonly-query",
     }
     assert forbidden_exact.isdisjoint(paths)
     for path in paths:
         lowered = path.casefold()
-        assert not lowered.endswith("/execute"), path
         assert "/demis/" not in lowered and not lowered.endswith("/demis"), path
     assert "/api/v1/audit-events" in paths
     assert "post" not in {

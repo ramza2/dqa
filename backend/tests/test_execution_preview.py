@@ -624,11 +624,16 @@ def test_errors_and_logs_do_not_leak_secrets(
     assert "SELECT ward_cd" not in joined
 
 
-def test_no_execute_route_yet(db_client: TestClient) -> None:
+def test_execute_route_is_registered(db_client: TestClient) -> None:
     from app.main import create_app
 
     app = create_app(init_db_on_startup=False)
     paths = set(app.openapi()["paths"].keys())
     assert PREVIEW_PATH in paths
-    assert "/api/v1/query-executions/execute" not in paths
-    assert db_client.post("/api/v1/query-executions/execute", json={}).status_code == 404
+    assert "/api/v1/query-executions/execute" in paths
+    # Unauthenticated request is rejected (not 404).
+    assert db_client.post("/api/v1/query-executions/execute", json={}).status_code in {
+        401,
+        403,
+        422,
+    }

@@ -381,8 +381,8 @@ No query generation occurs here.
 `POST /api/v1/query-executions/preview` (requires `QUERY_OPERATE`) runs the
 deterministic production eligibility gate without contacting DEMIS.
 
-Reusable service: `evaluate_execution_eligibility(...)` (also intended for the
-future execute path). It re-checks template existence/source, current version,
+Reusable service: `evaluate_execution_eligibility(...)` (shared by preview and
+execute). It re-checks template existence/source, current version,
 APPROVED+enabled, Active Catalog revision/fingerprint match, SQL Safety PASS,
 parameter schema + undeclared-key rejection + deterministic validation, and an
 enabled Connection Profile with complete non-secret adapter metadata.
@@ -396,6 +396,52 @@ Preview does **not** resolve credentials, instantiate a live adapter, execute
 SQL, call LLM, return SQL/host/user/DSN, or write audit events.
 `row_limit` / `timeout_seconds` come only from the approved template version.
 Responses that include resolved parameter values use `Cache-Control: no-store, private`.
+
+### 3.9.2 Query execution orchestration
+
+`POST /api/v1/query-executions/execute` (requires `QUERY_OPERATE`) is the
+explicit user execution action. It always re-runs
+`evaluate_execution_eligibility()` and never trusts a prior preview response.
+
+Orchestration (`execute_query`):
+1. generate `audit_id`; durable-append `QUERY_REQUEST` / `STARTED`
+2. re-evaluate eligibility; on failure durable-append `DENIED` (no DEMIS access)
+3. if `execution_available=false`, durable-append `DENIED` with
+   `DEMIS_ADAPTER_UNAVAILABLE` and fail closed (no credential resolution)
+4. on eligibility success, durable-append `QUERY_REQUEST` / `SUCCEEDED`
+5. durable-append `QUERY_EXECUTION` / `STARTED` (if this fails, no credentials)
+6. build `ConnectionProfileSnapshot` server-side; create credential resolver +
+   read-only adapter via production factories (factory failures append
+   `QUERY_EXECUTION` / `FAILED`)
+7. build `ReadonlyQueryRequest` only from approved `version.sql_text`,
+   resolved parameters, and approved timeout/row_limit (unexpected contract
+   validation failures append `FAILED` with sanitized `EXECUTION_FAILED`)
+8. call `adapter.execute_readonly()` exactly once; success → durable-append
+   `SUCCEEDED` (elapsed/row_count/truncated + names only); adapter/runtime
+   failure → durable-append `FAILED` with sanitized `failure_category`
+
+Eligibility also rejects approved `sql_text` longer than the adapter
+`MAX_SQL_TEXT_LENGTH` contract (`TEMPLATE_NOT_ELIGIBLE`) before any
+credential/adapter access, without echoing SQL.
+
+Caller-controlled request fields match preview (`source_name`, `environment`,
+`template_id`, `version_id`, `parameters`). Caller-supplied SQL, catalog
+revision/fingerprint, connection profile id, row_limit, timeout, actor/audit
+metadata, and credentials are rejected.
+
+Response includes `audit_id`, catalog/template/version/profile ids, columns,
+rows, row_count, truncated, elapsed_ms. It never returns SQL, host/port,
+username, database/service name, credential ref/value, DSN, or raw driver
+errors. Headers: `Cache-Control: no-store, private` and `Pragma: no-cache`.
+
+**Production live DEMIS execution remains unavailable** until a concrete DEMIS
+DBMS adapter exists. With no registered driver, production execute fails closed
+after eligibility (`DEMIS_ADAPTER_UNAVAILABLE`) before credential resolution.
+Fake/test adapters are injectable only at the Python test boundary.
+
+Result privacy: rows may contain medical/sensitive data; they are never logged,
+never persisted, never placed in exceptions, never sent to an LLM, and
+summarization is not added.
 
 ### 3.10 Result Handling
 
@@ -436,7 +482,20 @@ Read API: `GET /api/v1/audit-events` and `GET /api/v1/audit-events/{audit_id}`
 histories and are not replaced by this table.
 
 Do not log full sensitive result sets, SQL text, request text, credentials,
-prompts, or LLM responses. Live execution paths are not yet wired to the writer.
+prompts, or LLM responses.
+
+Durable execution audit (`record_query_audit_event_durable`):
+- obtains its own short-lived DQA DB session and commits independently of the
+  request-scoped SQLAlchemy transaction (so HTTP errors / rollbacks cannot erase
+  the lifecycle)
+- reuses the same append-only validation as session-based
+  `record_query_audit_event()` (never accepts parameter values, result rows,
+  SQL, or secrets)
+- production safety gate: if initial `QUERY_REQUEST` / `STARTED` cannot be
+  persisted, do **not** execute DEMIS; fail closed with `AUDIT_UNAVAILABLE`
+- if final success/failure audit cannot be persisted after a read-only query,
+  do not return result rows; return sanitized `AUDIT_UNAVAILABLE`
+- session-based writer remains available for internal/tests
 
 ## 4. Initial technology choices
 

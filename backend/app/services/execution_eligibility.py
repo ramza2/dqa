@@ -15,7 +15,11 @@ from app.adapters.demis.factory import (
     is_concrete_demis_adapter_available,
     required_adapter_config_present,
 )
-from app.adapters.demis.types import MAX_ROW_LIMIT, MAX_TIMEOUT_SECONDS
+from app.adapters.demis.types import (
+    MAX_ROW_LIMIT,
+    MAX_SQL_TEXT_LENGTH,
+    MAX_TIMEOUT_SECONDS,
+)
 from app.adapters.execution.errors import (
     ExecutionPreviewError,
     ExecutionPreviewErrorCode,
@@ -90,6 +94,12 @@ def evaluate_execution_eligibility(
         raise ExecutionPreviewError(
             ExecutionPreviewErrorCode.CATALOG_MISMATCH,
             "query template catalog fingerprint does not match the active catalog",
+        )
+
+    if len(version.sql_text) > MAX_SQL_TEXT_LENGTH:
+        raise ExecutionPreviewError(
+            ExecutionPreviewErrorCode.TEMPLATE_NOT_ELIGIBLE,
+            "query template sql_text exceeds allowed production limits",
         )
 
     report = validate_sql_safety(version.sql_text, version.parameter_schema)

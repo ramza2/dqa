@@ -184,18 +184,25 @@ Scope:
 - no DEMIS driver / connection / execute API
 - Connection Profile and preview still store/check references only (no resolve)
 
-### PR 18 - Execution preview and execution service
-Status: preview + eligibility gate landed (`POST /api/v1/query-executions/preview`);
-actual execute endpoint / DEMIS call / audit wiring remain follow-up.
+### PR 18 - Execution preview and eligibility gate
+Status: landed (`POST /api/v1/query-executions/preview`).
 Scope:
 - complete production execution eligibility gate (reusable service)
 - executable eligibility checks (template/catalog/SQL/params/profile)
 - preview API (`QUERY_OPERATE`); `execution_available=false` while no concrete DEMIS adapter
-- explicit user execution action (not in this PR)
-- approved read-only execution (not in this PR)
-- normalized result (not in this PR)
-- audit write (not in this PR)
 - failure categories for preview/eligibility
+
+### PR 18b - Query execution service + durable audit
+Status: orchestration landed (`POST /api/v1/query-executions/execute`).
+Scope:
+- explicit user execution action (`QUERY_OPERATE`)
+- re-run eligibility independently of preview
+- durable audit writer (independent commit; fail closed on AUDIT_UNAVAILABLE)
+- QUERY_REQUEST / QUERY_EXECUTION lifecycle (STARTED|SUCCEEDED|DENIED|FAILED)
+- adapter factory + credential resolver wiring; normalized result response
+- production still fail-closed (`DEMIS_ADAPTER_UNAVAILABLE`) until concrete DEMIS adapter
+- fake adapter only via Python test DI (never HTTP/config/env selectable)
+- result rows never persisted/logged/LLM-egressed
 
 ### PR 19 - Query Assistant frontend
 Scope:
