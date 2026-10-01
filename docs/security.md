@@ -239,10 +239,17 @@ Protected in this foundation:
 - Template Recommendation
 - Parameter Extraction
 - Connection Profile management (`CONNECTION_PROFILE_MANAGE`, administrator only)
+- Catalog read (`CATALOG_READ`): active Catalog pointers/metadata query,
+  import history, activation history
+- Catalog management (`CATALOG_MANAGE`, administrator only): package validate,
+  package import, revision activation
 - Execution preview (`QUERY_OPERATE`; no DEMIS connection / no credential resolve)
 - Query execution form metadata (`QUERY_OPERATE`; parameter/environment projection
   without `TEMPLATE_READ` or `CONNECTION_PROFILE_MANAGE`)
 - Query execution (`QUERY_OPERATE`; durable audit; fail closed without concrete adapter)
+
+`query_operator` receives `CATALOG_READ` so Query Assistant can discover active
+Catalog sources without gaining package validate/import/activate rights.
 
 Connection Profile rules:
 - credentials are referenced, never stored as secret values
@@ -281,12 +288,10 @@ Execution form metadata rules:
 - exposes only enabled environments; never host/user/db/credential refs/profile ids
 
 Not yet covered (follow-up):
-- Catalog Package import / activation admin authorization
-- Catalog Explorer admin surfaces
 - OIDC/OAuth2/JWT verification, user directory, MFA, sessions
 - concrete DEMIS DBMS driver / live connectivity (blocked on confirmed requirements)
 - production credential secret-store resolver (beyond env-prefix boundary)
-
+- production IdentityProvider (Catalog RBAC closes authorization gaps only)
 ## 11. Production checklist
 
 Before real DEMIS access:

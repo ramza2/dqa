@@ -10,6 +10,8 @@ from app.adapters.catalog.activation_errors import (
     CatalogActivationErrorCode,
 )
 from app.adapters.db.deps import get_db_session
+from app.auth.dependencies import require_permission
+from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.catalog_package import (
     CatalogActivationEventSummary,
     CatalogActiveSummary,
@@ -27,6 +29,7 @@ activations_router = APIRouter(prefix="/api/v1/catalog/activations", tags=["cata
 @active_router.get("", response_model=list[CatalogActiveSummary])
 def list_active(
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> list[CatalogActiveSummary]:
     """List current active Catalog pointers (one per source)."""
     return [
@@ -46,6 +49,7 @@ def list_active(
 def get_active(
     source_name: str,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> CatalogActiveSummary:
     """Return the active Catalog pointer for one source_name."""
     try:
@@ -68,6 +72,7 @@ def list_activations(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> list[CatalogActivationEventSummary]:
     """List append-only activation history (newest first)."""
     events = list_activation_events(

@@ -71,16 +71,21 @@ Current provider:
   (`X-DQA-Dev-Actor`, `X-DQA-Dev-Roles`); rejected outside `development`/`test`
 
 Routes authorize via permissions (`TEMPLATE_READ`, `TEMPLATE_AUTHOR`,
-`TEMPLATE_APPROVE`, `QUERY_OPERATE`, `AUDIT_READ`), not raw role strings.
+`TEMPLATE_APPROVE`, `QUERY_OPERATE`, `AUDIT_READ`, `CONNECTION_PROFILE_MANAGE`,
+`CATALOG_READ`, `CATALOG_MANAGE`), not raw role strings.
 `administrator` resolves to all declared permissions.
+
+Role permission highlights:
+- `CATALOG_READ`: active/imported Catalog metadata and activation history
+  (granted to `viewer`, `template_author`, `template_approver`, `query_operator`,
+  `auditor`; required so Query Assistant source discovery works for operators)
+- `CATALOG_MANAGE`: package validate / import / activate (administrator only)
 
 Authenticated `actor_id` is propagated into Query Template lifecycle metadata
 (`created_by`, `approved_by`, review-event `actor`).
 
-This PR prioritizes the roadmap authorization points for template author /
-approver / operator / auditor. Catalog import/activation, Catalog Explorer,
-and Catalog Explorer authorization remain follow-up hardening.
-Health endpoints remain unauthenticated.
+Catalog Package validate/import/activate and Catalog Explorer/query APIs are
+permission-gated. Health endpoints remain unauthenticated.
 
 Authentication is not execution permission. Query execution still requires
 Connection Profile, SQL Safety, Active Catalog compatibility, read-only DEMIS
@@ -88,6 +93,9 @@ access, and audit.
 
 Author vs approver permissions are separated; optional actor-level
 separation-of-duty policy may be added later.
+
+Production still requires an approved IdentityProvider; this Catalog RBAC
+hardening only closes authorization gaps under the existing provider abstraction.
 
 ### 3.1 Package Import / Validation
 

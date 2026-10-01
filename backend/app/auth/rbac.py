@@ -7,20 +7,36 @@ from collections.abc import Iterable
 from app.auth.models import AuthenticatedActor, Permission, Role
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
-    Role.VIEWER: frozenset({Permission.TEMPLATE_READ}),
+    Role.VIEWER: frozenset(
+        {Permission.TEMPLATE_READ, Permission.CATALOG_READ}
+    ),
     Role.TEMPLATE_AUTHOR: frozenset(
-        {Permission.TEMPLATE_READ, Permission.TEMPLATE_AUTHOR}
+        {
+            Permission.TEMPLATE_READ,
+            Permission.TEMPLATE_AUTHOR,
+            Permission.CATALOG_READ,
+        }
     ),
     Role.TEMPLATE_APPROVER: frozenset(
         {
             Permission.TEMPLATE_READ,
             Permission.TEMPLATE_APPROVE,
             Permission.AUDIT_READ,
+            Permission.CATALOG_READ,
         }
     ),
-    Role.QUERY_OPERATOR: frozenset({Permission.QUERY_OPERATE}),
-    Role.AUDITOR: frozenset({Permission.TEMPLATE_READ, Permission.AUDIT_READ}),
-    # Administrator is resolved specially to all declared permissions.
+    Role.QUERY_OPERATOR: frozenset(
+        {Permission.QUERY_OPERATE, Permission.CATALOG_READ}
+    ),
+    Role.AUDITOR: frozenset(
+        {
+            Permission.TEMPLATE_READ,
+            Permission.AUDIT_READ,
+            Permission.CATALOG_READ,
+        }
+    ),
+    # Administrator is resolved specially to all declared permissions
+    # (including CATALOG_MANAGE). Do not grant CATALOG_MANAGE to other roles.
     Role.ADMINISTRATOR: frozenset(Permission),
 }
 

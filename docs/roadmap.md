@@ -240,6 +240,16 @@ Scope:
 - optional Traefik override only if an external-access requirement exists (not added)
 - outstanding blockers documented: production IdP + concrete DEMIS DBMS/driver
 
+### PR 20b - Catalog RBAC hardening
+Status: landed (`feat/catalog-rbac-hardening`).
+Scope:
+- `CATALOG_READ` / `CATALOG_MANAGE` permissions
+- role mapping: read for viewer/author/approver/operator/auditor; manage admin-only
+- protect active Catalog / query / import history / activation history reads
+- protect package validate / import / activate management paths
+- `query_operator` retains Catalog read for Query Assistant source discovery
+- no production IdP / DEMIS adapter / frontend redesign / rate limiting
+
 ### PR 21 - Hardening
 Scope:
 - rate/size limits
@@ -247,7 +257,7 @@ Scope:
 - security regression suite
 - backup/restore guidance
 - audit retention
-- RBAC refinement
+- RBAC refinement (beyond Catalog)
 - data-egress policy enforcement
 
 ## Exit criteria before real DEMIS use

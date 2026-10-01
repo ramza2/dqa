@@ -9,6 +9,8 @@ from app.adapters.catalog.activation_errors import CatalogActivationError
 from app.adapters.db.deps import get_db_session
 from app.api.routes.catalog_active import activation_http_error
 from app.api.routes.catalog_packages import to_detail, to_summary
+from app.auth.dependencies import require_permission
+from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.catalog_package import (
     CatalogActivateResult,
     CatalogImportRevisionDetail,
@@ -28,6 +30,7 @@ def list_imports(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> list[CatalogImportRevisionSummary]:
     """List immutable Catalog Package import revisions (newest first)."""
     revisions = list_catalog_imports(
@@ -51,6 +54,7 @@ def list_imports(
 def activate_import(
     revision_id: int,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_MANAGE)),
 ) -> CatalogActivateResult:
     """Activate a READY+VALID import revision (source_name taken from the revision)."""
     try:
@@ -73,6 +77,7 @@ def activate_import(
 def get_import(
     revision_id: int,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> CatalogImportRevisionDetail:
     """Return metadata for one Catalog Package import revision."""
     revision = get_catalog_import(session, revision_id)

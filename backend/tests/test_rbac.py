@@ -11,12 +11,18 @@ from app.auth.rbac import ALL_PERMISSIONS, actor_has_permission, permissions_for
 
 
 def test_viewer_permissions() -> None:
-    assert permissions_for_roles({Role.VIEWER}) == frozenset({Permission.TEMPLATE_READ})
+    assert permissions_for_roles({Role.VIEWER}) == frozenset(
+        {Permission.TEMPLATE_READ, Permission.CATALOG_READ}
+    )
 
 
 def test_template_author_permissions() -> None:
     assert permissions_for_roles({Role.TEMPLATE_AUTHOR}) == frozenset(
-        {Permission.TEMPLATE_READ, Permission.TEMPLATE_AUTHOR}
+        {
+            Permission.TEMPLATE_READ,
+            Permission.TEMPLATE_AUTHOR,
+            Permission.CATALOG_READ,
+        }
     )
 
 
@@ -26,19 +32,24 @@ def test_template_approver_permissions() -> None:
             Permission.TEMPLATE_READ,
             Permission.TEMPLATE_APPROVE,
             Permission.AUDIT_READ,
+            Permission.CATALOG_READ,
         }
     )
 
 
 def test_query_operator_permissions() -> None:
     assert permissions_for_roles({Role.QUERY_OPERATOR}) == frozenset(
-        {Permission.QUERY_OPERATE}
+        {Permission.QUERY_OPERATE, Permission.CATALOG_READ}
     )
 
 
 def test_auditor_permissions() -> None:
     assert permissions_for_roles({Role.AUDITOR}) == frozenset(
-        {Permission.TEMPLATE_READ, Permission.AUDIT_READ}
+        {
+            Permission.TEMPLATE_READ,
+            Permission.AUDIT_READ,
+            Permission.CATALOG_READ,
+        }
     )
 
 
@@ -48,13 +59,32 @@ def test_administrator_has_all_declared_permissions() -> None:
     assert granted == frozenset(Permission)
     for permission in Permission:
         assert permission in granted
+    assert Permission.CATALOG_READ in granted
+    assert Permission.CATALOG_MANAGE in granted
 
 
 def test_multi_role_union() -> None:
     granted = permissions_for_roles({Role.VIEWER, Role.QUERY_OPERATOR})
     assert granted == frozenset(
-        {Permission.TEMPLATE_READ, Permission.QUERY_OPERATE}
+        {
+            Permission.TEMPLATE_READ,
+            Permission.QUERY_OPERATE,
+            Permission.CATALOG_READ,
+        }
     )
+
+
+def test_catalog_manage_only_via_administrator() -> None:
+    for role in (
+        Role.VIEWER,
+        Role.TEMPLATE_AUTHOR,
+        Role.TEMPLATE_APPROVER,
+        Role.QUERY_OPERATOR,
+        Role.AUDITOR,
+    ):
+        assert Permission.CATALOG_MANAGE not in permissions_for_roles({role})
+    assert Permission.CATALOG_MANAGE in permissions_for_roles({Role.ADMINISTRATOR})
+
 
 
 def test_actor_has_permission_helper() -> None:

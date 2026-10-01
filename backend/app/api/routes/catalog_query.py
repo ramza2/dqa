@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.adapters.catalog.query_errors import CatalogQueryError, CatalogQueryErrorCode
 from app.adapters.db.deps import get_db_session
+from app.auth.dependencies import require_permission
+from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.catalog_query import (
     CatalogCategoryListResponse,
     CatalogColumnListResponse,
@@ -69,6 +71,7 @@ def get_tables(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> CatalogTableListResponse:
     """List tables from the current active Catalog revision."""
     try:
@@ -95,6 +98,7 @@ def get_table_detail(
     schema_name: str,
     table_name: str,
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> CatalogTableDetailResponse:
     """Return one schema-qualified table from the active Catalog revision."""
     try:
@@ -121,6 +125,7 @@ def get_columns(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> CatalogColumnListResponse:
     """List columns from the current active Catalog revision."""
     try:
@@ -150,6 +155,7 @@ def get_relations(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> CatalogRelationListResponse:
     """List FK relations from the current active Catalog revision."""
     try:
@@ -176,6 +182,7 @@ def get_indexes(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> CatalogIndexListResponse:
     """List indexes from the current active Catalog revision."""
     try:
@@ -200,6 +207,7 @@ def get_categories(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
 ) -> CatalogCategoryListResponse:
     """List categories and table assignments from the active Catalog revision."""
     try:
