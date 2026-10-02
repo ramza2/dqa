@@ -32,6 +32,7 @@ services:
     environment:
       APP_ENV: development
       DQA_AUTH_PROVIDER: dev_headers
+      LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST: ${LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST:-false}
 
   frontend:
     build:
