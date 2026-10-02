@@ -109,3 +109,24 @@ Default development fixture:
 Values can be overridden with `DQA_SMOKE_*` environment variables.
 
 The script uses the development `dev_headers` identity, does not print result rows or credentials, and must not be used against production or real clinical data.
+
+### Oracle mock security smoke test
+
+Development/LAN Oracle mock integration only.
+
+Run: `./scripts/dqa-oracle-mock-security-smoke.sh`
+
+The smoke test verifies fail-closed parameter validation, execution RBAC, audit RBAC, and audit parameter redaction without changing Catalog, Query Template, Connection Profile, or DEMIS data.
+
+It checks:
+- missing required parameter -> `PARAMETER_INVALID`
+- invalid parameter pattern -> `PARAMETER_INVALID`
+- undeclared parameter -> `PARAMETER_UNDECLARED`
+- viewer execution -> `AUTHORIZATION_DENIED`
+- viewer audit read -> `AUTHORIZATION_DENIED`
+- audit logging policy -> `NAMES_ONLY`
+- actual parameter values are not exposed in audit responses
+
+Values can be overridden with `DQA_SMOKE_*` environment variables.
+
+The script uses development `dev_headers` identities and must not be used against production or real clinical data.
