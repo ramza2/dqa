@@ -90,3 +90,22 @@ docker compose -f docker-compose.onprem.yml -f docker-compose.onprem.dev.yml \
 Never enable `dev_headers` on a production host.
 
 Do not place credentials in scripts.
+
+### Oracle mock E2E smoke test
+
+Development/LAN Oracle mock integration only.
+
+Run: `./scripts/dqa-oracle-mock-smoke.sh`
+
+The smoke test verifies recommendation → parameter extraction → execution preview → read-only Oracle execution → audit lifecycle.
+
+Default development fixture:
+- source: `oracle_demis_mock`
+- environment: `development`
+- template: `demis.code-master.by-group`
+- parameter: `cd_grp_id=DQA_TEST`
+- expected rows: `3`
+
+Values can be overridden with `DQA_SMOKE_*` environment variables.
+
+The script uses the development `dev_headers` identity, does not print result rows or credentials, and must not be used against production or real clinical data.
