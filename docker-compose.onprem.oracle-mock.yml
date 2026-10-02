@@ -1,0 +1,30 @@
+# Development-only Oracle mock integration overlay.
+#
+# NEVER use this overlay for production.
+# Requires:
+#   - external Docker network: demis-schema-search-poc_demis-net
+#   - DEMIS_SECRET_ORACLE_PASSWORD in the operator shell/environment
+#
+# Use together with:
+#   docker-compose.onprem.yml
+#   docker-compose.onprem.dev.yml
+#
+# Example:
+#   docker compose --env-file .env.onprem \
+#     -f docker-compose.onprem.yml \
+#     -f docker-compose.onprem.dev.yml \
+#     -f docker-compose.onprem.oracle-mock.yml up -d --build
+
+networks:
+  demis-mock:
+    external: true
+    name: demis-schema-search-poc_demis-net
+
+services:
+  backend:
+    environment:
+      DEMIS_SECRET_ORACLE_PASSWORD: ${DEMIS_SECRET_ORACLE_PASSWORD:?DEMIS Oracle test credential is required}
+    networks:
+      - edge
+      - data
+      - demis-mock
