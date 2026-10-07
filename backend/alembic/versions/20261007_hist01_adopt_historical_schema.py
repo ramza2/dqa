@@ -17,7 +17,7 @@ Tables adopted (create if missing; adopt only when schema-compatible):
 
 Existing tables are never ALTER/repair/drop/recreated by this revision.
 Incompatible legacy schemas fail closed before the revision is stamped.
-Runtime ``create_all`` was removed in Phase 24-B (Alembic-only lifecycle).
+Runtime ``create_all`` is intentionally left in place by this PR.
 """
 
 from __future__ import annotations

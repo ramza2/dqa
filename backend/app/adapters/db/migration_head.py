@@ -82,15 +82,20 @@ def inspect_migration_head(
             detail="no Alembic heads in script directory",
         )
 
-    owns_engine = engine is None
-    bind: Engine
-    if engine is None:
-        # Throwaway engine; never log URL (may embed credentials).
-        bind = create_engine(get_settings().database_url)
-    else:
-        bind = engine
-
+    # settings/URL/engine creation + connect/inspection share one fail-closed
+    # boundary so raw exceptions (including credential-bearing messages) never
+    # escape. Injected engines are not disposed by this helper.
+    owns_engine = False
+    bind: Engine | None = None
+    current: tuple[str, ...] = ()
     try:
+        if engine is None:
+            # Throwaway engine; never log URL (may embed credentials).
+            bind = create_engine(get_settings().database_url)
+            owns_engine = True
+        else:
+            bind = engine
+
         with bind.connect() as conn:
             has_version_table = conn.execute(
                 text(
@@ -118,7 +123,7 @@ def inspect_migration_head(
             detail=f"database/Alembic error ({exc.__class__.__name__})",
         )
     finally:
-        if owns_engine:
+        if owns_engine and bind is not None:
             bind.dispose()
 
     if not current:

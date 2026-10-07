@@ -194,6 +194,49 @@ def test_migration_head_checker_is_non_mutating(
     assert after_count == before_count == 1
 
 
+def test_engine_creation_failure_sanitizes_secret_marker(
+    monkeypatch: pytest.MonkeyPatch,
+    test_settings_env: dict[str, str],
+) -> None:
+    """Engine/settings failures must not leak DSN/password markers publicly."""
+    from app.adapters.db.migration_head import (
+        MigrationHeadError,
+        assert_migrations_at_head,
+        inspect_migration_head,
+        status_message,
+    )
+
+    secret_marker = (
+        "SUPER_SECRET_DSN_MARKER_postgresql://dqa:hunter2@evil-host.example:5432/dqa"
+    )
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError(f"create_engine failed with {secret_marker}")
+
+    monkeypatch.setattr("sqlalchemy.create_engine", _boom)
+    _clear_caches()
+
+    status = inspect_migration_head()  # self-managed engine path
+    assert status.ok is False
+    assert status.reason_code == "database_error"
+    assert status.detail == "database/Alembic error (RuntimeError)"
+    public = status_message(status)
+    assert secret_marker not in status.detail
+    assert secret_marker not in public
+    assert "hunter2" not in public
+    assert "evil-host" not in public
+    assert "postgresql://" not in public.casefold()
+
+    with pytest.raises(MigrationHeadError) as exc_info:
+        assert_migrations_at_head()
+    raised = str(exc_info.value)
+    assert secret_marker not in raised
+    assert "hunter2" not in raised
+    assert "evil-host" not in raised
+    assert "postgresql://" not in raised.casefold()
+    assert "database/Alembic error (RuntimeError)" in raised
+
+
 def test_cli_check_at_head_reuses_application_checker(
     test_settings_env: dict[str, str],
 ) -> None:
