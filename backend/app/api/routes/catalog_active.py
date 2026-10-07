@@ -10,6 +10,7 @@ from app.adapters.catalog.activation_errors import (
     CatalogActivationErrorCode,
 )
 from app.adapters.db.deps import get_db_session
+from app.api.public_errors import PublicErrorSpec, build_public_http_error
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.catalog_package import (
@@ -24,6 +25,21 @@ from app.services.catalog_active import (
 
 active_router = APIRouter(prefix="/api/v1/catalog/active", tags=["catalog-active"])
 activations_router = APIRouter(prefix="/api/v1/catalog/activations", tags=["catalog-activations"])
+
+_ACTIVATION_PUBLIC_ERRORS = {
+    CatalogActivationErrorCode.IMPORT_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "catalog import revision not found",
+    ),
+    CatalogActivationErrorCode.ACTIVE_REVISION_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "active catalog revision not found",
+    ),
+    CatalogActivationErrorCode.REVISION_NOT_ACTIVATABLE: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "catalog revision is not activatable",
+    ),
+}
 
 
 @active_router.get("", response_model=list[CatalogActiveSummary])
@@ -93,15 +109,10 @@ def list_activations(
 
 
 def activation_http_error(exc: CatalogActivationError) -> HTTPException:
-    if exc.code == CatalogActivationErrorCode.IMPORT_NOT_FOUND:
-        status_code = status.HTTP_404_NOT_FOUND
-    elif exc.code == CatalogActivationErrorCode.ACTIVE_REVISION_NOT_FOUND:
-        status_code = status.HTTP_404_NOT_FOUND
-    elif exc.code == CatalogActivationErrorCode.REVISION_NOT_ACTIVATABLE:
-        status_code = status.HTTP_409_CONFLICT
-    else:
-        status_code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": exc.code, "message": exc.issue.message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_ACTIVATION_PUBLIC_ERRORS,
+        fallback_code=CatalogActivationErrorCode.INTERNAL_ERROR,
+        fallback_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        fallback_message="catalog activation operation failed",
     )
