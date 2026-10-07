@@ -36,6 +36,10 @@ from app.schemas.parameter_extraction import (
 )
 from app.schemas.query_template import QueryTemplateParameter
 from app.services.catalog_active import get_active_catalog
+from app.services.llm_egress_policy import (
+    LLMEgressPayloadClass,
+    is_llm_egress_allowed,
+)
 from app.services.parameter_validation import validate_parameter_values
 from app.services.query_template import APPROVAL_APPROVED
 from app.services.sql_safety import validate_sql_safety
@@ -110,10 +114,14 @@ def extract_query_parameters(
             sensitive_parameter_names=sensitive_names,
         )
 
-    if not cfg.llm_parameter_extraction_allow_raw_request:
+    if not is_llm_egress_allowed(
+        cfg,
+        purpose=LLMRequestPurpose.PARAMETER_EXTRACTION,
+        payload_class=LLMEgressPayloadClass.RAW_REQUEST_TEXT,
+    ):
         raise ParameterExtractionError(
             ParameterExtractionErrorCode.EGRESS_NOT_ALLOWED,
-            "parameter extraction raw-request egress is not enabled",
+            "parameter extraction raw-request egress is not approved",
         )
 
     messages = _build_messages(
