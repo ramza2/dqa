@@ -93,6 +93,12 @@ Provider boundary (`app/adapters/llm`):
   into exception messages
 - sanitize HTTP failures to status-level messages (e.g. "LLM provider returned HTTP 500")
 - do not expose a public arbitrary `/chat` proxy
+- Recommendation and Parameter Extraction HTTP boundaries allowlist stable
+  error codes and static public messages; raw typed-exception messages never
+  cross the API boundary
+- unknown/unreviewed typed errors fail closed to
+  `RECOMMENDATION_INTERNAL_ERROR` or `PARAMETER_EXTRACTION_INTERNAL_ERROR`
+  (HTTP 500) with generic static messages
 - do not implement query-result summarization or any path that sends result rows
   to an LLM until an approved data-egress policy exists
 
