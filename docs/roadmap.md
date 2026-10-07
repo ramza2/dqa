@@ -337,7 +337,9 @@ Scope:
   `catalog_activation_events`, `query_templates`, `query_template_versions`,
   `query_template_review_events`
 - fresh DB: `alembic upgrade head` creates full DQA schema
-- legacy DB: existing tables are skipped (no drop/recreate); rows preserved
+- legacy DB: existing tables are adopted only when schema-compatible
+  (columns/PK/uniques/indexes/FKs); incompatible schemas fail closed
+  (no stamp/ALTER/repair); compatible create_all rows preserved
 - downgrade is non-destructive (revision pointer only)
 - runtime `create_all` / `init_db_schema` unchanged in this PR
 

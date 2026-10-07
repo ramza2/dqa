@@ -155,8 +155,11 @@ Historical caveat:
   phase; runtime `create_all` removal is deferred to a later hardening PR
 - recommended fresh-DB order: **migrate first, then start backend**
 - `20261007_hist01` is an adoption migration: existing create_all tables are
-  kept (no drop/recreate); downgrade is intentionally non-destructive so
-  Catalog/template history is not deleted
+  kept (no drop/recreate) only when their schema matches the hist01 contract
+  (required columns/nullability/type family, PK, uniques, indexes, FKs);
+  incompatible legacy schemas fail closed without stamp/ALTER/repair
+- downgrade is intentionally non-destructive so Catalog/template history is
+  not deleted
 - never run destructive downgrades automatically
 
 ## 7. Operational scripts
