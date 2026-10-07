@@ -306,6 +306,8 @@ Scope:
 - rate/size policy tuning after concurrency requirements are confirmed
 - operational error handling expansion
   - public DEMIS adapter errors use allowlisted codes + static sanitized messages
+  - Recommendation/Parameter Extraction public errors use shared allowlisted
+    contracts; unknown typed errors normalize to generic internal-error codes
 - security regression suite growth
   - recommendation LLM call-site egress denial regression
   - cross-cutting API role/permission matrix across representative protected routes
