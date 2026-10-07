@@ -53,8 +53,11 @@ def test_alembic_chain_includes_audit_revision() -> None:
     rev = script.get_revision("20260929_audit01")
     assert rev is not None
     assert rev.down_revision == "20260929_cp01"
+    hist = script.get_revision("20261007_hist01")
+    assert hist is not None
+    assert hist.down_revision == "20260929_audit01"
     heads = script.get_heads()
-    assert "20260929_audit01" in heads
+    assert list(heads) == ["20261007_hist01"]
 
 
 def test_record_and_list_get_audit_events(
@@ -288,7 +291,7 @@ def test_audit_read_permission_mapping_unchanged() -> None:
 
 
 def test_migration_upgrade_chain(test_settings_env: dict[str, str]) -> None:
-    """cp01 -> audit01 upgrade works when starting from stamped cp01."""
+    """cp01 -> audit01 -> hist01 upgrade works when starting from stamped cp01."""
     from alembic import command
     from alembic.config import Config
 
@@ -298,6 +301,15 @@ def test_migration_upgrade_chain(test_settings_env: dict[str, str]) -> None:
     engine = get_engine()
     with engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS query_audit_events CASCADE"))
+        for name in (
+            "query_template_review_events",
+            "query_template_versions",
+            "query_templates",
+            "catalog_activation_events",
+            "catalog_active_revisions",
+            "catalog_import_revisions",
+        ):
+            conn.execute(text(f"DROP TABLE IF EXISTS {name} CASCADE"))
         # Ensure alembic_version exists and points at cp01 when table may already exist.
         if inspect(engine).has_table("alembic_version"):
             conn.execute(text("DELETE FROM alembic_version"))
@@ -315,6 +327,8 @@ def test_migration_upgrade_chain(test_settings_env: dict[str, str]) -> None:
     cfg = Config("alembic.ini")
     command.upgrade(cfg, "head")
     assert inspect(engine).has_table("query_audit_events")
+    assert inspect(engine).has_table("catalog_import_revisions")
+    assert inspect(engine).has_table("query_templates")
     with engine.begin() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert version == "20260929_audit01"
+    assert version == "20261007_hist01"
