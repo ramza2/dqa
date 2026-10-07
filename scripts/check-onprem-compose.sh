@@ -16,8 +16,10 @@ ENV_EXAMPLE="${ROOT}/.env.onprem.example"
 COMMON="${ROOT}/scripts/dqa-common.sh"
 UP="${ROOT}/scripts/dqa-up.sh"
 MIGRATE="${ROOT}/scripts/dqa-migrate.sh"
+READINESS="${ROOT}/scripts/dqa-readiness.sh"
 DOWN="${ROOT}/scripts/dqa-down.sh"
 CHECK_AT_HEAD="${ROOT}/backend/alembic/check_at_head.py"
+READINESS_CLI="${ROOT}/backend/app/cli/production_readiness.py"
 NGINX_CONF="${ROOT}/frontend/nginx.conf"
 NGINX_MAIN="${ROOT}/frontend/nginx.main.conf"
 NGINX_PROXY="${ROOT}/frontend/dqa_proxy_params.conf"
@@ -120,6 +122,17 @@ if grep -nE 'down[[:space:]].*-v|down[[:space:]].*--volumes' "${DOWN}" >/dev/nul
 fi
 grep -q 'check_at_head' "${COMMON}" || fail "migration preflight should use Alembic check_at_head helper"
 pass "migration-order helpers present; dqa-up does not auto-upgrade; down preserves volume"
+
+# --- Production readiness report (read-only; no DEMIS probe) ---
+[[ -x "${READINESS}" ]] || fail "dqa-readiness.sh must exist and be executable"
+[[ -f "${READINESS_CLI}" ]] || fail "missing production readiness CLI module"
+grep -q -- '--source-name' "${READINESS}" || fail "dqa-readiness.sh must require --source-name"
+grep -q -- '--environment' "${READINESS}" || fail "dqa-readiness.sh must require --environment"
+grep -q 'python -m app.cli.production_readiness' "${READINESS}" || fail "dqa-readiness.sh must invoke readiness CLI"
+if grep -nE 'create_credential_resolver|probe_readonly|oracledb\.connect' "${READINESS}" "${READINESS_CLI}" >/dev/null; then
+  fail "readiness CLI/script must not reference credential resolve / live probe / oracle connect"
+fi
+pass "production readiness script is present and read-only"
 
 # --- Nginx hardening assertions ---
 grep -q 'server_tokens off' "${NGINX_MAIN}" || fail "nginx.main.conf must set server_tokens off"

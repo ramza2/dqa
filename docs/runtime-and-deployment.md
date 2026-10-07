@@ -167,6 +167,7 @@ From repository root (requires Docker + `.env.onprem`):
 ```bash
 ./scripts/dqa-migrate.sh
 ./scripts/dqa-up.sh
+./scripts/dqa-readiness.sh --source-name <source> --environment <env>
 ./scripts/dqa-status.sh
 ./scripts/dqa-logs.sh
 ./scripts/dqa-down.sh
@@ -175,6 +176,16 @@ From repository root (requires Docker + `.env.onprem`):
 ./scripts/dqa-restore.sh /path/to/dqa_UTC.dump RESTORE
 ./scripts/dqa-audit-retention-status.sh
 ./scripts/check-onprem-compose.sh   # static (+ optional Docker) regression checks
+```
+
+Operator preflight sequence (Production Readiness Report is distinct from container health):
+
+```bash
+./scripts/dqa-migrate.sh
+./scripts/dqa-up.sh
+./scripts/dqa-readiness.sh --source-name oracle_demis_mock --environment development
+# explicit live DEMIS probe remains a separate administrator action:
+# POST /api/v1/connection-profiles/{profile_id}/test-connection
 ```
 
 Behavior:
@@ -276,13 +287,19 @@ No Traefik requirement has been confirmed for current on-prem use.
 
 Backend:
 - `GET /health` — liveness (process/API alive)
-- `GET /health/ready` — readiness (DQA PostgreSQL reachable)
+- `GET /health/ready` — readiness (DQA PostgreSQL reachable only)
 
 Frontend healthcheck verifies the nginx HTTP serving endpoint.
 
+`/health/ready` must not be confused with Production Readiness Report
+(`./scripts/dqa-readiness.sh`). The report is an operator preflight over
+migrations, auth, Catalog, templates, Connection Profile, and adapter
+registration. It never claims container health and never opens DEMIS.
+
 DEMIS adapter absence and LLM unavailability are capability/dependency diagnostics, not container health failures.
 
-Connection Profile live connectivity is not probed at startup or via GET diagnostics.
+Connection Profile live connectivity is not probed at startup, via GET diagnostics,
+or via the Production Readiness Report.
 Administrators may run an explicit live probe with
 `POST /api/v1/connection-profiles/{profile_id}/test-connection` after migrate/up.
 

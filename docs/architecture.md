@@ -155,6 +155,12 @@ Activation of a Catalog revision does not automatically create or modify a live 
 GET diagnostics never resolve secrets or open sockets. Live connectivity is attempted only
 when an administrator explicitly calls the test-connection endpoint.
 
+Production Readiness Report (`./scripts/dqa-readiness.sh`) is metadata/config inspection only:
+it reuses migration-head, Catalog, template, and profile checks without credential resolution,
+adapter factory construction for live use, or DEMIS socket/probe calls. Live connectivity and
+external DEMIS privilege verification remain ACTION_REQUIRED until operators resolve them outside
+the report. It is not an HTTP API and is not `/health/ready`.
+
 Before execution, DQA must verify that:
 - the selected Query Template is compatible with the active Catalog
 - the connection profile is enabled

@@ -353,13 +353,24 @@ Scope:
 - authoritative workflow remains migrate then up (no auto-migrate)
 
 ### PR 25-A - Explicit Connection Profile live DEMIS probe
-Status: in progress (`feat/live-demis-connection-probe`).
+Status: completed (merged via `feat/live-demis-connection-probe`).
 Scope:
 - `POST /api/v1/connection-profiles/{profile_id}/test-connection` (administrator only)
 - GET diagnostics remain configuration-only (no credential resolve / socket connect)
 - production credential resolver + DEMIS adapter factory + Oracle `probe_readonly()`
 - sanitized bounded failure categories; no probe result persistence
 - no execution eligibility gate changes; no new Alembic revision
+
+### PR 25-B - Production Readiness Report
+Status: in progress (`feat/production-readiness-report`).
+Scope:
+- read-only operator preflight (`./scripts/dqa-readiness.sh --source-name ... --environment ...`)
+- checks: migrations, auth provider, active Catalog, eligible Query Templates,
+  Connection Profile, DEMIS adapter registration, live connectivity ACTION_REQUIRED,
+  external read-only privilege ACTION_REQUIRED
+- never resolves DEMIS credentials, never opens DEMIS sockets, never mutates schema/data
+- distinct from `/health/ready` (DQA PostgreSQL reachability only)
+- no HTTP readiness API in this PR; no new Alembic revision
 
 ## Exit criteria before real DEMIS use
 
