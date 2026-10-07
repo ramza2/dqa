@@ -179,7 +179,7 @@ Scope:
 - bound SQL + parameters; `SET TRANSACTION READ ONLY` before SELECT
 - call timeout; row_limit+1 truncation; rollback/close cleanup
 - sanitized CONNECTION_FAILED / TIMEOUT / EXECUTION_FAILED mapping
-- no Instant Client / thick mode; no live mock network wiring in-repo
+- no Instant Client / thick mode; development-only Oracle mock network wiring is provided by `docker-compose.onprem.oracle-mock.yml`
 - fake/test/mock/memory remain non-selectable
 
 ### PR 17b - Environment credential resolver
@@ -196,7 +196,7 @@ Status: landed (`POST /api/v1/query-executions/preview`).
 Scope:
 - complete production execution eligibility gate (reusable service)
 - executable eligibility checks (template/catalog/SQL/params/profile)
-- preview API (`QUERY_OPERATE`); `execution_available=false` while no concrete DEMIS adapter
+- preview API (`QUERY_OPERATE`); Oracle is production-selectable while unsupported DBMS/profile paths fail closed
 - failure categories for preview/eligibility
 
 ### PR 18b - Query execution service + durable audit
@@ -207,7 +207,7 @@ Scope:
 - durable audit writer (independent commit; fail closed on AUDIT_UNAVAILABLE)
 - QUERY_REQUEST / QUERY_EXECUTION lifecycle (STARTED|SUCCEEDED|DENIED|FAILED)
 - adapter factory + credential resolver wiring; normalized result response
-- production still fail-closed (`DEMIS_ADAPTER_UNAVAILABLE`) until concrete DEMIS adapter
+- Oracle concrete adapter is selectable; unsupported DBMS, invalid profile, and unavailable credential paths remain fail closed
 - fake adapter only via Python test DI (never HTTP/config/env selectable)
 - result rows never persisted/logged/LLM-egressed
 
@@ -226,8 +226,8 @@ Scope:
 - in-app Query Assistant / Catalog Explorer navigation (default: Assistant)
 - natural-language recommendation → form metadata → optional AI extraction
 - parameter confirmation, execution preview, explicit execute, result + audit_id
-- live execute remains blocked until a concrete DEMIS adapter exists
-  (`execution_available=false` / `DEMIS_ADAPTER_UNAVAILABLE`)
+- Oracle mock development integration exercises preview/execute end to end
+- production use remains blocked until production IdP and real DEMIS access/privilege validation are complete
 
 ## Phase 7 - Operations
 
@@ -245,7 +245,7 @@ Scope:
 - health/readiness (`/health`, `/health/ready`; frontend HTTP healthcheck)
 - operational scripts: up / status / logs / down / migrate
 - optional Traefik override only if an external-access requirement exists (not added)
-- outstanding blockers documented: production IdP + concrete DEMIS DBMS/driver
+- outstanding blockers documented: production IdP + real DEMIS endpoint/account/network/privilege validation
 
 ### PR 20b - Catalog RBAC hardening
 Status: landed (`feat/catalog-rbac-hardening`).
@@ -255,7 +255,7 @@ Scope:
 - protect active Catalog / query / import history / activation history reads
 - protect package validate / import / activate management paths
 - `query_operator` retains Catalog read for Query Assistant source discovery
-- no production IdP / DEMIS adapter / frontend redesign / rate limiting
+- not part of this PR: production IdP, DEMIS adapter implementation, frontend redesign, or rate limiting
 
 ### PR 21 - Runtime security hardening (Phase 1)
 Status: landed (`feat/runtime-security-hardening`).
@@ -269,10 +269,10 @@ Scope:
 - on-prem checker no longer pip-installs dependencies
 - rate limiting deferred pending traffic/concurrency requirements
 - HSTS deferred to approved TLS termination
-- no production IdP / DEMIS driver / frontend redesign
+- not part of this PR: production IdP, DEMIS driver implementation, or frontend redesign
 
 ### PR 22 - DQA DB backup / restore + audit retention foundations
-Status: Draft PR (`feat/db-backup-audit-retention`).
+Status: landed (GitHub PR #28, `feat/db-backup-audit-retention`).
 Scope:
 - operator `dqa-backup.sh` (`pg_dump -Fc` via `dqa-db`, SHA-256 sidecar, `DQA_BACKUP_DIR`)
 - fail-closed `dqa-restore.sh` (explicit `RESTORE` token, checksum, refuse while app up)
@@ -280,7 +280,25 @@ Scope:
 - audit retention policy document (append-only; duration not hardcoded; no auto purge)
 - read-only `dqa-audit-retention-status.sh` (oldest/newest/count only)
 - static regression checks for backup/restore safety boundaries
-- no production IdP / DEMIS adapter / public audit DELETE API
+- no production IdP / real DEMIS connectivity / public audit DELETE API
+
+### Oracle integration follow-ups
+Status: landed (development/mock validation complete).
+
+Landed follow-up work:
+- GitHub PR #31: production-selectable `OracleReadOnlyDemisAdapter` using python-oracledb thin mode
+- GitHub PR #32: local DEMIS Catalog Package ZIP excluded from Git
+- GitHub PR #33: development-only Oracle mock Compose/network overlay with secret injection boundary
+- GitHub PR #34: Oracle mock E2E smoke (`recommendation -> parameter extraction -> preview -> execute -> audit`)
+- GitHub PR #35: security smoke for parameter validation, execution/audit RBAC, and `NAMES_ONLY` audit redaction
+- GitHub PR #36: idempotent, fail-closed Oracle mock metadata bootstrap
+- GitHub PR #37: isolated fresh-bootstrap contract test covering create -> review -> approve -> enable and repeat execution
+
+Current boundary:
+- Oracle mock integration is validated only for development/LAN testing
+- no real DEMIS clinical data is used by these fixtures
+- production remains fail closed until an approved IdP is configured
+- real DEMIS endpoint, read-only account, network path, finalized Catalog Package, and database privilege validation remain external prerequisites
 
 ### PR 23 - Hardening (follow-up)
 Scope:
