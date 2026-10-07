@@ -14,6 +14,7 @@ class PublicErrorSpec:
 
     status_code: int
     message: str
+    public_code: str | None = None
 
 
 def build_public_http_error(
@@ -36,7 +37,7 @@ def build_public_http_error(
         status_code = fallback_status_code
         message = fallback_message
     else:
-        public_code = error_code
+        public_code = spec.public_code or error_code
         status_code = spec.status_code
         message = spec.message
 
