@@ -315,6 +315,7 @@ Scope:
 - security regression suite growth
   - recommendation LLM call-site egress denial regression
   - cross-cutting API role/permission matrix across representative protected routes
+  - static route guard rejects direct typed-exception passthrough into public errors
 - approved purge tooling after retention policy confirmation
 - RBAC refinement (beyond Catalog)
 - data-egress policy enforcement
