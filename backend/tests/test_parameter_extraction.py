@@ -41,7 +41,13 @@ SOURCE_A = dict(DEFAULT_SOURCE)
 SYNTHETIC = "SYNTHETIC-PATIENT-001"
 
 
-def _settings(*, allow_raw: bool = True) -> Settings:
+def _settings(
+    *,
+    allow_raw: bool = True,
+    approved: bool | None = None,
+) -> Settings:
+    if approved is None:
+        approved = allow_raw
     return Settings(
         APP_ENV="test",
         DQA_DB_HOST="localhost",
@@ -50,6 +56,7 @@ def _settings(*, allow_raw: bool = True) -> Settings:
         DQA_DB_USER="dqa",
         DQA_DB_PASSWORD="change-me",
         LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST=allow_raw,
+        LLM_PARAMETER_EXTRACTION_RAW_REQUEST_EGRESS_APPROVED=approved,
         LLM_BASE_URL="https://llm.example",
         LLM_MODEL="demo-model",
     )
@@ -363,6 +370,29 @@ def test_egress_gate_default_blocks_llm(
             llm_provider=stub,
             settings=_settings(allow_raw=False),
         )
+    assert exc_info.value.code == ParameterExtractionErrorCode.EGRESS_NOT_ALLOWED
+    assert stub.calls == []
+
+
+def test_technical_opt_in_without_policy_approval_blocks_llm(
+    db_session: Session, db_client: TestClient
+) -> None:
+    detail = _create_eligible(db_session, db_client, stable_key="pex_policy_gate")
+    stub = _stub(_extraction(values=[{"name": "ward_cd", "value": "A01"}]))
+
+    with pytest.raises(ParameterExtractionError) as exc_info:
+        extract_query_parameters(
+            db_session,
+            ParameterExtractionRequest(
+                source_name=SOURCE_A["source_name"],
+                template_id=detail["id"],
+                version_id=detail["current_version_id"],
+                request_text=f"{SYNTHETIC} A01",
+            ),
+            llm_provider=stub,
+            settings=_settings(allow_raw=True, approved=False),
+        )
+
     assert exc_info.value.code == ParameterExtractionErrorCode.EGRESS_NOT_ALLOWED
     assert stub.calls == []
 

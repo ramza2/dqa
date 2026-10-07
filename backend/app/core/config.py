@@ -50,6 +50,12 @@ class Settings(BaseSettings):
         default=False,
         alias="LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST",
     )
+    # Separate production policy approval gate. Both this and the technical
+    # raw-request opt-in must be true before request text may leave DQA.
+    llm_parameter_extraction_raw_request_egress_approved: bool = Field(
+        default=False,
+        alias="LLM_PARAMETER_EXTRACTION_RAW_REQUEST_EGRESS_APPROVED",
+    )
     # Authentication provider. Default disabled = fail-closed on protected routes.
     # ``dev_headers`` is development/test only and rejected outside those envs.
     dqa_auth_provider: Literal["disabled", "dev_headers"] = Field(
