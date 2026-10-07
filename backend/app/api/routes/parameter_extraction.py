@@ -10,6 +10,7 @@ from app.adapters.parameter_extraction.errors import (
     ParameterExtractionError,
     ParameterExtractionErrorCode,
 )
+from app.api.public_errors import PublicErrorSpec, build_public_http_error
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.parameter_extraction import (
@@ -19,6 +20,49 @@ from app.schemas.parameter_extraction import (
 from app.services.parameter_extraction import extract_query_parameters
 
 router = APIRouter(prefix="/api/v1", tags=["query-parameters"])
+
+_EXTRACTION_PUBLIC_ERRORS = {
+    ParameterExtractionErrorCode.TEMPLATE_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "query template not found",
+    ),
+    ParameterExtractionErrorCode.ACTIVE_CATALOG_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "active catalog revision not found for source",
+    ),
+    ParameterExtractionErrorCode.TEMPLATE_NOT_ELIGIBLE: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "query template is not eligible for parameter extraction",
+    ),
+    ParameterExtractionErrorCode.STALE_VERSION: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "requested version is not the current template version",
+    ),
+    ParameterExtractionErrorCode.EGRESS_NOT_ALLOWED: PublicErrorSpec(
+        status.HTTP_403_FORBIDDEN,
+        "parameter extraction raw-request egress is not approved",
+    ),
+    ParameterExtractionErrorCode.PROMPT_TOO_LARGE: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "parameter extraction prompt exceeds the configured size limit",
+    ),
+    ParameterExtractionErrorCode.PARAMETER_SCHEMA_INVALID: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "template parameter schema is invalid",
+    ),
+    ParameterExtractionErrorCode.LLM_NOT_CONFIGURED: PublicErrorSpec(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "LLM provider is not configured",
+    ),
+    ParameterExtractionErrorCode.LLM_UNAVAILABLE: PublicErrorSpec(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "LLM provider is temporarily unavailable",
+    ),
+    ParameterExtractionErrorCode.LLM_OUTPUT_INVALID: PublicErrorSpec(
+        status.HTTP_502_BAD_GATEWAY,
+        "LLM provider returned an invalid extraction response",
+    ),
+}
 
 
 @router.post(
@@ -46,32 +90,10 @@ def extract_parameters(
 
 
 def _extraction_http_error(exc: ParameterExtractionError) -> HTTPException:
-    if exc.code == ParameterExtractionErrorCode.TEMPLATE_NOT_FOUND:
-        status_code = status.HTTP_404_NOT_FOUND
-    elif exc.code == ParameterExtractionErrorCode.ACTIVE_CATALOG_NOT_FOUND:
-        status_code = status.HTTP_404_NOT_FOUND
-    elif exc.code in {
-        ParameterExtractionErrorCode.TEMPLATE_NOT_ELIGIBLE,
-        ParameterExtractionErrorCode.STALE_VERSION,
-    }:
-        status_code = status.HTTP_409_CONFLICT
-    elif exc.code == ParameterExtractionErrorCode.EGRESS_NOT_ALLOWED:
-        status_code = status.HTTP_403_FORBIDDEN
-    elif exc.code in {
-        ParameterExtractionErrorCode.PROMPT_TOO_LARGE,
-        ParameterExtractionErrorCode.PARAMETER_SCHEMA_INVALID,
-    }:
-        status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
-    elif exc.code in {
-        ParameterExtractionErrorCode.LLM_NOT_CONFIGURED,
-        ParameterExtractionErrorCode.LLM_UNAVAILABLE,
-    }:
-        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    elif exc.code == ParameterExtractionErrorCode.LLM_OUTPUT_INVALID:
-        status_code = status.HTTP_502_BAD_GATEWAY
-    else:
-        status_code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": exc.code, "message": exc.issue.message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_EXTRACTION_PUBLIC_ERRORS,
+        fallback_code=ParameterExtractionErrorCode.INTERNAL_ERROR,
+        fallback_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        fallback_message="parameter extraction failed",
     )
