@@ -24,6 +24,14 @@ def test_metadata_only_recommendation_is_allowed() -> None:
     )
 
 
+def test_unapproved_metadata_purpose_fails_closed() -> None:
+    assert not is_llm_egress_allowed(
+        _settings(),
+        purpose=LLMRequestPurpose.CATALOG_EXPLANATION,
+        payload_class=LLMEgressPayloadClass.METADATA_ONLY,
+    )
+
+
 def test_raw_request_requires_both_opt_in_and_approval() -> None:
     for allow_raw, approved in [
         (False, False),
