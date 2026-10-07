@@ -20,6 +20,8 @@ def test_create_app_exposes_openapi_outside_production(
     """Development/test keep interactive docs (APP_ENV=test via fixture)."""
     application = create_app(init_db_on_startup=False)
     assert application.title
+    assert "audited read-only DEMIS query execution" in application.description
+    assert "no execution" not in application.description.lower()
     assert application.docs_url == "/docs"
     assert application.redoc_url == "/redoc"
     assert application.openapi_url == "/openapi.json"
