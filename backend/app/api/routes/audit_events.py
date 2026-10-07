@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.audit.errors import AuditError, AuditErrorCode
 from app.adapters.db.deps import get_db_session
+from app.api.public_errors import PublicErrorSpec, build_public_http_error
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.audit import QueryAuditEventListResponse, QueryAuditEventView
@@ -17,6 +18,17 @@ from app.services.query_audit import (
 )
 
 router = APIRouter(prefix="/api/v1/audit-events", tags=["audit-events"])
+
+_AUDIT_PUBLIC_ERRORS = {
+    AuditErrorCode.NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "audit event not found",
+    ),
+    AuditErrorCode.INVALID_REQUEST: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "audit request is invalid",
+    ),
+}
 
 
 class QueryAuditEventBundleResponse(BaseModel):
@@ -71,13 +83,10 @@ def get_audit_events(
 
 
 def _audit_http_error(exc: AuditError) -> HTTPException:
-    if exc.code == AuditErrorCode.NOT_FOUND:
-        status_code = status.HTTP_404_NOT_FOUND
-    elif exc.code == AuditErrorCode.INVALID_REQUEST:
-        status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
-    else:
-        status_code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": exc.code, "message": exc.issue.message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_AUDIT_PUBLIC_ERRORS,
+        fallback_code=AuditErrorCode.INTERNAL_ERROR,
+        fallback_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        fallback_message="audit operation failed",
     )
