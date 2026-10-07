@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.db.deps import get_db_session
 from app.adapters.recommendation.errors import RecommendationError, RecommendationErrorCode
+from app.api.public_errors import PublicErrorSpec, build_public_http_error
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.recommendation import (
@@ -16,6 +17,37 @@ from app.schemas.recommendation import (
 from app.services.template_recommendation import recommend_query_templates
 
 router = APIRouter(prefix="/api/v1", tags=["query-recommendations"])
+
+_RECOMMENDATION_PUBLIC_ERRORS = {
+    RecommendationErrorCode.ACTIVE_CATALOG_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "active catalog revision not found for source",
+    ),
+    RecommendationErrorCode.LLM_NOT_CONFIGURED: PublicErrorSpec(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "LLM provider is not configured",
+    ),
+    RecommendationErrorCode.LLM_UNAVAILABLE: PublicErrorSpec(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "LLM provider is temporarily unavailable",
+    ),
+    RecommendationErrorCode.EGRESS_NOT_ALLOWED: PublicErrorSpec(
+        status.HTTP_403_FORBIDDEN,
+        "template recommendation LLM egress is not allowed",
+    ),
+    RecommendationErrorCode.LLM_OUTPUT_INVALID: PublicErrorSpec(
+        status.HTTP_502_BAD_GATEWAY,
+        "LLM provider returned an invalid ranking response",
+    ),
+    RecommendationErrorCode.INVALID_REQUEST: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "recommendation request is invalid",
+    ),
+    RecommendationErrorCode.PROMPT_TOO_LARGE: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "recommendation prompt exceeds the configured size limit",
+    ),
+}
 
 
 @router.post(
@@ -41,24 +73,10 @@ def create_query_recommendation(
 
 
 def _recommendation_http_error(exc: RecommendationError) -> HTTPException:
-    if exc.code == RecommendationErrorCode.ACTIVE_CATALOG_NOT_FOUND:
-        status_code = status.HTTP_404_NOT_FOUND
-    elif exc.code == RecommendationErrorCode.LLM_NOT_CONFIGURED:
-        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    elif exc.code == RecommendationErrorCode.LLM_UNAVAILABLE:
-        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    elif exc.code == RecommendationErrorCode.EGRESS_NOT_ALLOWED:
-        status_code = status.HTTP_403_FORBIDDEN
-    elif exc.code == RecommendationErrorCode.LLM_OUTPUT_INVALID:
-        status_code = status.HTTP_502_BAD_GATEWAY
-    elif exc.code in {
-        RecommendationErrorCode.INVALID_REQUEST,
-        RecommendationErrorCode.PROMPT_TOO_LARGE,
-    }:
-        status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
-    else:
-        status_code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": exc.code, "message": exc.issue.message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_RECOMMENDATION_PUBLIC_ERRORS,
+        fallback_code=RecommendationErrorCode.INTERNAL_ERROR,
+        fallback_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        fallback_message="template recommendation failed",
     )
