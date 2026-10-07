@@ -146,10 +146,20 @@ Recommended operational sequence:
 Do not rely on `create_all` as the documented production migration mechanism for new tables.
 
 Historical caveat:
-- Alembic currently owns `connection_profiles` and `query_audit_events`
-- backend startup still runs `create_all` for older catalog/template tables until full migration ownership exists
+- Alembic owns `connection_profiles`, `query_audit_events`, and the historical
+  Catalog/Template tables adopted in `20261007_hist01`
+  (`catalog_import_revisions`, `catalog_active_revisions`,
+  `catalog_activation_events`, `query_templates`, `query_template_versions`,
+  `query_template_review_events`)
+- backend startup still runs `create_all` for bootstrap compatibility in this
+  phase; runtime `create_all` removal is deferred to a later hardening PR
 - recommended fresh-DB order: **migrate first, then start backend**
-- running `create_all` first, then Alembic, can fail when managed tables already exist
+- `20261007_hist01` is an adoption migration: existing create_all tables are
+  kept (no drop/recreate) only when their schema matches the hist01 contract
+  (required columns/nullability/type family, PK, uniques, indexes, FKs);
+  incompatible legacy schemas fail closed without stamp/ALTER/repair
+- downgrade is intentionally non-destructive so Catalog/template history is
+  not deleted
 - never run destructive downgrades automatically
 
 ## 7. Operational scripts

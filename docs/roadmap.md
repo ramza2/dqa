@@ -328,6 +328,21 @@ Deferred until policy/site inputs are confirmed:
 - approved purge tooling after retention policy confirmation
 - backup encryption after site key-management approval
 
+### PR 24-A - Alembic historical schema adoption
+Status: in progress (`hardening/alembic-historical-schema-adoption`).
+Scope:
+- Alembic revision `20261007_hist01` after `20260929_audit01`
+- adopt create_all-era tables into Alembic ownership without data loss:
+  `catalog_import_revisions`, `catalog_active_revisions`,
+  `catalog_activation_events`, `query_templates`, `query_template_versions`,
+  `query_template_review_events`
+- fresh DB: `alembic upgrade head` creates full DQA schema
+- legacy DB: existing tables are adopted only when schema-compatible
+  (columns/PK/uniques/indexes/FKs); incompatible schemas fail closed
+  (no stamp/ALTER/repair); compatible create_all rows preserved
+- downgrade is non-destructive (revision pointer only)
+- runtime `create_all` / `init_db_schema` unchanged in this PR
+
 ## Exit criteria before real DEMIS use
 
 - Catalog Package import validated against a real finalized package
