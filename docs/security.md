@@ -205,6 +205,8 @@ Keep both Parameter Extraction egress gates disabled (`false`) until that approv
 Default audit captures execution metadata, not complete query result data.
 
 Current Query Audit foundation policy:
+- audit read API errors use reviewed code/status/static-message contracts;
+  unknown typed errors fail closed to `AUDIT_INTERNAL_ERROR` (HTTP 500)
 - `parameter_logging_policy = NAMES_ONLY`
 - persist parameter names and sensitive parameter names only
 - never persist parameter values, hashes of values, SQL, request text, result
@@ -299,6 +301,9 @@ Connection Profile rules:
   `*_INTERNAL_ERROR` codes (HTTP 500)
 
 Execution preview rules:
+- public eligibility/form errors use reviewed code/status/static-message
+  contracts; unknown typed errors fail closed to
+  `EXECUTION_PREVIEW_INTERNAL_ERROR` (HTTP 500)
 - authoritative catalog/profile/template metadata loaded server-side only
 - resolved parameter values may appear in the preview response for confirmation
   (`Cache-Control: no-store, private`); never log or persist parameter values
@@ -308,6 +313,10 @@ Execution preview rules:
 - preview does not write audit events
 
 Query execution rules:
+- orchestration errors use reviewed code/status/static-message contracts;
+  unknown typed errors fail closed to `QUERY_EXECUTION_INTERNAL_ERROR` (HTTP 500)
+- DEMIS adapter errors use the same shared public-error mapper while preserving
+  the existing fail-closed fallback to `DEMIS_EXECUTION_FAILED` (HTTP 502)
 - same caller-controlled fields as preview; never accept caller SQL, catalog
   revision/fingerprint, connection_profile_id, row_limit, timeout, actor/audit
   metadata, or credentials
