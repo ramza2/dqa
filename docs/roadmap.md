@@ -362,7 +362,7 @@ Scope:
 - no execution eligibility gate changes; no new Alembic revision
 
 ### PR 25-B - Production Readiness Report
-Status: in progress (`feat/production-readiness-report`).
+Status: completed (merged via `feat/production-readiness-report`).
 Scope:
 - read-only operator preflight (`./scripts/dqa-readiness.sh --source-name ... --environment ...`)
 - checks: migrations, auth provider, active Catalog, eligible Query Templates,
@@ -371,6 +371,18 @@ Scope:
 - never resolves DEMIS credentials, never opens DEMIS sockets, never mutates schema/data
 - distinct from `/health/ready` (DQA PostgreSQL reachability only)
 - no HTTP readiness API in this PR; no new Alembic revision
+
+### PR 26-A - Real DEMIS onboarding & acceptance runbook
+Status: in progress (`docs/real-demis-onboarding-runbook`).
+Scope:
+- real DEMIS onboarding sequence
+- automated vs external prerequisites
+- explicit live probe interpretation
+- DBA privilege verification checklist
+- first controlled-query acceptance
+- stop/rollback criteria
+- acceptance record template
+- no runtime behavior changes
 
 ## Exit criteria before real DEMIS use
 
