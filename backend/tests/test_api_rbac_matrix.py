@@ -140,7 +140,8 @@ def test_protected_route_role_matrix(
         # Downstream domain failures (e.g. synthetic id not found) are allowed.
         # The role must have crossed the authentication/authorization boundary.
         assert response.status_code not in {401, 403}, response.text
-        detail = response.json().get("detail") if response.content else None
+        payload = response.json() if response.content else None
+        detail = payload.get("detail") if isinstance(payload, dict) else None
         if isinstance(detail, dict):
             assert detail.get("code") not in {
                 AuthErrorCode.AUTHENTICATION_REQUIRED,
