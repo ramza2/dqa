@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 # Run Alembic migrations against the on-prem DQA PostgreSQL.
 #
-# Preferred production workflow:
+# Authoritative production workflow:
 #   1. ./scripts/dqa-migrate.sh   # starts DB only, then alembic upgrade head
 #   2. ./scripts/dqa-up.sh        # refuses to start backend until DB is at head
 #
-# Caveat: Alembic currently owns connection_profiles + query_audit_events only.
-# Backend startup still runs create_all for historical catalog/template tables.
-# Recommended order on a fresh database: migrate first, then start backend.
-# Running create_all first, then alembic, can fail when managed tables already exist.
-#
-# This script does not start backend/frontend.
+# Alembic owns the full DQA application schema (head: 20261007_hist01).
+# Backend startup never creates/alters tables; it only verifies Alembic head.
+# This script does not start backend/frontend and never auto-runs on dqa-up.
 # Never runs destructive downgrade.
 set -euo pipefail
 

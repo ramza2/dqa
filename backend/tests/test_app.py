@@ -18,7 +18,7 @@ def test_create_app_exposes_openapi_outside_production(
     test_settings_env: dict[str, str],
 ) -> None:
     """Development/test keep interactive docs (APP_ENV=test via fixture)."""
-    application = create_app(init_db_on_startup=False)
+    application = create_app(check_migrations_on_startup=False)
     assert application.title
     assert "audited read-only DEMIS query execution" in application.description
     assert "no execution" not in application.description.lower()
@@ -45,7 +45,7 @@ def test_production_disables_public_docs(
     get_settings.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()
-    application = create_app(init_db_on_startup=False)
+    application = create_app(check_migrations_on_startup=False)
     assert application.docs_url is None
     assert application.redoc_url is None
     assert application.openapi_url is None

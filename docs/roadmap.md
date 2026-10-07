@@ -329,7 +329,7 @@ Deferred until policy/site inputs are confirmed:
 - backup encryption after site key-management approval
 
 ### PR 24-A - Alembic historical schema adoption
-Status: in progress (`hardening/alembic-historical-schema-adoption`).
+Status: completed (merged via `hardening/alembic-historical-schema-adoption`).
 Scope:
 - Alembic revision `20261007_hist01` after `20260929_audit01`
 - adopt create_all-era tables into Alembic ownership without data loss:
@@ -341,7 +341,16 @@ Scope:
   (columns/PK/uniques/indexes/FKs); incompatible schemas fail closed
   (no stamp/ALTER/repair); compatible create_all rows preserved
 - downgrade is non-destructive (revision pointer only)
-- runtime `create_all` / `init_db_schema` unchanged in this PR
+
+### PR 24-B - Alembic-only schema lifecycle
+Status: in progress (`hardening/alembic-only-schema-lifecycle`).
+Scope:
+- remove runtime `Base.metadata.create_all` / `init_db_schema` completely
+- backend startup read-only Alembic head validation (fail closed; no schema mutation)
+- shared checker: `app.adapters.db.migration_head` (+ CLI `alembic/check_at_head.py`)
+- test DB fixtures bootstrap via `alembic upgrade head` only
+- no new Alembic revision; head remains `20261007_hist01`
+- authoritative workflow remains migrate then up (no auto-migrate)
 
 ## Exit criteria before real DEMIS use
 

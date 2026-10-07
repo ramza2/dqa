@@ -329,7 +329,7 @@ def test_credential_material_repr_redacts_secret() -> None:
 def test_no_demis_http_surface_registered() -> None:
     from app.main import create_app
 
-    app = create_app(init_db_on_startup=False)
+    app = create_app(check_migrations_on_startup=False)
     paths = set(app.openapi()["paths"].keys())
     # Orchestrated execute is allowed; direct DEMIS adapter HTTP surfaces are not.
     assert "/api/v1/query-executions/execute" in paths

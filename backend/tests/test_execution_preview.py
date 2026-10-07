@@ -582,7 +582,7 @@ def test_provider_disabled_503(
     get_settings.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()
-    application = create_app(init_db_on_startup=False)
+    application = create_app(check_migrations_on_startup=False)
     with TestClient(application) as client:
         response = client.post(
             PREVIEW_PATH,
@@ -627,7 +627,7 @@ def test_errors_and_logs_do_not_leak_secrets(
 def test_execute_route_is_registered(db_client: TestClient) -> None:
     from app.main import create_app
 
-    app = create_app(init_db_on_startup=False)
+    app = create_app(check_migrations_on_startup=False)
     paths = set(app.openapi()["paths"].keys())
     assert PREVIEW_PATH in paths
     assert "/api/v1/query-executions/execute" in paths

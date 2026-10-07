@@ -81,7 +81,7 @@ def test_provider_disabled_returns_503(
     get_settings.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()
-    application = create_app(init_db_on_startup=False)
+    application = create_app(check_migrations_on_startup=False)
     with TestClient(application) as client:
         response = client.get(
             "/api/v1/query-templates",
@@ -104,7 +104,7 @@ def test_dev_headers_blocked_in_production(
     get_settings.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()
-    application = create_app(init_db_on_startup=False)
+    application = create_app(check_migrations_on_startup=False)
     with TestClient(application) as client:
         response = client.get(
             "/api/v1/query-templates",

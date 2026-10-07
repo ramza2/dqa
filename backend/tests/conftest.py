@@ -39,6 +39,15 @@ def _clear_db_caches() -> None:
     get_session_factory.cache_clear()
 
 
+def _alembic_upgrade_head() -> None:
+    """Prepare DQA schema via Alembic only (no create_all)."""
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config("alembic.ini")
+    command.upgrade(cfg, "head")
+
+
 @pytest.fixture()
 def test_settings_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     """Force a known settings environment for the duration of a test."""
@@ -49,11 +58,11 @@ def test_settings_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
 
 @pytest.fixture()
 def client(test_settings_env: dict[str, str]) -> TestClient:
-    """HTTP client for validation/health tests (no DB schema bootstrap)."""
+    """HTTP client for validation/health tests (no DB migration check)."""
     from app.main import create_app
 
     _clear_db_caches()
-    application = create_app(init_db_on_startup=False)
+    application = create_app(check_migrations_on_startup=False)
     with TestClient(application, headers=_TEST_AUTH_HEADERS) as test_client:
         yield test_client
     _clear_db_caches()
@@ -61,11 +70,12 @@ def client(test_settings_env: dict[str, str]) -> TestClient:
 
 @pytest.fixture()
 def db_client(test_settings_env: dict[str, str]) -> TestClient:
-    """HTTP client for import/history integration tests (bootstraps DB schema)."""
+    """HTTP client for import/history integration tests (Alembic-migrated schema)."""
     from app.main import create_app
 
     _clear_db_caches()
-    application = create_app(init_db_on_startup=True)
+    _alembic_upgrade_head()
+    application = create_app(check_migrations_on_startup=True)
     with TestClient(application, headers=_TEST_AUTH_HEADERS) as test_client:
         yield test_client
     _clear_db_caches()
@@ -77,7 +87,7 @@ def unauth_client(test_settings_env: dict[str, str]) -> TestClient:
     from app.main import create_app
 
     _clear_db_caches()
-    application = create_app(init_db_on_startup=False)
+    application = create_app(check_migrations_on_startup=False)
     with TestClient(application) as test_client:
         yield test_client
     _clear_db_caches()
@@ -85,11 +95,12 @@ def unauth_client(test_settings_env: dict[str, str]) -> TestClient:
 
 @pytest.fixture()
 def unauth_db_client(test_settings_env: dict[str, str]) -> TestClient:
-    """DB-backed client without default auth headers."""
+    """DB-backed client without default auth headers (Alembic-migrated schema)."""
     from app.main import create_app
 
     _clear_db_caches()
-    application = create_app(init_db_on_startup=True)
+    _alembic_upgrade_head()
+    application = create_app(check_migrations_on_startup=True)
     with TestClient(application) as test_client:
         yield test_client
     _clear_db_caches()
@@ -100,11 +111,10 @@ def db_session(test_settings_env: dict[str, str]):
     """Transactional DB session with clean catalog_import_revisions table."""
     from sqlalchemy import inspect, text
 
-    from app.adapters.db.deps import init_db_schema
     from app.adapters.db.session import get_engine, get_session_factory
 
     _clear_db_caches()
-    init_db_schema()
+    _alembic_upgrade_head()
     engine = get_engine()
     # Ensure clean catalog tables for persistence tests without dropping unrelated objects.
     tables = (
