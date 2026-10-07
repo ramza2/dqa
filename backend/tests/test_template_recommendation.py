@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.llm.errors import LLMProviderError, LLMProviderErrorCode
 from app.adapters.recommendation.errors import RecommendationError, RecommendationErrorCode
+from app.api.routes.recommendations import _recommendation_http_error
 from app.models.catalog_import import CatalogImportRevision
 from app.schemas.recommendation import (
     MAX_LLM_FREE_TEXT_CHARS,
@@ -589,6 +590,53 @@ def test_no_lexical_match_skips_llm(
     assert result.clarification_question == NO_MATCH_CLARIFICATION
     assert result.recommended_template is None
     assert stub.calls == []
+
+
+def test_central_egress_policy_denial_blocks_recommendation_llm(
+    db_session: Session,
+    db_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    detail = _create_approve_enable(
+        db_session,
+        db_client,
+        stable_key="egress_policy_denied",
+    )
+    stub = _stub_for(
+        _ranking(
+            recommended_template_id=detail["id"],
+            ranked_template_ids=[detail["id"]],
+            confidence=0.95,
+        )
+    )
+    monkeypatch.setattr(
+        "app.services.template_recommendation.is_llm_egress_allowed",
+        lambda *args, **kwargs: False,
+    )
+
+    with pytest.raises(RecommendationError) as exc_info:
+        recommend_query_templates(
+            db_session,
+            TemplateRecommendationRequest(
+                source_name=SOURCE_A["source_name"],
+                request_text="환자 입원 병동 이력 조회",
+            ),
+            llm_provider=stub,
+        )
+
+    assert exc_info.value.code == RecommendationErrorCode.EGRESS_NOT_ALLOWED
+    assert stub.calls == []
+
+
+def test_recommendation_egress_denial_maps_to_http_403() -> None:
+    error = RecommendationError(
+        RecommendationErrorCode.EGRESS_NOT_ALLOWED,
+        "template recommendation LLM egress is not allowed",
+    )
+    http_error = _recommendation_http_error(error)
+
+    assert http_error.status_code == 403
+    assert http_error.detail["code"] == RecommendationErrorCode.EGRESS_NOT_ALLOWED
 
 
 def test_routing_confidence_high_returns_recommendation(
