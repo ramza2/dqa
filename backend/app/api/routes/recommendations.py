@@ -47,6 +47,8 @@ def _recommendation_http_error(exc: RecommendationError) -> HTTPException:
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     elif exc.code == RecommendationErrorCode.LLM_UNAVAILABLE:
         status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    elif exc.code == RecommendationErrorCode.EGRESS_NOT_ALLOWED:
+        status_code = status.HTTP_403_FORBIDDEN
     elif exc.code == RecommendationErrorCode.LLM_OUTPUT_INVALID:
         status_code = status.HTTP_502_BAD_GATEWAY
     elif exc.code in {
