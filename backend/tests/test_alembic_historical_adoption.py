@@ -61,7 +61,7 @@ def _current_revision(engine) -> str | None:
 
 
 def _type_family(sa_type) -> tuple[str, int | None]:
-    """Mirror hist01 coarse type families for ORM parity checks."""
+    """Mirror hist01 coarse type families for ORM/DB parity checks."""
     type_name = type(sa_type).__name__.casefold()
     as_str = str(sa_type).casefold()
 
@@ -73,7 +73,13 @@ def _type_family(sa_type) -> tuple[str, int | None]:
         return "integer", None
     if "text" in type_name or as_str == "text":
         return "text", None
-    if "timestamp" in type_name or "timestamp" in as_str:
+    # ORM DateTime(...) and PG TIMESTAMP WITH TIME ZONE both map here.
+    if (
+        "timestamp" in type_name
+        or "timestamp" in as_str
+        or type_name == "datetime"
+        or as_str.startswith("datetime")
+    ):
         tz = bool(getattr(sa_type, "timezone", False)) or "with time zone" in as_str
         if not tz:
             return "timestamp", None
