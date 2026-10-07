@@ -5,7 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.adapters.catalog.errors import CatalogPackageValidationError
+from app.adapters.catalog.errors import (
+    CatalogPackageErrorCode,
+    CatalogPackageValidationError,
+)
 from app.adapters.db.deps import get_db_session
 from app.api.uploads import read_upload_bounded
 from app.auth.dependencies import require_permission
@@ -22,6 +25,46 @@ from app.services.catalog_package_import import import_catalog_package_bytes
 from app.services.catalog_package_validation import validate_catalog_package_bytes
 
 router = APIRouter(prefix="/api/v1/catalog/packages", tags=["catalog-packages"])
+
+_CATALOG_PACKAGE_PUBLIC_CODES = frozenset(
+    {
+        CatalogPackageErrorCode.INVALID_ZIP,
+        CatalogPackageErrorCode.ARCHIVE_TOO_LARGE,
+        CatalogPackageErrorCode.TOO_MANY_ENTRIES,
+        CatalogPackageErrorCode.UNCOMPRESSED_TOO_LARGE,
+        CatalogPackageErrorCode.COMPRESSION_RATIO,
+        CatalogPackageErrorCode.UNSAFE_PATH,
+        CatalogPackageErrorCode.INVALID_ROOT,
+        CatalogPackageErrorCode.DUPLICATE_ENTRY,
+        CatalogPackageErrorCode.NON_REGULAR_ENTRY,
+        CatalogPackageErrorCode.UNEXPECTED_FILE,
+        CatalogPackageErrorCode.MISSING_MANIFEST,
+        CatalogPackageErrorCode.MALFORMED_MANIFEST,
+        CatalogPackageErrorCode.INVALID_PACKAGE_FORMAT,
+        CatalogPackageErrorCode.UNSUPPORTED_VERSION,
+        CatalogPackageErrorCode.INVALID_READINESS,
+        CatalogPackageErrorCode.MISSING_SOURCE,
+        CatalogPackageErrorCode.MISSING_FINGERPRINT,
+        CatalogPackageErrorCode.INVALID_MANIFEST_FILES,
+        CatalogPackageErrorCode.MISSING_REQUIRED_FILE,
+        CatalogPackageErrorCode.CHECKSUM_MISMATCH,
+        CatalogPackageErrorCode.BYTES_MISMATCH,
+        CatalogPackageErrorCode.MALFORMED_JSON,
+        CatalogPackageErrorCode.SOURCE_MISMATCH,
+        CatalogPackageErrorCode.FINGERPRINT_MISMATCH,
+        CatalogPackageErrorCode.COUNTS_MISMATCH,
+        CatalogPackageErrorCode.EMPTY_UPLOAD,
+        CatalogPackageErrorCode.FORBIDDEN_SECRET_FIELD,
+    }
+)
+
+_CATALOG_PACKAGE_TOO_LARGE_CODES = frozenset(
+    {
+        CatalogPackageErrorCode.ARCHIVE_TOO_LARGE,
+        CatalogPackageErrorCode.UNCOMPRESSED_TOO_LARGE,
+        CatalogPackageErrorCode.TOO_MANY_ENTRIES,
+    }
+)
 
 
 @router.post(
@@ -83,18 +126,26 @@ async def import_catalog_package(
 
 
 def _validation_http_error(exc: CatalogPackageValidationError) -> HTTPException:
-    status_code = status.HTTP_400_BAD_REQUEST
-    if exc.code in {
-        "CATALOG_PACKAGE_ARCHIVE_TOO_LARGE",
-        "CATALOG_PACKAGE_UNCOMPRESSED_TOO_LARGE",
-        "CATALOG_PACKAGE_TOO_MANY_ENTRIES",
-    }:
-        status_code = status.HTTP_413_CONTENT_TOO_LARGE
+    if exc.code not in _CATALOG_PACKAGE_PUBLIC_CODES:
+        return HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=CatalogPackageErrorBody(
+                code=CatalogPackageErrorCode.INTERNAL_ERROR,
+                message="catalog package validation failed",
+                path=None,
+            ).model_dump(),
+        )
+
+    status_code = (
+        status.HTTP_413_CONTENT_TOO_LARGE
+        if exc.code in _CATALOG_PACKAGE_TOO_LARGE_CODES
+        else status.HTTP_400_BAD_REQUEST
+    )
     return HTTPException(
         status_code=status_code,
         detail=CatalogPackageErrorBody(
             code=exc.code,
-            message=exc.issue.message,
+            message="catalog package validation failed",
             path=exc.path,
         ).model_dump(),
     )

@@ -308,6 +308,8 @@ Scope:
   - public DEMIS adapter errors use allowlisted codes + static sanitized messages
   - Recommendation/Parameter Extraction public errors use shared allowlisted
     contracts; unknown typed errors normalize to generic internal-error codes
+  - Connection Profile, Catalog, and Query Template typed errors use reviewed
+    public contracts; unknown codes fail closed to domain internal-error codes
 - security regression suite growth
   - recommendation LLM call-site egress denial regression
   - cross-cutting API role/permission matrix across representative protected routes

@@ -10,6 +10,7 @@ from app.adapters.connection_profile.errors import (
     ConnectionProfileErrorCode,
 )
 from app.adapters.db.deps import get_db_session
+from app.api.public_errors import PublicErrorSpec, build_public_http_error
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.connection_profile import (
@@ -30,6 +31,21 @@ from app.services.connection_profile import (
 )
 
 router = APIRouter(prefix="/api/v1/connection-profiles", tags=["connection-profiles"])
+
+_PROFILE_PUBLIC_ERRORS = {
+    ConnectionProfileErrorCode.NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "connection profile not found",
+    ),
+    ConnectionProfileErrorCode.DUPLICATE_SOURCE_ENVIRONMENT: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "connection profile already exists for source and environment",
+    ),
+    ConnectionProfileErrorCode.INVALID_REQUEST: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "connection profile request is invalid",
+    ),
+}
 
 
 @router.post("", response_model=ConnectionProfileView, status_code=status.HTTP_201_CREATED)
@@ -143,15 +159,10 @@ def profile_diagnostics(
 
 
 def _profile_http_error(exc: ConnectionProfileError) -> HTTPException:
-    if exc.code == ConnectionProfileErrorCode.NOT_FOUND:
-        status_code = status.HTTP_404_NOT_FOUND
-    elif exc.code == ConnectionProfileErrorCode.DUPLICATE_SOURCE_ENVIRONMENT:
-        status_code = status.HTTP_409_CONFLICT
-    elif exc.code == ConnectionProfileErrorCode.INVALID_REQUEST:
-        status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
-    else:
-        status_code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": exc.code, "message": exc.issue.message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_PROFILE_PUBLIC_ERRORS,
+        fallback_code=ConnectionProfileErrorCode.INTERNAL_ERROR,
+        fallback_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        fallback_message="connection profile operation failed",
     )

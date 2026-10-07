@@ -11,6 +11,7 @@ from app.adapters.catalog.query_template_errors import (
     QueryTemplateErrorCode,
 )
 from app.adapters.db.deps import get_db_session
+from app.api.public_errors import PublicErrorSpec, build_public_http_error
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.query_template import (
@@ -43,6 +44,61 @@ from app.services.query_template import (
 )
 
 router = APIRouter(prefix="/api/v1/query-templates", tags=["query-templates"])
+
+_TEMPLATE_PUBLIC_ERRORS = {
+    QueryTemplateErrorCode.TEMPLATE_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "query template not found",
+    ),
+    QueryTemplateErrorCode.VERSION_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "query template version not found",
+    ),
+    QueryTemplateErrorCode.ACTIVE_CATALOG_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "active catalog revision not found for source",
+    ),
+    QueryTemplateErrorCode.DUPLICATE_STABLE_KEY: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "query template stable key already exists",
+    ),
+    QueryTemplateErrorCode.NOT_DRAFT: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "query template version is not editable",
+    ),
+    QueryTemplateErrorCode.INVALID_TRANSITION: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "query template approval transition is invalid",
+    ),
+    QueryTemplateErrorCode.STABLE_METADATA_FROZEN: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "query template stable metadata is frozen",
+    ),
+    QueryTemplateErrorCode.INCOMPATIBLE_CATALOG: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "query template is incompatible with the active catalog",
+    ),
+    QueryTemplateErrorCode.INVALID_PARAMETER_SCHEMA: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "query template parameter schema is invalid",
+    ),
+    QueryTemplateErrorCode.INVALID_TARGET_SCHEMA: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "query template target schema is invalid",
+    ),
+    QueryTemplateErrorCode.INVALID_REQUEST: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "query template request is invalid",
+    ),
+}
+
+_CATALOG_QUERY_TEMPLATE_PUBLIC_ERRORS = {
+    CatalogQueryErrorCode.ACTIVE_REVISION_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "active catalog revision not found for source",
+        public_code=QueryTemplateErrorCode.ACTIVE_CATALOG_NOT_FOUND,
+    ),
+}
 
 
 @router.post("", response_model=QueryTemplateDetail, status_code=status.HTTP_201_CREATED)
@@ -273,42 +329,20 @@ def disable(
 
 
 def _template_http_error(exc: QueryTemplateError) -> HTTPException:
-    if exc.code in {
-        QueryTemplateErrorCode.TEMPLATE_NOT_FOUND,
-        QueryTemplateErrorCode.VERSION_NOT_FOUND,
-        QueryTemplateErrorCode.ACTIVE_CATALOG_NOT_FOUND,
-    }:
-        status_code = status.HTTP_404_NOT_FOUND
-    elif exc.code in {
-        QueryTemplateErrorCode.DUPLICATE_STABLE_KEY,
-        QueryTemplateErrorCode.NOT_DRAFT,
-        QueryTemplateErrorCode.INVALID_TRANSITION,
-        QueryTemplateErrorCode.STABLE_METADATA_FROZEN,
-        QueryTemplateErrorCode.INCOMPATIBLE_CATALOG,
-    }:
-        status_code = status.HTTP_409_CONFLICT
-    elif exc.code in {
-        QueryTemplateErrorCode.INVALID_PARAMETER_SCHEMA,
-        QueryTemplateErrorCode.INVALID_TARGET_SCHEMA,
-        QueryTemplateErrorCode.INVALID_REQUEST,
-    }:
-        status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
-    else:
-        status_code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": exc.code, "message": exc.issue.message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_TEMPLATE_PUBLIC_ERRORS,
+        fallback_code=QueryTemplateErrorCode.INTERNAL_ERROR,
+        fallback_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        fallback_message="query template operation failed",
     )
 
 
 def _catalog_query_http_error(exc: CatalogQueryError) -> HTTPException:
-    if exc.code == CatalogQueryErrorCode.ACTIVE_REVISION_NOT_FOUND:
-        status_code = status.HTTP_404_NOT_FOUND
-        code = QueryTemplateErrorCode.ACTIVE_CATALOG_NOT_FOUND
-    else:
-        status_code = status.HTTP_400_BAD_REQUEST
-        code = exc.code
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": code, "message": exc.issue.message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_CATALOG_QUERY_TEMPLATE_PUBLIC_ERRORS,
+        fallback_code=QueryTemplateErrorCode.INTERNAL_ERROR,
+        fallback_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        fallback_message="query template catalog lookup failed",
     )

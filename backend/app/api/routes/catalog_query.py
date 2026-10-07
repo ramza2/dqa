@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.catalog.query_errors import CatalogQueryError, CatalogQueryErrorCode
 from app.adapters.db.deps import get_db_session
+from app.api.public_errors import PublicErrorSpec, build_public_http_error
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.catalog_query import (
@@ -32,6 +33,17 @@ from app.services.catalog_query import (
 
 query_router = APIRouter(prefix="/api/v1/catalog/active", tags=["catalog-query"])
 
+_QUERY_PUBLIC_ERRORS = {
+    CatalogQueryErrorCode.ACTIVE_REVISION_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "active catalog revision not found",
+    ),
+    CatalogQueryErrorCode.TABLE_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "catalog table not found",
+    ),
+}
+
 
 def _envelope(
     resolved: ResolvedActiveRevision,
@@ -49,16 +61,12 @@ def _envelope(
 
 
 def _query_http_error(exc: CatalogQueryError) -> HTTPException:
-    if exc.code in {
-        CatalogQueryErrorCode.ACTIVE_REVISION_NOT_FOUND,
-        CatalogQueryErrorCode.TABLE_NOT_FOUND,
-    }:
-        status_code = status.HTTP_404_NOT_FOUND
-    else:
-        status_code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": exc.code, "message": exc.issue.message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_QUERY_PUBLIC_ERRORS,
+        fallback_code=CatalogQueryErrorCode.INTERNAL_ERROR,
+        fallback_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        fallback_message="catalog metadata query failed",
     )
 
 
