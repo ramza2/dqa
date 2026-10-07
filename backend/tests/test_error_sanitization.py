@@ -14,6 +14,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.adapters.demis.errors import DemisAdapterError, DemisAdapterErrorCode
+from app.adapters.parameter_extraction.errors import (
+    ParameterExtractionError,
+    ParameterExtractionErrorCode,
+)
+from app.adapters.recommendation.errors import RecommendationError, RecommendationErrorCode
+from app.api.routes.parameter_extraction import _extraction_http_error
+from app.api.routes.recommendations import _recommendation_http_error
 from app.auth.errors import AuthErrorCode
 from app.schemas.query_template import QueryTemplateCreateRequest
 from app.services.catalog_active import activate_catalog_revision
@@ -246,6 +253,149 @@ def test_demis_adapter_public_error_boundary_sanitized(
     assert body["detail"]["code"] == expected_public_code
     _assert_sanitized(body)
     assert raw_internal_detail not in json.dumps(body)
+
+
+@pytest.mark.parametrize(
+    ("code", "expected_status", "expected_public_code"),
+    [
+        (
+            RecommendationErrorCode.ACTIVE_CATALOG_NOT_FOUND,
+            404,
+            RecommendationErrorCode.ACTIVE_CATALOG_NOT_FOUND,
+        ),
+        (
+            RecommendationErrorCode.LLM_NOT_CONFIGURED,
+            503,
+            RecommendationErrorCode.LLM_NOT_CONFIGURED,
+        ),
+        (
+            RecommendationErrorCode.LLM_UNAVAILABLE,
+            503,
+            RecommendationErrorCode.LLM_UNAVAILABLE,
+        ),
+        (
+            RecommendationErrorCode.EGRESS_NOT_ALLOWED,
+            403,
+            RecommendationErrorCode.EGRESS_NOT_ALLOWED,
+        ),
+        (
+            RecommendationErrorCode.LLM_OUTPUT_INVALID,
+            502,
+            RecommendationErrorCode.LLM_OUTPUT_INVALID,
+        ),
+        (
+            RecommendationErrorCode.INVALID_REQUEST,
+            422,
+            RecommendationErrorCode.INVALID_REQUEST,
+        ),
+        (
+            RecommendationErrorCode.PROMPT_TOO_LARGE,
+            422,
+            RecommendationErrorCode.PROMPT_TOO_LARGE,
+        ),
+        (
+            "UNREVIEWED_RECOMMENDATION_FAILURE",
+            500,
+            RecommendationErrorCode.INTERNAL_ERROR,
+        ),
+    ],
+)
+def test_recommendation_public_error_contract_sanitized(
+    code: str,
+    expected_status: int,
+    expected_public_code: str,
+) -> None:
+    raw_internal_detail = (
+        "sk-test-llm-secret-key Traceback (most recent call last) "
+        "SELECT secret_patient_id FROM dual row_secret_phi_value"
+    )
+    public = _recommendation_http_error(
+        RecommendationError(code, raw_internal_detail)
+    )
+
+    assert public.status_code == expected_status
+    assert public.detail["code"] == expected_public_code
+    _assert_sanitized(public.detail)
+    assert raw_internal_detail not in json.dumps(public.detail)
+
+
+@pytest.mark.parametrize(
+    ("code", "expected_status", "expected_public_code"),
+    [
+        (
+            ParameterExtractionErrorCode.TEMPLATE_NOT_FOUND,
+            404,
+            ParameterExtractionErrorCode.TEMPLATE_NOT_FOUND,
+        ),
+        (
+            ParameterExtractionErrorCode.ACTIVE_CATALOG_NOT_FOUND,
+            404,
+            ParameterExtractionErrorCode.ACTIVE_CATALOG_NOT_FOUND,
+        ),
+        (
+            ParameterExtractionErrorCode.TEMPLATE_NOT_ELIGIBLE,
+            409,
+            ParameterExtractionErrorCode.TEMPLATE_NOT_ELIGIBLE,
+        ),
+        (
+            ParameterExtractionErrorCode.STALE_VERSION,
+            409,
+            ParameterExtractionErrorCode.STALE_VERSION,
+        ),
+        (
+            ParameterExtractionErrorCode.EGRESS_NOT_ALLOWED,
+            403,
+            ParameterExtractionErrorCode.EGRESS_NOT_ALLOWED,
+        ),
+        (
+            ParameterExtractionErrorCode.PROMPT_TOO_LARGE,
+            422,
+            ParameterExtractionErrorCode.PROMPT_TOO_LARGE,
+        ),
+        (
+            ParameterExtractionErrorCode.PARAMETER_SCHEMA_INVALID,
+            422,
+            ParameterExtractionErrorCode.PARAMETER_SCHEMA_INVALID,
+        ),
+        (
+            ParameterExtractionErrorCode.LLM_NOT_CONFIGURED,
+            503,
+            ParameterExtractionErrorCode.LLM_NOT_CONFIGURED,
+        ),
+        (
+            ParameterExtractionErrorCode.LLM_UNAVAILABLE,
+            503,
+            ParameterExtractionErrorCode.LLM_UNAVAILABLE,
+        ),
+        (
+            ParameterExtractionErrorCode.LLM_OUTPUT_INVALID,
+            502,
+            ParameterExtractionErrorCode.LLM_OUTPUT_INVALID,
+        ),
+        (
+            "UNREVIEWED_PARAMETER_EXTRACTION_FAILURE",
+            500,
+            ParameterExtractionErrorCode.INTERNAL_ERROR,
+        ),
+    ],
+)
+def test_parameter_extraction_public_error_contract_sanitized(
+    code: str,
+    expected_status: int,
+    expected_public_code: str,
+) -> None:
+    raw_internal_detail = (
+        "sk-test-llm-secret-key Traceback (most recent call last) "
+        "SELECT secret_patient_id FROM dual row_secret_phi_value"
+    )
+    public = _extraction_http_error(
+        ParameterExtractionError(code, raw_internal_detail)
+    )
+
+    assert public.status_code == expected_status
+    assert public.detail["code"] == expected_public_code
+    _assert_sanitized(public.detail)
+    assert raw_internal_detail not in json.dumps(public.detail)
 
 
 def test_execution_unavailable_error_sanitized(
