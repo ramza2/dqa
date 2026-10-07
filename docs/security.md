@@ -100,6 +100,9 @@ Template recommendation (`POST /api/v1/query-recommendations`):
 - natural-language requests may contain patient identifiers or sensitive values
 - raw `request_text` remains local and is never sent to an LLM
 - only metadata-derived matched terms and eligible candidate metadata egress
+- the recommendation LLM call must pass the central egress policy as
+  `TEMPLATE_RECOMMENDATION + METADATA_ONLY`; denial returns
+  `RECOMMENDATION_EGRESS_NOT_ALLOWED` (HTTP 403) before any provider call
 - do not send SQL text, parameter values, or result rows to the LLM
 - do not log raw request text or full prompts
 - LLM-returned template IDs must be validated against the deterministic candidate set

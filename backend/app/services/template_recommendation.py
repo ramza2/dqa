@@ -41,6 +41,10 @@ from app.schemas.recommendation import (
 )
 from app.schemas.query_template import QueryTemplateParameter
 from app.services.catalog_active import get_active_catalog
+from app.services.llm_egress_policy import (
+    LLMEgressPayloadClass,
+    is_llm_egress_allowed,
+)
 from app.services.sql_safety import validate_sql_safety
 
 # Deterministic lexical field weights (higher = stronger match signal).
@@ -293,6 +297,17 @@ def _rank_with_llm(
     llm_provider: LLMProvider | None,
     settings: Settings | None,
 ) -> tuple[LLMTemplateRanking, list[_EligibleCandidate]]:
+    cfg = settings or get_settings()
+    if not is_llm_egress_allowed(
+        cfg,
+        purpose=LLMRequestPurpose.TEMPLATE_RECOMMENDATION,
+        payload_class=LLMEgressPayloadClass.METADATA_ONLY,
+    ):
+        raise RecommendationError(
+            RecommendationErrorCode.EGRESS_NOT_ALLOWED,
+            "template recommendation LLM egress is not allowed",
+        )
+
     messages, sent_candidates = _build_messages(
         source_name=source_name,
         catalog_revision_id=catalog_revision_id,
@@ -306,7 +321,7 @@ def _rank_with_llm(
     try:
         if provider is None:
             try:
-                provider = create_llm_provider(settings or get_settings())
+                provider = create_llm_provider(cfg)
             except LLMProviderError as exc:
                 raise _map_provider_error(exc) from None
             owned = True

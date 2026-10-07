@@ -301,17 +301,19 @@ Current boundary:
 - real DEMIS endpoint, read-only account, network path, finalized Catalog Package, and database privilege validation remain external prerequisites
 
 ### PR 23 - Hardening (follow-up)
-Status: in progress (data-egress policy slice on `hardening/llm-data-egress-policy`).
+Status: in progress.
 Scope:
 - rate/size policy tuning after concurrency requirements are confirmed
 - operational error handling expansion
 - security regression suite growth
+  - recommendation LLM call-site egress denial regression
 - approved purge tooling after retention policy confirmation
 - RBAC refinement (beyond Catalog)
 - data-egress policy enforcement
-  - central fail-closed payload-class policy
+  - central fail-closed payload-class policy landed in GitHub PR #39
   - raw parameter-extraction request requires technical opt-in + explicit runtime approval assertion
   - query-result-row egress remains denied for all current LLM purposes
+  - recommendation metadata egress is explicitly checked at the LLM call site
 - backup encryption after site key-management approval
 
 ## Exit criteria before real DEMIS use
