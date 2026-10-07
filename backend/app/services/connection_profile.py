@@ -13,11 +13,16 @@ from app.adapters.connection_profile.errors import (
 )
 from app.models.connection_profile import ConnectionProfile
 from app.repositories.connection_profile import ConnectionProfileRepository
+from app.adapters.demis.credential_factory import create_credential_resolver
+from app.adapters.demis.errors import DemisAdapterError, DemisProbeState
+from app.adapters.demis.factory import create_readonly_demis_adapter
+from app.adapters.demis.profile import ConnectionProfileSnapshot
 from app.schemas.connection_profile import (
     ConnectionProfileCreateRequest,
     ConnectionProfileDiagnosticsIssue,
     ConnectionProfileDiagnosticsResponse,
     ConnectionProfileListResponse,
+    ConnectionProfileTestConnectionResponse,
     ConnectionProfileUpdateRequest,
     ConnectionProfileView,
 )
@@ -161,6 +166,48 @@ def disable_connection_profile(
     return _set_enabled(session, profile_id, enabled=False, actor=actor)
 
 
+def test_connection_profile_live_connection(
+    session: Session, profile_id: int
+) -> ConnectionProfileTestConnectionResponse:
+    """Explicit administrator live probe — resolves credentials and opens DEMIS once."""
+    profile = _require_profile(session, profile_id)
+    snapshot = _profile_snapshot(profile)
+
+    try:
+        adapter = create_readonly_demis_adapter(
+            snapshot,
+            credential_resolver=create_credential_resolver(),
+        )
+    except DemisAdapterError as exc:
+        return _test_connection_failed_response(profile, exc)
+    except Exception:  # pragma: no cover - defensive boundary
+        raise ConnectionProfileError(
+            ConnectionProfileErrorCode.INTERNAL_ERROR,
+            "connection profile live test failed",
+        ) from None
+
+    try:
+        probe = adapter.probe_readonly()
+    except DemisAdapterError as exc:
+        return _test_connection_failed_response(profile, exc)
+    except Exception:  # pragma: no cover - defensive boundary
+        raise ConnectionProfileError(
+            ConnectionProfileErrorCode.INTERNAL_ERROR,
+            "connection profile live test failed",
+        ) from None
+
+    return ConnectionProfileTestConnectionResponse(
+        profile_id=profile.id,
+        source_name=profile.source_name,
+        environment=profile.environment,
+        status="SUCCEEDED",
+        live_connection_tested=probe.live_connection_tested,
+        reachable=probe.reachable,
+        read_only=probe.read_only,
+        failure_category=None,
+    )
+
+
 def get_connection_profile_diagnostics(
     session: Session, profile_id: int
 ) -> ConnectionProfileDiagnosticsResponse:
@@ -254,6 +301,45 @@ def _require_profile(session: Session, profile_id: int) -> ConnectionProfile:
             "connection profile not found",
         )
     return profile
+
+
+def _profile_snapshot(profile: ConnectionProfile) -> ConnectionProfileSnapshot:
+    return ConnectionProfileSnapshot.model_validate(
+        {
+            "profile_id": profile.id,
+            "name": profile.name,
+            "source_name": profile.source_name,
+            "environment": profile.environment,
+            "enabled": profile.enabled,
+            "dbms_type": profile.dbms_type,
+            "host": profile.host,
+            "port": profile.port,
+            "database_name": profile.database_name,
+            "username": profile.username,
+            "credential_secret_ref": profile.credential_secret_ref,
+        }
+    )
+
+
+def _test_connection_failed_response(
+    profile: ConnectionProfile,
+    exc: DemisAdapterError,
+) -> ConnectionProfileTestConnectionResponse:
+    probe = exc.probe or DemisProbeState(
+        live_connection_tested=False,
+        reachable=None,
+        read_only=None,
+    )
+    return ConnectionProfileTestConnectionResponse(
+        profile_id=profile.id,
+        source_name=profile.source_name,
+        environment=profile.environment,
+        status="FAILED",
+        live_connection_tested=probe.live_connection_tested,
+        reachable=probe.reachable,
+        read_only=probe.read_only,
+        failure_category=exc.failure_category,
+    )
 
 
 def _to_view(profile: ConnectionProfile) -> ConnectionProfileView:

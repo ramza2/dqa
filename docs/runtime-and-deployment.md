@@ -282,6 +282,10 @@ Frontend healthcheck verifies the nginx HTTP serving endpoint.
 
 DEMIS adapter absence and LLM unavailability are capability/dependency diagnostics, not container health failures.
 
+Connection Profile live connectivity is not probed at startup or via GET diagnostics.
+Administrators may run an explicit live probe with
+`POST /api/v1/connection-profiles/{profile_id}/test-connection` after migrate/up.
+
 ## 11. Frontend nginx edge policy
 
 The production frontend image uses nginx as the LAN entrypoint:

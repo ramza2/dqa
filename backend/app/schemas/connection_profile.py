@@ -162,3 +162,21 @@ class ConnectionProfileDiagnosticsResponse(BaseModel):
     issues: list[ConnectionProfileDiagnosticsIssue] = Field(default_factory=list)
     # Explicitly documents that live connectivity was not tested.
     live_connection_tested: bool = False
+
+
+ConnectionTestStatus = Literal["SUCCEEDED", "FAILED"]
+
+
+class ConnectionProfileTestConnectionResponse(BaseModel):
+    """Sanitized explicit live probe result (no host/user/DSN/credentials/rows)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile_id: int
+    source_name: str
+    environment: str
+    status: ConnectionTestStatus
+    live_connection_tested: bool
+    reachable: bool | None = None
+    read_only: bool | None = None
+    failure_category: str | None = None

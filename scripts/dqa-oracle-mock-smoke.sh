@@ -44,6 +44,10 @@ parameter_name = os.environ.get("DQA_SMOKE_PARAMETER_NAME", "cd_grp_id")
 parameter_value = os.environ.get("DQA_SMOKE_PARAMETER_VALUE", "DQA_TEST")
 expected_row_count = int(os.environ.get("DQA_SMOKE_EXPECTED_ROW_COUNT", "3"))
 
+admin_headers = {
+    "X-DQA-Dev-Actor": "dqa-smoke-admin",
+    "X-DQA-Dev-Roles": "administrator",
+}
 operator_headers = {
     "X-DQA-Dev-Actor": "dqa-smoke-operator",
     "X-DQA-Dev-Roles": "query_operator",
@@ -100,6 +104,45 @@ def request_json(
         fail(f"{method} {path} returned non-object JSON")
     return parsed
 
+
+profiles = request_json(
+    "/api/v1/connection-profiles",
+    headers=admin_headers,
+    payload=None,
+)
+items = profiles.get("items") or []
+profile_id = None
+for item in items:
+    if not isinstance(item, dict):
+        continue
+    if (
+        item.get("source_name") == source_name
+        and item.get("environment") == environment
+        and item.get("enabled") is True
+    ):
+        profile_id = item.get("id")
+        break
+if not isinstance(profile_id, int):
+    fail(
+        "no enabled connection profile found for smoke source/environment; "
+        "configure oracle mock profile first"
+    )
+
+probe = request_json(
+    f"/api/v1/connection-profiles/{profile_id}/test-connection",
+    headers=admin_headers,
+    payload={},
+)
+if probe.get("status") != "SUCCEEDED":
+    fail(f"connection profile live probe failed: category={probe.get('failure_category')!r}")
+if probe.get("live_connection_tested") is not True:
+    fail("live_connection_tested must be true after explicit probe")
+if probe.get("reachable") is not True or probe.get("read_only") is not True:
+    fail("probe must report reachable/read_only true on success")
+probe_serialized = json.dumps(probe, ensure_ascii=False)
+if "password" in probe_serialized.casefold() or "postgresql://" in probe_serialized.casefold():
+    fail("probe response leaked credential-like material")
+print(f"PASS: connection profile live probe profile_id={profile_id}")
 
 recommendation = request_json(
     "/api/v1/query-recommendations",

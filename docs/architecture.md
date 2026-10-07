@@ -143,19 +143,23 @@ Implemented management API (`/api/v1/connection-profiles`):
 - create / list / get / patch
 - enable / disable (no delete; state is preserved)
 - configuration-level sanitized diagnostics (`live_connection_tested=false`)
+- explicit administrator live probe:
+  `POST /api/v1/connection-profiles/{profile_id}/test-connection`
+  (resolves credentials and performs a read-only Oracle probe; never automatic)
 - unique `(source_name, environment)`
 - `credential_secret_ref` stores a secret-store/env reference only
 - password / token / full DSN values are never persisted or returned
 - protected by `CONNECTION_PROFILE_MANAGE` (administrator only)
 
 Activation of a Catalog revision does not automatically create or modify a live connection profile.
-Live DEMIS connection tests and query execution are out of scope for this foundation.
+GET diagnostics never resolve secrets or open sockets. Live connectivity is attempted only
+when an administrator explicitly calls the test-connection endpoint.
 
 Before execution, DQA must verify that:
 - the selected Query Template is compatible with the active Catalog
 - the connection profile is enabled
 - the profile is bound to the intended source/environment
-- the read-only connection test succeeds
+- operators have verified live connectivity separately when required (explicit probe)
 
 ### 3.4 Catalog Explorer / Search
 
@@ -342,7 +346,7 @@ This registration does **not** claim live DEMIS/mock network connectivity has
 been validated in an operator environment.
 
 Implemented:
-- `ReadOnlyDemisAdapter` protocol: `diagnostics(...)`, `execute_readonly(...)`
+- `ReadOnlyDemisAdapter` protocol: `diagnostics(...)`, `probe_readonly(...)`, `execute_readonly(...)`
 - request DTO: approved SQL text + bound parameter map + `timeout_seconds` + `row_limit`
 - result DTO: `columns`, `rows`, `row_count`, `truncated`, `elapsed_ms`
 - sanitized diagnostics DTO (no host/port/user/DSN/credential ref)

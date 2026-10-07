@@ -29,11 +29,27 @@ class DemisAdapterIssue:
     message: str
 
 
+@dataclass(frozen=True)
+class DemisProbeState:
+    """Optional live-probe progress for explicit connection-test responses."""
+
+    live_connection_tested: bool
+    reachable: bool | None
+    read_only: bool | None
+
+
 class DemisAdapterError(Exception):
     """Sanitized adapter failure. Never embed secrets, DSN, or result rows."""
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        probe: DemisProbeState | None = None,
+    ) -> None:
         self.issue = DemisAdapterIssue(code=code, message=message)
+        self.probe = probe
         super().__init__(message)
 
     @property
