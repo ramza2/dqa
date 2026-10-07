@@ -305,6 +305,7 @@ Status: in progress.
 Scope:
 - rate/size policy tuning after concurrency requirements are confirmed
 - operational error handling expansion
+  - public DEMIS adapter errors use allowlisted codes + static sanitized messages
 - security regression suite growth
   - recommendation LLM call-site egress denial regression
   - cross-cutting API role/permission matrix across representative protected routes
