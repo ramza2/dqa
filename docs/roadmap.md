@@ -301,28 +301,31 @@ Current boundary:
 - real DEMIS endpoint, read-only account, network path, finalized Catalog Package, and database privilege validation remain external prerequisites
 
 ### PR 23 - Hardening (follow-up)
-Status: in progress.
-Scope:
-- rate/size policy tuning after concurrency requirements are confirmed
+Status: repository-internal hardening complete; policy/site-dependent items deferred.
+
+Implemented:
 - operational error handling expansion
   - public DEMIS adapter errors use allowlisted codes + static sanitized messages
   - Recommendation/Parameter Extraction public errors use shared allowlisted
     contracts; unknown typed errors normalize to generic internal-error codes
-  - Connection Profile, Catalog, and Query Template typed errors use reviewed
-    public contracts; unknown codes fail closed to domain internal-error codes
-  - Audit and execution eligibility/orchestration typed errors use reviewed
-    public contracts; unknown codes fail closed to internal-error codes
+  - Connection Profile, Catalog, Query Template, Audit, and execution typed
+    errors use reviewed public contracts with fail-closed unknown-code handling
 - security regression suite growth
   - recommendation LLM call-site egress denial regression
   - cross-cutting API role/permission matrix across representative protected routes
   - static route guard rejects direct typed-exception passthrough into public errors
-- approved purge tooling after retention policy confirmation
-- RBAC refinement (beyond Catalog)
+- RBAC refinement across representative protected API surfaces
 - data-egress policy enforcement
   - central fail-closed payload-class policy landed in GitHub PR #39
   - raw parameter-extraction request requires technical opt-in + explicit runtime approval assertion
   - query-result-row egress remains denied for all current LLM purposes
   - recommendation metadata egress is explicitly checked at the LLM call site
+- public runtime/documentation state synchronized with the production-selectable
+  Oracle read-only adapter and audited execution path
+
+Deferred until policy/site inputs are confirmed:
+- rate/size policy tuning based on internal concurrency / traffic requirements
+- approved purge tooling after retention policy confirmation
 - backup encryption after site key-management approval
 
 ## Exit criteria before real DEMIS use
