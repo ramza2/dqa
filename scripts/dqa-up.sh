@@ -13,8 +13,8 @@ dqa_preflight
 echo "Validating Compose configuration..."
 dqa_compose config >/dev/null
 
-# create_all() still bootstraps historical tables on backend start.
-# Require Alembic-managed revisions to be at head before backend comes up.
+# Schema lifecycle is Alembic-only: refuse to start until DB is at head.
+# Backend startup also re-checks head read-only and never runs create_all.
 dqa_ensure_db_healthy
 dqa_require_migrations_at_head
 

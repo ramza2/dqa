@@ -143,23 +143,21 @@ Recommended operational sequence:
 ./scripts/dqa-up.sh
 ```
 
-Do not rely on `create_all` as the documented production migration mechanism for new tables.
-
-Historical caveat:
-- Alembic owns `connection_profiles`, `query_audit_events`, and the historical
-  Catalog/Template tables adopted in `20261007_hist01`
-  (`catalog_import_revisions`, `catalog_active_revisions`,
-  `catalog_activation_events`, `query_templates`, `query_template_versions`,
-  `query_template_review_events`)
-- backend startup still runs `create_all` for bootstrap compatibility in this
-  phase; runtime `create_all` removal is deferred to a later hardening PR
-- recommended fresh-DB order: **migrate first, then start backend**
-- `20261007_hist01` is an adoption migration: existing create_all tables are
-  kept (no drop/recreate) only when their schema matches the hist01 contract
-  (required columns/nullability/type family, PK, uniques, indexes, FKs);
-  incompatible legacy schemas fail closed without stamp/ALTER/repair
-- downgrade is intentionally non-destructive so Catalog/template history is
-  not deleted
+Schema lifecycle is **Alembic-only** (Phase 24-B):
+- Alembic head `20261007_hist01` owns the full DQA application schema
+  (`connection_profiles`, `query_audit_events`, `catalog_import_revisions`,
+  `catalog_active_revisions`, `catalog_activation_events`, `query_templates`,
+  `query_template_versions`, `query_template_review_events`)
+- runtime `Base.metadata.create_all` / `init_db_schema` are removed
+- backend startup performs a read-only Alembic head check
+  (`app.adapters.db.migration_head`, also used by `alembic/check_at_head.py`)
+  and fails closed when the database is not at head — it never creates or
+  alters tables
+- authoritative order: **`./scripts/dqa-migrate.sh` then `./scripts/dqa-up.sh`**
+- `20261007_hist01` adoption semantics (Phase 24-A): existing create_all-era
+  tables are kept only when schema-compatible; incompatible legacy schemas
+  fail closed without stamp/ALTER/repair
+- downgrade of hist01 is intentionally non-destructive
 - never run destructive downgrades automatically
 
 ## 7. Operational scripts

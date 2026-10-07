@@ -260,7 +260,7 @@ def test_catalog_disabled_provider_returns_503(
     get_settings.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()
-    application = create_app(init_db_on_startup=False)
+    application = create_app(check_migrations_on_startup=False)
     with TestClient(application) as client:
         response = client.get(
             "/api/v1/catalog/active",

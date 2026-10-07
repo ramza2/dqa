@@ -1,4 +1,4 @@
-"""Database session FastAPI dependencies and schema bootstrap helpers."""
+"""Database session FastAPI dependencies."""
 
 from __future__ import annotations
 
@@ -6,21 +6,7 @@ from collections.abc import Generator
 
 from sqlalchemy.orm import Session
 
-from app.adapters.db.session import get_engine, get_session_factory
-from app.models import Base
-
-
-def init_db_schema() -> None:
-    """Create application tables if they do not already exist.
-
-    Alembic migrations are the preferred production schema path for new tables.
-    ``create_all`` remains for local/test bootstrap until full migration
-    ownership covers historical tables.
-    """
-    # Import models so metadata is populated.
-    import app.models  # noqa: F401
-
-    Base.metadata.create_all(bind=get_engine())
+from app.adapters.db.session import get_session_factory
 
 
 def get_db_session() -> Generator[Session, None, None]:

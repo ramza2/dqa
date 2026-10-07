@@ -137,8 +137,8 @@ def test_legacy_create_all_adoption_preserves_rows(
     test_settings_env: dict[str, str],
 ) -> None:
     """Simulate create_all-era DB at audit01, then adopt via hist01 without data loss."""
-    from app.adapters.db.deps import init_db_schema
     from app.adapters.db.session import get_engine, get_session_factory
+    from app.models import Base
 
     get_settings.cache_clear()
     get_engine.cache_clear()
@@ -154,8 +154,9 @@ def test_legacy_create_all_adoption_preserves_rows(
     for name in _ADOPTED:
         assert not inspect(engine).has_table(name), name
 
-    # Legacy bootstrap path still used by runtime create_all.
-    init_db_schema()
+    # Historical fixture only: simulate pre-24-B create_all-era tables in-test.
+    # Production runtime no longer exposes init_db_schema / create_all.
+    Base.metadata.create_all(bind=engine)
     for name in _ADOPTED:
         assert inspect(engine).has_table(name), name
 
