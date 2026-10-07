@@ -303,6 +303,98 @@ def test_read_only_setup_failure_reachable_true(
     assert body["read_only"] is False
 
 
+def test_bounded_demis_adapter_failure_still_http_200(
+    db_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "app.services.connection_profile.create_credential_resolver",
+        lambda: FakeCredentialResolver({"env:DEMIS_SECRET_PASSWORD": "pw"}),
+    )
+    def _disabled_factory(*_args, **_kwargs):
+        raise DemisAdapterError(
+            DemisAdapterErrorCode.PROFILE_DISABLED,
+            "connection profile is disabled",
+        )
+
+    monkeypatch.setattr(
+        "app.services.connection_profile.create_readonly_demis_adapter",
+        _disabled_factory,
+    )
+    profile_id = _create_enabled_profile(db_client, environment="probe-bounded-200")
+    response = db_client.post(f"/api/v1/connection-profiles/{profile_id}/test-connection")
+    assert response.status_code == 200
+    assert response.json()["status"] == "FAILED"
+
+
+def test_unexpected_probe_exception_sanitized_without_chain(
+    db_client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    leak_marker = (
+        "LEAK_SECRET_pw=super-secret host=evil.demis.internal "
+        "user=secret_ro env:DEMIS_SECRET_PASSWORD"
+    )
+
+    class _ProbeAdapterUnexpected:
+        def probe_readonly(self):
+            raise RuntimeError(f"driver exploded: {leak_marker}")
+
+    def _factory(_profile, *, credential_resolver):
+        credential_resolver.resolve("env:DEMIS_SECRET_PASSWORD")
+        return _ProbeAdapterUnexpected()
+
+    monkeypatch.setattr(
+        "app.services.connection_profile.create_credential_resolver",
+        lambda: FakeCredentialResolver({"env:DEMIS_SECRET_PASSWORD": "pw"}),
+    )
+    monkeypatch.setattr("app.services.connection_profile.create_readonly_demis_adapter", _factory)
+
+    profile_id = _create_enabled_profile(db_client, environment="probe-unexpected")
+    with caplog.at_level(logging.DEBUG):
+        response = db_client.post(f"/api/v1/connection-profiles/{profile_id}/test-connection")
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "CONNECTION_PROFILE_INTERNAL_ERROR"
+    combined = response.text + "\n".join(record.getMessage() for record in caplog.records)
+    for forbidden in (
+        leak_marker,
+        "super-secret",
+        "evil.demis.internal",
+        "secret_ro",
+        "env:DEMIS_SECRET_PASSWORD",
+        "driver exploded",
+    ):
+        assert forbidden not in combined
+
+
+def test_unexpected_factory_exception_has_no_cause(db_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.adapters.connection_profile.errors import ConnectionProfileError
+    from app.services.connection_profile import test_connection_profile_live_connection
+
+    leak = "FACTORY_LEAK_password=abc host=secret.example"
+
+    def _boom(*_args, **_kwargs):
+        raise ValueError(leak)
+
+    monkeypatch.setattr("app.services.connection_profile.create_readonly_demis_adapter", _boom)
+    monkeypatch.setattr(
+        "app.services.connection_profile.create_credential_resolver",
+        lambda: FakeCredentialResolver({"env:DEMIS_SECRET_PASSWORD": "pw"}),
+    )
+
+    profile_id = _create_enabled_profile(db_client, environment="probe-no-cause")
+    from app.adapters.db.session import get_session_factory
+
+    session = get_session_factory()()
+    try:
+        with pytest.raises(ConnectionProfileError) as exc_info:
+            test_connection_profile_live_connection(session, profile_id)
+        assert exc_info.value.code == "CONNECTION_PROFILE_INTERNAL_ERROR"
+        assert exc_info.value.__cause__ is None
+        assert leak not in str(exc_info.value)
+    finally:
+        session.close()
+
+
 def test_secrets_not_in_response_or_logs(
     db_client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

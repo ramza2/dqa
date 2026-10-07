@@ -433,6 +433,42 @@ def test_oracle_probe_read_only_failure_reachable_true() -> None:
     assert exc.value.probe.read_only is False
 
 
+def test_oracle_probe_select_failure_preserves_read_only_true() -> None:
+    class _SelectFail(Exception):
+        pass
+
+    adapter, _, fake_cursor = _oracle_adapter_with_fake(
+        execute_error_on="execute",
+        execute_error=_SelectFail("ORA-00942 secret-table"),
+    )
+    with pytest.raises(DemisAdapterError) as exc:
+        adapter.probe_readonly()
+    assert exc.value.code == DemisAdapterErrorCode.EXECUTION_FAILED
+    assert exc.value.probe is not None
+    assert exc.value.probe.reachable is True
+    assert exc.value.probe.read_only is True
+    assert fake_cursor.executed[0][0] == "SET TRANSACTION READ ONLY"
+    assert fake_cursor.executed[1][0] == "SELECT 1 FROM DUAL"
+    assert "secret-table" not in str(exc.value)
+
+
+def test_oracle_probe_select_timeout_preserves_read_only_true() -> None:
+    class _TimeoutError(Exception):
+        pass
+
+    adapter, _, _ = _oracle_adapter_with_fake(
+        execute_error_on="execute",
+        execute_error=_TimeoutError("driver timed out host=secret.example"),
+    )
+    with pytest.raises(DemisAdapterError) as exc:
+        adapter.probe_readonly()
+    assert exc.value.code == DemisAdapterErrorCode.TIMEOUT
+    assert exc.value.probe is not None
+    assert exc.value.probe.reachable is True
+    assert exc.value.probe.read_only is True
+    assert "secret.example" not in str(exc.value)
+
+
 class _FakeOracleCursor:
     def __init__(self, rows: list[tuple[object, ...]], columns: list[str]) -> None:
         self.executed: list[tuple[str, object]] = []

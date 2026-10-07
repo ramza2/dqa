@@ -236,10 +236,11 @@ class OracleReadOnlyDemisAdapter:
                 read_only=False,
             )
         else:
+            # SELECT probe (and fetch) run only after read-only txn succeeds.
             probe = DemisProbeState(
                 live_connection_tested=True,
                 reachable=True,
-                read_only=False,
+                read_only=True,
             )
         return DemisAdapterError(exc.code, str(exc), probe=probe)
 

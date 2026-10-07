@@ -180,21 +180,21 @@ def test_connection_profile_live_connection(
         )
     except DemisAdapterError as exc:
         return _test_connection_failed_response(profile, exc)
-    except Exception as exc:  # pragma: no cover - defensive boundary
+    except Exception:  # pragma: no cover - defensive boundary
         raise ConnectionProfileError(
             ConnectionProfileErrorCode.INTERNAL_ERROR,
             "connection profile live test failed",
-        ) from exc
+        ) from None
 
     try:
         probe = adapter.probe_readonly()
     except DemisAdapterError as exc:
         return _test_connection_failed_response(profile, exc)
-    except Exception as exc:  # pragma: no cover - defensive boundary
+    except Exception:  # pragma: no cover - defensive boundary
         raise ConnectionProfileError(
             ConnectionProfileErrorCode.INTERNAL_ERROR,
             "connection profile live test failed",
-        ) from exc
+        ) from None
 
     return ConnectionProfileTestConnectionResponse(
         profile_id=profile.id,
