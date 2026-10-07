@@ -32,10 +32,7 @@ def is_llm_egress_allowed(
         return False
 
     if payload_class == LLMEgressPayloadClass.METADATA_ONLY:
-        return purpose in {
-            LLMRequestPurpose.TEMPLATE_RECOMMENDATION,
-            LLMRequestPurpose.CATALOG_EXPLANATION,
-        }
+        return purpose == LLMRequestPurpose.TEMPLATE_RECOMMENDATION
 
     if payload_class == LLMEgressPayloadClass.RAW_REQUEST_TEXT:
         return (
