@@ -307,6 +307,7 @@ Scope:
 - operational error handling expansion
 - security regression suite growth
   - recommendation LLM call-site egress denial regression
+  - cross-cutting API role/permission matrix across representative protected routes
 - approved purge tooling after retention policy confirmation
 - RBAC refinement (beyond Catalog)
 - data-egress policy enforcement
