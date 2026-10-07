@@ -61,6 +61,17 @@ def _call_name(node: ast.Call) -> str | None:
     return None
 
 
+def _is_exception_class_name(node: ast.AST, exception_names: set[str]) -> bool:
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "__name__"
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "__class__"
+        and isinstance(node.value.value, ast.Name)
+        and node.value.value.id in exception_names
+    )
+
+
 def _scan_source(source: str, *, filename: str) -> list[str]:
     tree = ast.parse(source, filename=filename)
     violations: list[str] = []
@@ -96,7 +107,13 @@ def _scan_source(source: str, *, filename: str) -> list[str]:
                     )
 
             if isinstance(node, ast.JoinedStr):
-                if _referenced_names(node) & exception_names:
+                unsafe_interpolation = any(
+                    isinstance(value, ast.FormattedValue)
+                    and _referenced_names(value.value) & exception_names
+                    and not _is_exception_class_name(value.value, exception_names)
+                    for value in node.values
+                )
+                if unsafe_interpolation:
                     violations.append(
                         f"{filename}:{node.lineno}: typed exception interpolation"
                     )
