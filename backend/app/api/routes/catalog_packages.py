@@ -141,12 +141,17 @@ def _validation_http_error(exc: CatalogPackageValidationError) -> HTTPException:
         if exc.code in _CATALOG_PACKAGE_TOO_LARGE_CODES
         else status.HTTP_400_BAD_REQUEST
     )
+    # The code/path are public only after the code passed the reviewed allowlist
+    # above. Copy them out before constructing HTTPException.detail so route
+    # error payloads never consume typed-exception state directly.
+    public_code = exc.code
+    public_path = exc.path
     return HTTPException(
         status_code=status_code,
         detail=CatalogPackageErrorBody(
-            code=exc.code,
+            code=public_code,
             message="catalog package validation failed",
-            path=exc.path,
+            path=public_path,
         ).model_dump(),
     )
 
