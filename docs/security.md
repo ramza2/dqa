@@ -106,15 +106,16 @@ Template recommendation (`POST /api/v1/query-recommendations`):
 
 Parameter extraction (`POST /api/v1/query-parameters/extract`):
 - unlike Recommendation, extraction may need the raw request to recover values
-- raw `request_text` egress is gated by
-  `LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST` (default `false`)
-- when the gate is `false` and the template declares parameters, extraction
+- raw `request_text` egress requires both runtime gates:
+  `LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST=true` and
+  `LLM_PARAMETER_EXTRACTION_RAW_REQUEST_EGRESS_APPROVED=true`
+- when either gate is `false` and the template declares parameters, extraction
   returns `PARAMETER_EXTRACTION_EGRESS_NOT_ALLOWED` (HTTP 403) and does not
   call the LLM provider
-- setting the gate to `true` is a technical opt-in only; it does **not**
-  constitute production medical/data-egress approval
+- `ALLOW_RAW_REQUEST` is the technical opt-in; `RAW_REQUEST_EGRESS_APPROVED`
+  is a runtime assertion that the required external approval exists
 - production use still requires an approved provider, network boundary, and
-  data-egress policy before enabling the gate
+  data-egress policy before enabling both gates
 - when enabled, the LLM receives only `request_text`, template/version ids,
   and declared parameter metadata (name, label, description, type, constraints)
 - never send SQL text, Catalog-wide metadata, DB credentials, or query result
@@ -176,14 +177,15 @@ Default policy:
 
 Exceptions must be explicit and reviewed:
 - Recommendation never sends raw natural-language request text
-- Parameter Extraction may send raw request text only behind
-  `LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST=true`, and only after provider /
-  network / data-egress policy approval for production
+- Parameter Extraction may send raw request text only when both
+  `LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST=true` and
+  `LLM_PARAMETER_EXTRACTION_RAW_REQUEST_EGRESS_APPROVED=true`, and only after
+  provider / network / data-egress policy approval for production
 - LLM result summarization requires a reviewed data-egress policy covering
   provider, network boundary, permitted fields, redaction/minimization,
   retention, and audit
 
-Keep Parameter Extraction disabled (`false`) until that approval exists.
+Keep both Parameter Extraction egress gates disabled (`false`) until that approval exists.
 
 ## 9. Audit and privacy
 
