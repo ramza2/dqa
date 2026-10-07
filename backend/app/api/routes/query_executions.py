@@ -13,6 +13,7 @@ from app.adapters.execution.errors import (
     ExecutionPreviewError,
     ExecutionPreviewErrorCode,
 )
+from app.api.public_errors import PublicErrorSpec, build_public_http_error
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.execution_form import ExecutionFormResponse
@@ -27,40 +28,102 @@ from app.services.query_execution import execute_query
 
 router = APIRouter(prefix="/api/v1/query-executions", tags=["query-executions"])
 
-_ADAPTER_PUBLIC_ERRORS: dict[str, tuple[int, str]] = {
-    DemisAdapterErrorCode.TIMEOUT: (
+_ELIGIBILITY_PUBLIC_ERRORS = {
+    ExecutionPreviewErrorCode.TEMPLATE_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "query template not found",
+    ),
+    ExecutionPreviewErrorCode.ACTIVE_CATALOG_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "active catalog revision not found",
+    ),
+    ExecutionPreviewErrorCode.CONNECTION_PROFILE_NOT_FOUND: PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND,
+        "connection profile not found",
+    ),
+    ExecutionPreviewErrorCode.TEMPLATE_NOT_ELIGIBLE: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "query template is not eligible for execution",
+    ),
+    ExecutionPreviewErrorCode.STALE_TEMPLATE_VERSION: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "requested template version is stale",
+    ),
+    ExecutionPreviewErrorCode.CATALOG_MISMATCH: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "query template is incompatible with the active catalog",
+    ),
+    ExecutionPreviewErrorCode.CONNECTION_PROFILE_DISABLED: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "connection profile is disabled",
+    ),
+    ExecutionPreviewErrorCode.CONNECTION_PROFILE_INCOMPLETE: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "connection profile is incomplete",
+    ),
+    ExecutionPreviewErrorCode.SQL_UNSAFE: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "query template SQL does not pass safety validation",
+    ),
+    ExecutionPreviewErrorCode.PARAMETER_SCHEMA_INVALID: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "query template parameter schema is invalid",
+    ),
+    ExecutionPreviewErrorCode.PARAMETER_UNDECLARED: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "request contains an undeclared parameter",
+    ),
+    ExecutionPreviewErrorCode.PARAMETER_INVALID: PublicErrorSpec(
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "query parameter values are invalid",
+    ),
+}
+
+_EXECUTION_PUBLIC_ERRORS = {
+    ExecutionErrorCode.AUDIT_UNAVAILABLE: PublicErrorSpec(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "query audit is unavailable",
+    ),
+    ExecutionErrorCode.DEMIS_ADAPTER_UNAVAILABLE: PublicErrorSpec(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "DEMIS read-only adapter is unavailable",
+    ),
+}
+
+_ADAPTER_PUBLIC_ERRORS = {
+    DemisAdapterErrorCode.TIMEOUT: PublicErrorSpec(
         status.HTTP_504_GATEWAY_TIMEOUT,
         "DEMIS read-only query execution timed out",
     ),
-    DemisAdapterErrorCode.UNSUPPORTED_DBMS: (
+    DemisAdapterErrorCode.UNSUPPORTED_DBMS: PublicErrorSpec(
         status.HTTP_503_SERVICE_UNAVAILABLE,
         "DEMIS database type is not supported",
     ),
-    DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE: (
+    DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE: PublicErrorSpec(
         status.HTTP_503_SERVICE_UNAVAILABLE,
         "DEMIS credential is unavailable",
     ),
-    DemisAdapterErrorCode.CONNECTION_FAILED: (
+    DemisAdapterErrorCode.CONNECTION_FAILED: PublicErrorSpec(
         status.HTTP_503_SERVICE_UNAVAILABLE,
         "DEMIS read-only connection could not be established",
     ),
-    DemisAdapterErrorCode.ADAPTER_NOT_CONFIGURED: (
+    DemisAdapterErrorCode.ADAPTER_NOT_CONFIGURED: PublicErrorSpec(
         status.HTTP_503_SERVICE_UNAVAILABLE,
         "DEMIS read-only adapter is not configured",
     ),
-    DemisAdapterErrorCode.PROFILE_DISABLED: (
+    DemisAdapterErrorCode.PROFILE_DISABLED: PublicErrorSpec(
         status.HTTP_503_SERVICE_UNAVAILABLE,
         "DEMIS connection profile is disabled",
     ),
-    DemisAdapterErrorCode.EXECUTION_FAILED: (
+    DemisAdapterErrorCode.EXECUTION_FAILED: PublicErrorSpec(
         status.HTTP_502_BAD_GATEWAY,
         "DEMIS read-only query execution failed",
     ),
-    DemisAdapterErrorCode.RESULT_LIMIT_ERROR: (
+    DemisAdapterErrorCode.RESULT_LIMIT_ERROR: PublicErrorSpec(
         status.HTTP_502_BAD_GATEWAY,
         "DEMIS query result limit could not be enforced",
     ),
-    DemisAdapterErrorCode.INVALID_REQUEST: (
+    DemisAdapterErrorCode.INVALID_REQUEST: PublicErrorSpec(
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "DEMIS read-only query request is invalid",
     ),
@@ -133,59 +196,30 @@ def execute_execution(
 
 
 def _eligibility_http_error(exc: ExecutionPreviewError) -> HTTPException:
-    if exc.code in {
-        ExecutionPreviewErrorCode.TEMPLATE_NOT_FOUND,
-        ExecutionPreviewErrorCode.ACTIVE_CATALOG_NOT_FOUND,
-        ExecutionPreviewErrorCode.CONNECTION_PROFILE_NOT_FOUND,
-    }:
-        status_code = status.HTTP_404_NOT_FOUND
-    elif exc.code in {
-        ExecutionPreviewErrorCode.TEMPLATE_NOT_ELIGIBLE,
-        ExecutionPreviewErrorCode.STALE_TEMPLATE_VERSION,
-        ExecutionPreviewErrorCode.CATALOG_MISMATCH,
-        ExecutionPreviewErrorCode.CONNECTION_PROFILE_DISABLED,
-        ExecutionPreviewErrorCode.CONNECTION_PROFILE_INCOMPLETE,
-    }:
-        status_code = status.HTTP_409_CONFLICT
-    elif exc.code in {
-        ExecutionPreviewErrorCode.SQL_UNSAFE,
-        ExecutionPreviewErrorCode.PARAMETER_SCHEMA_INVALID,
-        ExecutionPreviewErrorCode.PARAMETER_UNDECLARED,
-        ExecutionPreviewErrorCode.PARAMETER_INVALID,
-    }:
-        status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
-    else:
-        status_code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": exc.code, "message": exc.issue.message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_ELIGIBILITY_PUBLIC_ERRORS,
+        fallback_code=ExecutionPreviewErrorCode.INTERNAL_ERROR,
+        fallback_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        fallback_message="query execution eligibility check failed",
     )
 
 
 def _execution_http_error(exc: ExecutionError) -> HTTPException:
-    if exc.code in {
-        ExecutionErrorCode.AUDIT_UNAVAILABLE,
-        ExecutionErrorCode.DEMIS_ADAPTER_UNAVAILABLE,
-    }:
-        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    else:
-        status_code = status.HTTP_400_BAD_REQUEST
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": exc.code, "message": exc.issue.message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_EXECUTION_PUBLIC_ERRORS,
+        fallback_code=ExecutionErrorCode.INTERNAL_ERROR,
+        fallback_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        fallback_message="query execution failed",
     )
 
 
 def _adapter_http_error(exc: DemisAdapterError) -> HTTPException:
-    mapped = _ADAPTER_PUBLIC_ERRORS.get(exc.code)
-    if mapped is None:
-        public_code = DemisAdapterErrorCode.EXECUTION_FAILED
-        status_code = status.HTTP_502_BAD_GATEWAY
-        message = "DEMIS read-only operation failed"
-    else:
-        public_code = exc.code
-        status_code, message = mapped
-    return HTTPException(
-        status_code=status_code,
-        detail={"code": public_code, "message": message},
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts=_ADAPTER_PUBLIC_ERRORS,
+        fallback_code=DemisAdapterErrorCode.EXECUTION_FAILED,
+        fallback_status_code=status.HTTP_502_BAD_GATEWAY,
+        fallback_message="DEMIS read-only operation failed",
     )
