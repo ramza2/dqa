@@ -18,6 +18,13 @@ Trust boundaries include:
 
 Each boundary requires validation and sanitized error handling.
 
+A static regression guard scans API route source for common exception-leak
+patterns. Route code must not directly stringify typed exceptions, interpolate
+their values into public messages, or feed typed-exception state into
+`HTTPException.detail`; reviewed public error contracts should be used instead.
+Sanitized exception class names used only for readiness diagnostics remain
+permitted.
+
 ## 3. DEMIS database controls
 
 Required:
