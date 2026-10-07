@@ -99,6 +99,13 @@ Run: `./scripts/dqa-oracle-mock-smoke.sh`
 
 The smoke test verifies recommendation → parameter extraction → execution preview → read-only Oracle execution → audit lifecycle.
 
+Because this development smoke includes LLM-backed parameter extraction, the
+backend must receive both
+`LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST=true` and
+`LLM_PARAMETER_EXTRACTION_RAW_REQUEST_EGRESS_APPROVED=true`.
+Use that combination only for the synthetic Oracle mock after the applicable
+development data-egress approval; never copy it to production by default.
+
 Default development fixture:
 - source: `oracle_demis_mock`
 - environment: `development`
