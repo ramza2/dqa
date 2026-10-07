@@ -160,6 +160,10 @@ Validate:
 
 Reject ZIP path traversal and duplicate managed paths.
 
+Catalog Package validation errors expose only reviewed stable codes plus a static
+validation message. Unknown/unreviewed validation codes fail closed to
+`CATALOG_PACKAGE_INTERNAL_ERROR` (HTTP 500) and do not echo the validation path.
+
 Do not execute or render active content from package artifacts.
 
 ## 7. Secret handling
@@ -288,6 +292,11 @@ Connection Profile rules:
 - credentials are referenced, never stored as secret values
 - diagnostics are configuration-level only (no live DEMIS connection test)
 - Catalog activation does not auto-create or mutate Connection Profiles
+- Connection Profile, Catalog activation/query, and Query Template HTTP
+  boundaries use reviewed code/status/static-message contracts; typed exception
+  messages never cross the public API boundary
+- unknown/unreviewed domain error codes fail closed to domain-specific
+  `*_INTERNAL_ERROR` codes (HTTP 500)
 
 Execution preview rules:
 - authoritative catalog/profile/template metadata loaded server-side only
