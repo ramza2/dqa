@@ -89,4 +89,7 @@ Included:
 Not included:
 - Catalog import / activation UI
 - Production IdentityProvider UI
-- Concrete DEMIS clinical enablement (blocked on adapter + IdP)
+- Real DEMIS clinical enablement. Oracle read-only adapter support exists, but
+  production use still depends on approved IdentityProvider, operator
+  network/credential wiring, read-only privilege validation, TLS termination,
+  and site retention/storage policy.

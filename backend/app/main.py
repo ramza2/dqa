@@ -20,10 +20,11 @@ def create_app(*, init_db_on_startup: bool = True) -> FastAPI:
         version=__version__,
         description=(
             "DEMIS Query Assistant backend. "
-            "Provides settings, DQA PostgreSQL connectivity, health endpoints, "
-            "Catalog Package v2 validation, immutable catalog import persistence, "
-            "Active Catalog management, Active Catalog metadata query APIs, "
-            "and draft Query Template registry (no execution)."
+            "Provides Catalog Package validation/import/activation, Catalog metadata "
+            "query APIs, approved Query Template management, LLM-assisted template "
+            "recommendation and parameter extraction, deterministic execution "
+            "preview, audited read-only DEMIS query execution, and operational "
+            "health/readiness endpoints."
         ),
         lifespan=lifespan,
         docs_url=docs_urls["docs_url"],

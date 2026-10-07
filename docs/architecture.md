@@ -331,7 +331,8 @@ The safety gate runs even for approved templates.
 
 ### 3.9 Read-only DEMIS Adapter
 
-Foundation package: `app/adapters/demis` (DBMS-neutral contracts only).
+Adapter package: `app/adapters/demis` (DBMS-neutral contracts plus the
+production-selectable Oracle thin-mode implementation).
 
 The adapter interface is DBMS-neutral.
 **Oracle (`dbms_type=oracle`) is registered as a concrete production adapter**
@@ -359,7 +360,7 @@ Credentials are never resolved during Connection Profile CRUD/diagnostics or
 execution preview. Resolver invocation remains behind concrete adapter selection;
 unsupported DBMS still returns `UNSUPPORTED_DBMS` without reading environment secrets.
 
-Responsibilities (contract / future concrete adapters):
+Adapter responsibilities:
 - connection lifecycle
 - read-only session/transaction where supported
 - bound parameter execution only (no value interpolation into SQL)

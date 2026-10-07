@@ -21,7 +21,7 @@ DEMIS DB (read-only)
 DQA does not crawl or analyze DEMIS schema directly.
 The imported and activated Catalog Package is the schema source of truth.
 
-## Initial stack
+## Stack
 
 - Backend: FastAPI / Python 3.11+ / SQLAlchemy / Pydantic
 - Frontend: React / TypeScript / Vite
@@ -56,7 +56,9 @@ dqa/
    └─ README.md
 ```
 
-Business code is intentionally not included in the bootstrap PR.
+The current implementation includes Catalog management, approved Query Template
+workflow, LLM-assisted recommendation/parameter extraction, deterministic
+preview, audited read-only execution, Catalog Explorer, and Query Assistant UI.
 
 ## Key safety rule
 
@@ -107,9 +109,13 @@ cp .env.onprem.example .env.onprem   # set DQA_DB_PASSWORD and bind IP
 ```
 
 See [Runtime and Deployment](docs/runtime-and-deployment.md) for Mode A/B,
-migration caveats, and outstanding blockers (production IdP + DEMIS DBMS).
+migration caveats, and outstanding production prerequisites. Oracle thin-mode
+read-only execution is implemented, but real DEMIS use still depends on an
+approved production IdentityProvider, operator network/credential wiring,
+read-only privilege validation, approved TLS termination, and retention/storage
+policy decisions.
 
-Do not treat this foundation as readiness for real DEMIS clinical use.
+Do not treat repository capability as readiness for real DEMIS clinical use.
 
 ## Development workflow
 
@@ -118,4 +124,5 @@ Feature work must use feature branches and pull requests.
 Do not merge PRs automatically.
 Merge only after tests/runtime validation and explicit approval.
 
-The first implementation PR after bootstrap should be the backend application skeleton described in `docs/roadmap.md`.
+Use `docs/roadmap.md` for implemented history, current hardening status, and
+policy/external prerequisites that remain outside repository-only changes.

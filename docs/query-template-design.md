@@ -152,7 +152,7 @@ Policy highlights:
 - reject binds used as dynamic schema/table/column identifiers
 
 `validate_sql_safety()` always returns a report (`safe=false` when unsafe).
-`require_sql_safe()` is the future execution-gate helper: it returns the report
+`require_sql_safe()` is the execution-gate helper used by the current eligibility path: it returns the report
 only when safe, otherwise raises `SqlSafetyValidationError` with the typed
 report attached (no full SQL text in the exception message).
 

@@ -1,22 +1,21 @@
 # Backend
 
-FastAPI application skeleton for DEMIS Query Assistant (DQA).
+FastAPI backend for DEMIS Query Assistant (DQA).
 
-## Scope (PR 2)
+## Current scope
 
-Included:
-- FastAPI app factory (`app.main:app`)
-- Pydantic Settings (`app.core.config`)
-- SQLAlchemy PostgreSQL session helpers (`app.adapters.db`)
-- `/health` (liveness) and `/health/ready` (DQA DB readiness)
-- pytest baseline
-- development Dockerfile / Compose skeleton
-
-Not included yet:
-- Catalog Package import/validation
-- Query Template registry
-- LLM provider
-- DEMIS read-only query execution
+Implemented:
+- FastAPI app factory, settings, DQA PostgreSQL persistence, Alembic/runtime helpers
+- Catalog Package validation/import/activation and Active Catalog query APIs
+- Query Template registry, versioning, approval/enable workflow, and SQL safety validation
+- OpenAI-compatible LLM provider abstraction for template recommendation and parameter extraction
+- authentication/RBAC foundation with fail-closed production provider configuration
+- Connection Profile management and environment-scoped credential reference boundary
+- deterministic execution form/preview eligibility checks
+- production-selectable Oracle thin-mode read-only DEMIS adapter
+- audited read-only query execution with timeout/row-limit controls
+- public error contracts and regression guards for exception-data leakage
+- `/health` liveness and `/health/ready` DQA PostgreSQL readiness
 
 ## Layout
 
@@ -75,8 +74,9 @@ DQA_DB_BIND_IP=127.0.0.1
 Then the backend is reachable at `http://192.168.0.100:8000` from the trusted LAN,
 subject to the GPU server firewall. DNS and Traefik are not required.
 
-This direct backend exposure is for the current backend-only phase. After the DQA frontend is
-implemented, prefer exposing the frontend on the LAN and keeping the backend internal/loopback.
+Direct backend exposure is for development/integration testing only. The on-prem
+production topology exposes the frontend as the LAN entrypoint and keeps the
+backend and DQA PostgreSQL internal to Compose.
 
 ## Tests
 
@@ -96,3 +96,10 @@ See also:
 - `AGENTS.md`
 - `../docs/architecture.md`
 - `../docs/roadmap.md`
+
+## Production boundary
+
+Repository support for Oracle read-only execution does not by itself authorize or
+prove real DEMIS clinical connectivity. Production use still requires an approved
+IdentityProvider, operator-managed network/credential wiring, verified read-only
+database privileges, approved TLS termination, and site retention/storage policy.

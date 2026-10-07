@@ -315,8 +315,9 @@ Execution preview rules:
 - resolved parameter values may appear in the preview response for confirmation
   (`Cache-Control: no-store, private`); never log or persist parameter values
 - SQL text, host/port/username/database, credential refs, and DSN never returned
-- live execution remains blocked (`execution_available=false`,
-  `DEMIS_ADAPTER_UNAVAILABLE`) until a concrete DEMIS adapter exists
+- execution remains blocked with `DEMIS_ADAPTER_UNAVAILABLE` only when
+  the selected profile DBMS has no concrete adapter; Oracle is currently
+  production-selectable when profile eligibility passes
 - preview does not write audit events
 
 Query execution rules:
@@ -334,8 +335,8 @@ Query execution rules:
 - result rows are never logged, persisted, exception-embedded, or LLM-egressed
 - if initial STARTED audit cannot persist → `AUDIT_UNAVAILABLE` (503), no DEMIS call
 - if final success audit cannot persist → `AUDIT_UNAVAILABLE` (503), no rows returned
-- production path cannot select fake adapters; live DEMIS remains unavailable until
-  a concrete DBMS adapter exists (`DEMIS_ADAPTER_UNAVAILABLE` before credentials)
+- production path cannot select fake adapters; unsupported DBMS types fail
+  closed with `DEMIS_ADAPTER_UNAVAILABLE` before credential resolution
 
 Execution form metadata rules:
 - `GET /api/v1/query-executions/form` is a QUERY_OPERATE-only projection for
@@ -345,12 +346,12 @@ Execution form metadata rules:
   runtime parameter values or SQL text
 - exposes only enabled environments; never host/user/db/credential refs/profile ids
 
-Not yet covered (follow-up):
+Not yet covered (follow-up / external integration):
 - OIDC/OAuth2/JWT verification, user directory, MFA, sessions
-- concrete DEMIS DBMS driver / live connectivity (Oracle thin adapter is
-  registered; live mock/network/secret wiring remains operator-side)
+- real DEMIS endpoint/network/credential wiring and read-only privilege validation
+  (Oracle thin adapter is already registered)
 - production credential secret-store resolver (beyond env-prefix boundary)
-- production IdentityProvider (Catalog RBAC closes authorization gaps only)
+- production IdentityProvider
 ## 11. Production checklist
 
 Before real DEMIS access:
