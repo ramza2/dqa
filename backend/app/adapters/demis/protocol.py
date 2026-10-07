@@ -30,6 +30,10 @@ class ReadOnlyDemisAdapter(Protocol):
         """Return sanitized configuration / connectivity diagnostics."""
         ...
 
+    def probe_readonly(self) -> DemisAdapterDiagnostics:
+        """Perform an explicit read-only live connectivity probe (admin-initiated only)."""
+        ...
+
     def execute_readonly(self, request: ReadonlyQueryRequest) -> ReadonlyQueryResult:
         """Execute approved SQL with bound parameters under timeout/row limits."""
         ...

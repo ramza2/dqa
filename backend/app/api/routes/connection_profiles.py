@@ -1,4 +1,8 @@
-"""Connection Profile management endpoints (no live DEMIS connectivity)."""
+"""Connection Profile management endpoints.
+
+GET diagnostics remain configuration-only. Live DEMIS connectivity is available
+only through explicit POST ``/test-connection`` (administrator).
+"""
 
 from __future__ import annotations
 
@@ -17,6 +21,7 @@ from app.schemas.connection_profile import (
     ConnectionProfileCreateRequest,
     ConnectionProfileDiagnosticsResponse,
     ConnectionProfileListResponse,
+    ConnectionProfileTestConnectionResponse,
     ConnectionProfileUpdateRequest,
     ConnectionProfileView,
 )
@@ -27,6 +32,7 @@ from app.services.connection_profile import (
     get_connection_profile,
     get_connection_profile_diagnostics,
     list_connection_profiles,
+    test_connection_profile_live_connection,
     update_connection_profile,
 )
 
@@ -154,6 +160,23 @@ def profile_diagnostics(
 ) -> ConnectionProfileDiagnosticsResponse:
     try:
         return get_connection_profile_diagnostics(session, profile_id)
+    except ConnectionProfileError as exc:
+        raise _profile_http_error(exc) from None
+
+
+@router.post(
+    "/{profile_id}/test-connection",
+    response_model=ConnectionProfileTestConnectionResponse,
+)
+def test_profile_connection(
+    profile_id: int,
+    session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+) -> ConnectionProfileTestConnectionResponse:
+    try:
+        return test_connection_profile_live_connection(session, profile_id)
     except ConnectionProfileError as exc:
         raise _profile_http_error(exc) from None
 

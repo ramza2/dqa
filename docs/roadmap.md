@@ -343,7 +343,7 @@ Scope:
 - downgrade is non-destructive (revision pointer only)
 
 ### PR 24-B - Alembic-only schema lifecycle
-Status: in progress (`hardening/alembic-only-schema-lifecycle`).
+Status: completed (merged via `hardening/alembic-only-schema-lifecycle`).
 Scope:
 - remove runtime `Base.metadata.create_all` / `init_db_schema` completely
 - backend startup read-only Alembic head validation (fail closed; no schema mutation)
@@ -351,6 +351,15 @@ Scope:
 - test DB fixtures bootstrap via `alembic upgrade head` only
 - no new Alembic revision; head remains `20261007_hist01`
 - authoritative workflow remains migrate then up (no auto-migrate)
+
+### PR 25-A - Explicit Connection Profile live DEMIS probe
+Status: in progress (`feat/live-demis-connection-probe`).
+Scope:
+- `POST /api/v1/connection-profiles/{profile_id}/test-connection` (administrator only)
+- GET diagnostics remain configuration-only (no credential resolve / socket connect)
+- production credential resolver + DEMIS adapter factory + Oracle `probe_readonly()`
+- sanitized bounded failure categories; no probe result persistence
+- no execution eligibility gate changes; no new Alembic revision
 
 ## Exit criteria before real DEMIS use
 

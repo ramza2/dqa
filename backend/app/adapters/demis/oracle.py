@@ -14,13 +14,20 @@ import oracledb
 from pydantic import ValidationError
 
 from app.adapters.demis.credentials import CredentialMaterial
-from app.adapters.demis.errors import DemisAdapterError, DemisAdapterErrorCode
+from app.adapters.demis.errors import (
+    DemisAdapterError,
+    DemisAdapterErrorCode,
+    DemisProbeState,
+)
 from app.adapters.demis.profile import ConnectionProfileSnapshot
 from app.adapters.demis.types import (
     DemisAdapterDiagnostics,
     ReadonlyQueryRequest,
     ReadonlyQueryResult,
 )
+
+_PROBE_TIMEOUT_SECONDS = 5
+_READONLY_PROBE_SQL = "SELECT 1 FROM DUAL"
 
 _SANITIZED_CONNECT_FAILED = "DEMIS read-only connection could not be established"
 _SANITIZED_TIMEOUT = "DEMIS read-only query execution timed out"
@@ -55,6 +62,37 @@ class OracleReadOnlyDemisAdapter:
             read_only=None,
             failure_category=None,
         )
+
+    def probe_readonly(self) -> DemisAdapterDiagnostics:
+        """Explicit read-only live probe (fixed server-side timeout; no caller SQL)."""
+        connection: Any | None = None
+        cursor: Any | None = None
+        phase = "connect"
+        try:
+            connection = self._open_connection(_PROBE_TIMEOUT_SECONDS)
+            connection.autocommit = False
+            connection.call_timeout = int(_PROBE_TIMEOUT_SECONDS) * 1000
+            cursor = connection.cursor()
+            phase = "read_only"
+            cursor.execute("SET TRANSACTION READ ONLY")
+            phase = "execute"
+            cursor.execute(_READONLY_PROBE_SQL)
+            # Discard probe row — never return, log, or persist result values.
+            cursor.fetchone()
+            return DemisAdapterDiagnostics(
+                configured=True,
+                dbms_type="oracle",
+                live_connection_tested=True,
+                reachable=True,
+                read_only=True,
+                failure_category=None,
+            )
+        except DemisAdapterError as exc:
+            raise self._with_probe_state(exc, phase) from None
+        except Exception as exc:
+            raise self._with_probe_state(self._map_failure(phase, exc), phase) from None
+        finally:
+            self._cleanup(connection, cursor)
 
     def execute_readonly(self, request: ReadonlyQueryRequest) -> ReadonlyQueryResult:
         try:
@@ -182,6 +220,28 @@ class OracleReadOnlyDemisAdapter:
                 connection.close()
             except Exception:
                 pass
+
+    @staticmethod
+    def _with_probe_state(exc: DemisAdapterError, phase: str) -> DemisAdapterError:
+        if phase == "connect":
+            probe = DemisProbeState(
+                live_connection_tested=True,
+                reachable=False,
+                read_only=None,
+            )
+        elif phase == "read_only":
+            probe = DemisProbeState(
+                live_connection_tested=True,
+                reachable=True,
+                read_only=False,
+            )
+        else:
+            probe = DemisProbeState(
+                live_connection_tested=True,
+                reachable=True,
+                read_only=False,
+            )
+        return DemisAdapterError(exc.code, str(exc), probe=probe)
 
     @staticmethod
     def _map_failure(phase: str, exc: BaseException) -> DemisAdapterError:

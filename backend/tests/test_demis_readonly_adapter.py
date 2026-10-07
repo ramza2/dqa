@@ -382,6 +382,57 @@ def test_protocol_surface_has_diagnostics_and_execute() -> None:
     assert diag.live_connection_tested is False
 
 
+def test_oracle_probe_readonly_success_order_and_cleanup() -> None:
+    adapter, fake_conn, fake_cursor = _oracle_adapter_with_fake(
+        rows=[(1,)],
+        columns=["ONE"],
+    )
+    diag = adapter.probe_readonly()
+    assert diag.live_connection_tested is True
+    assert diag.reachable is True
+    assert diag.read_only is True
+    assert fake_conn.autocommit is False
+    assert fake_conn.call_timeout == 5000
+    assert len(fake_cursor.executed) == 2
+    assert fake_cursor.executed[0][0] == "SET TRANSACTION READ ONLY"
+    assert fake_cursor.executed[1][0] == "SELECT 1 FROM DUAL"
+    assert fake_cursor.closed is True
+    assert fake_conn.rollback_calls >= 1
+    assert fake_conn.closed is True
+
+
+def test_oracle_probe_connect_failure_probe_state() -> None:
+    class _Boom(Exception):
+        pass
+
+    adapter, _, _ = _oracle_adapter_with_fake(
+        connect_error=_Boom("ORA host=secret.example user=secret password=secret")
+    )
+    with pytest.raises(DemisAdapterError) as exc:
+        adapter.probe_readonly()
+    assert exc.value.code == DemisAdapterErrorCode.CONNECTION_FAILED
+    assert exc.value.probe is not None
+    assert exc.value.probe.live_connection_tested is True
+    assert exc.value.probe.reachable is False
+    assert exc.value.probe.read_only is None
+    assert "secret.example" not in str(exc.value)
+
+
+def test_oracle_probe_read_only_failure_reachable_true() -> None:
+    class _ReadOnlyFail(Exception):
+        pass
+
+    adapter, _, _ = _oracle_adapter_with_fake(
+        execute_error_on="read_only",
+        execute_error=_ReadOnlyFail("cannot set read only"),
+    )
+    with pytest.raises(DemisAdapterError) as exc:
+        adapter.probe_readonly()
+    assert exc.value.probe is not None
+    assert exc.value.probe.reachable is True
+    assert exc.value.probe.read_only is False
+
+
 class _FakeOracleCursor:
     def __init__(self, rows: list[tuple[object, ...]], columns: list[str]) -> None:
         self.executed: list[tuple[str, object]] = []
@@ -394,6 +445,11 @@ class _FakeOracleCursor:
 
     def fetchmany(self, size: int) -> list[tuple[object, ...]]:
         return self._rows[:size]
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        if not self._rows:
+            return None
+        return self._rows[0]
 
     def close(self) -> None:
         self.closed = True
