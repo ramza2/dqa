@@ -401,6 +401,49 @@ def test_cli_exit_not_ready(
     assert code == 1
 
 
+def test_cli_session_factory_failure_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+    test_settings_env: dict[str, str],
+    capsys,
+) -> None:
+    """Engine/session factory failures must not leak DSN/password markers."""
+    from app.cli.production_readiness import main
+
+    secret_marker = (
+        "SUPER_SECRET_DSN_MARKER_postgresql://dqa:hunter2@evil-host.example/dqa"
+    )
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError(secret_marker)
+
+    monkeypatch.setattr("app.adapters.db.session.get_session_factory", _boom)
+
+    code = main(
+        [
+            "--source-name",
+            SOURCE["source_name"],
+            "--environment",
+            ENVIRONMENT,
+            "--json",
+        ]
+    )
+    assert code == 1
+    captured = capsys.readouterr()
+    err = captured.err
+    out = captured.out
+    assert "error: readiness inspection failed (RuntimeError)" in err
+    combined = err + out
+    for forbidden in (
+        secret_marker,
+        "SUPER_SECRET_DSN_MARKER",
+        "hunter2",
+        "evil-host.example",
+        "postgresql://",
+        "Traceback",
+    ):
+        assert forbidden not in combined
+
+
 def test_cli_exit_ready_when_report_is_ready(
     monkeypatch: pytest.MonkeyPatch,
     test_settings_env: dict[str, str],

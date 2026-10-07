@@ -44,31 +44,29 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --source-name and --environment are required", file=sys.stderr)
         return 1
 
+    session = None
     try:
         from app.adapters.db.session import get_session_factory
         from app.services.production_readiness import build_production_readiness_report
-    except Exception as exc:  # noqa: BLE001 — sanitized import failure
-        print(
-            f"error: readiness inspection failed ({exc.__class__.__name__})",
-            file=sys.stderr,
-        )
-        return 1
 
-    session = get_session_factory()()
-    try:
+        # Engine/session factory creation can raise with credential-bearing URLs;
+        # keep that path inside the same sanitized failure boundary as report build.
+        factory = get_session_factory()
+        session = factory()
         report = build_production_readiness_report(
             session,
             source_name=source_name,
             environment=environment,
         )
-    except Exception as exc:  # noqa: BLE001 — never echo DB/URL details
+    except Exception as exc:  # noqa: BLE001 — never echo DB/URL/driver details
         print(
             f"error: readiness inspection failed ({exc.__class__.__name__})",
             file=sys.stderr,
         )
         return 1
     finally:
-        session.close()
+        if session is not None:
+            session.close()
 
     payload = report.model_dump()
     if args.json:
