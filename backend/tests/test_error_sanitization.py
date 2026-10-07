@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.adapters.demis.errors import DemisAdapterError, DemisAdapterErrorCode
 from app.auth.errors import AuthErrorCode
 from app.schemas.query_template import QueryTemplateCreateRequest
 from app.services.catalog_active import activate_catalog_revision
@@ -159,6 +160,92 @@ def test_connection_profile_error_sanitized(
     diag_text = json.dumps(diagnostics.json())
     _assert_sanitized(diag_text)
     assert "demis-live-password-value" not in diag_text
+
+
+@pytest.mark.parametrize(
+    ("code", "expected_status", "expected_public_code"),
+    [
+        (DemisAdapterErrorCode.TIMEOUT, 504, DemisAdapterErrorCode.TIMEOUT),
+        (
+            DemisAdapterErrorCode.UNSUPPORTED_DBMS,
+            503,
+            DemisAdapterErrorCode.UNSUPPORTED_DBMS,
+        ),
+        (
+            DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE,
+            503,
+            DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE,
+        ),
+        (
+            DemisAdapterErrorCode.CONNECTION_FAILED,
+            503,
+            DemisAdapterErrorCode.CONNECTION_FAILED,
+        ),
+        (
+            DemisAdapterErrorCode.ADAPTER_NOT_CONFIGURED,
+            503,
+            DemisAdapterErrorCode.ADAPTER_NOT_CONFIGURED,
+        ),
+        (
+            DemisAdapterErrorCode.PROFILE_DISABLED,
+            503,
+            DemisAdapterErrorCode.PROFILE_DISABLED,
+        ),
+        (
+            DemisAdapterErrorCode.EXECUTION_FAILED,
+            502,
+            DemisAdapterErrorCode.EXECUTION_FAILED,
+        ),
+        (
+            DemisAdapterErrorCode.RESULT_LIMIT_ERROR,
+            502,
+            DemisAdapterErrorCode.RESULT_LIMIT_ERROR,
+        ),
+        (
+            DemisAdapterErrorCode.INVALID_REQUEST,
+            422,
+            DemisAdapterErrorCode.INVALID_REQUEST,
+        ),
+        ("UNREVIEWED_DRIVER_FAILURE", 502, DemisAdapterErrorCode.EXECUTION_FAILED),
+    ],
+)
+def test_demis_adapter_public_error_boundary_sanitized(
+    monkeypatch: pytest.MonkeyPatch,
+    unauth_db_client: TestClient,
+    code: str,
+    expected_status: int,
+    expected_public_code: str,
+) -> None:
+    raw_internal_detail = (
+        "demis-live-password-value postgresql+psycopg:// "
+        "SELECT secret_patient_id FROM dual row_secret_phi_value"
+    )
+
+    def _boom(*args: Any, **kwargs: Any) -> None:
+        raise DemisAdapterError(code, raw_internal_detail)
+
+    monkeypatch.setattr(
+        "app.api.routes.query_executions.execute_query",
+        _boom,
+    )
+
+    response = unauth_db_client.post(
+        "/api/v1/query-executions/execute",
+        headers=_headers("ops", "query_operator"),
+        json={
+            "source_name": SOURCE_NAME,
+            "environment": "prod",
+            "template_id": 1,
+            "version_id": 1,
+            "parameters": {},
+        },
+    )
+
+    assert response.status_code == expected_status, response.text
+    body = response.json()
+    assert body["detail"]["code"] == expected_public_code
+    _assert_sanitized(body)
+    assert raw_internal_detail not in json.dumps(body)
 
 
 def test_execution_unavailable_error_sanitized(

@@ -27,6 +27,45 @@ from app.services.query_execution import execute_query
 
 router = APIRouter(prefix="/api/v1/query-executions", tags=["query-executions"])
 
+_ADAPTER_PUBLIC_ERRORS: dict[str, tuple[int, str]] = {
+    DemisAdapterErrorCode.TIMEOUT: (
+        status.HTTP_504_GATEWAY_TIMEOUT,
+        "DEMIS read-only query execution timed out",
+    ),
+    DemisAdapterErrorCode.UNSUPPORTED_DBMS: (
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "DEMIS database type is not supported",
+    ),
+    DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE: (
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "DEMIS credential is unavailable",
+    ),
+    DemisAdapterErrorCode.CONNECTION_FAILED: (
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "DEMIS read-only connection could not be established",
+    ),
+    DemisAdapterErrorCode.ADAPTER_NOT_CONFIGURED: (
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "DEMIS read-only adapter is not configured",
+    ),
+    DemisAdapterErrorCode.PROFILE_DISABLED: (
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "DEMIS connection profile is disabled",
+    ),
+    DemisAdapterErrorCode.EXECUTION_FAILED: (
+        status.HTTP_502_BAD_GATEWAY,
+        "DEMIS read-only query execution failed",
+    ),
+    DemisAdapterErrorCode.RESULT_LIMIT_ERROR: (
+        status.HTTP_502_BAD_GATEWAY,
+        "DEMIS query result limit could not be enforced",
+    ),
+    DemisAdapterErrorCode.INVALID_REQUEST: (
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "DEMIS read-only query request is invalid",
+    ),
+}
+
 
 @router.get("/form", response_model=ExecutionFormResponse)
 def execution_form_metadata(
@@ -138,26 +177,15 @@ def _execution_http_error(exc: ExecutionError) -> HTTPException:
 
 
 def _adapter_http_error(exc: DemisAdapterError) -> HTTPException:
-    if exc.code == DemisAdapterErrorCode.TIMEOUT:
-        status_code = status.HTTP_504_GATEWAY_TIMEOUT
-    elif exc.code in {
-        DemisAdapterErrorCode.UNSUPPORTED_DBMS,
-        DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE,
-        DemisAdapterErrorCode.CONNECTION_FAILED,
-        DemisAdapterErrorCode.ADAPTER_NOT_CONFIGURED,
-        DemisAdapterErrorCode.PROFILE_DISABLED,
-    }:
-        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-    elif exc.code in {
-        DemisAdapterErrorCode.EXECUTION_FAILED,
-        DemisAdapterErrorCode.RESULT_LIMIT_ERROR,
-    }:
+    mapped = _ADAPTER_PUBLIC_ERRORS.get(exc.code)
+    if mapped is None:
+        public_code = DemisAdapterErrorCode.EXECUTION_FAILED
         status_code = status.HTTP_502_BAD_GATEWAY
-    elif exc.code == DemisAdapterErrorCode.INVALID_REQUEST:
-        status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+        message = "DEMIS read-only operation failed"
     else:
-        status_code = status.HTTP_502_BAD_GATEWAY
+        public_code = exc.code
+        status_code, message = mapped
     return HTTPException(
         status_code=status_code,
-        detail={"code": exc.code, "message": str(exc)},
+        detail={"code": public_code, "message": message},
     )
