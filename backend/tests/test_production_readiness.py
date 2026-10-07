@@ -351,6 +351,12 @@ def test_readiness_never_resolves_credentials_or_probes(
     )
     monkeypatch.setattr("app.adapters.demis.factory.create_readonly_demis_adapter", factory)
     monkeypatch.setattr("app.adapters.demis.oracle.oracledb.connect", connect)
+    # Wire probe mock to the concrete Oracle adapter method so accidental
+    # live-probe calls fail closed during readiness inspection.
+    monkeypatch.setattr(
+        "app.adapters.demis.oracle.OracleReadOnlyDemisAdapter.probe_readonly",
+        probe,
+    )
     # Also guard service-level imports if accidentally added later.
     monkeypatch.setattr(
         "app.services.connection_profile.create_credential_resolver",
@@ -369,6 +375,7 @@ def test_readiness_never_resolves_credentials_or_probes(
         environment=ENVIRONMENT,
     )
     assert report.checks
+    assert _by_code(report)["LIVE_CONNECTIVITY"].status == "ACTION_REQUIRED"
     resolver.assert_not_called()
     factory.assert_not_called()
     probe.assert_not_called()
@@ -392,6 +399,63 @@ def test_cli_exit_not_ready(
     )
     # ACTION_REQUIRED items keep overall NOT_READY in Phase 25-B.
     assert code == 1
+
+
+def test_cli_exit_ready_when_report_is_ready(
+    monkeypatch: pytest.MonkeyPatch,
+    test_settings_env: dict[str, str],
+    capsys,
+) -> None:
+    """CLI exit 0 contract via synthetic READY report (service semantics unchanged)."""
+    from app.cli.production_readiness import main
+    from app.schemas.production_readiness import ReadinessCheckResult
+
+    synthetic = ProductionReadinessReport(
+        source_name=SOURCE["source_name"],
+        environment=ENVIRONMENT,
+        overall_status="READY",
+        checks=[
+            ReadinessCheckResult(code=code, status="PASS", message="ok")
+            for code in (
+                "MIGRATIONS_AT_HEAD",
+                "AUTH_PROVIDER",
+                "ACTIVE_CATALOG",
+                "QUERY_TEMPLATE",
+                "CONNECTION_PROFILE",
+                "DEMIS_ADAPTER",
+                "LIVE_CONNECTIVITY",
+                "EXTERNAL_READONLY_PRIVILEGE",
+            )
+        ],
+    )
+
+    # CLI imports the builder inside main(); patch the service module symbol.
+    monkeypatch.setattr(
+        "app.services.production_readiness.build_production_readiness_report",
+        lambda *_args, **_kwargs: synthetic,
+    )
+
+    class _FakeSession:
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "app.adapters.db.session.get_session_factory",
+        lambda: (lambda: _FakeSession()),
+    )
+
+    code = main(
+        [
+            "--source-name",
+            SOURCE["source_name"],
+            "--environment",
+            ENVIRONMENT,
+            "--json",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert '"overall_status": "READY"' in out
 
 
 def test_cli_json_omits_secrets(
