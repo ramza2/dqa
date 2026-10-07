@@ -352,6 +352,9 @@ Foundation (`app/adapters/demis`):
 - future approved secret stores may implement the same `CredentialResolver` protocol
 - credential values, host/port/username/database, DSN, credential refs, and result
   rows must never appear in logs, exceptions, or public API payloads
+- the query-execution HTTP boundary allowlists DEMIS adapter error codes and uses
+  static public messages; unknown adapter codes are normalized to
+  `EXECUTION_FAILED` instead of echoing raw adapter code/message text
 - adapter assumes SQL Safety already passed and must not weaken it
 - DB least privilege remains mandatory outside application controls
 - Connection Profile diagnostics remain configuration-level until a concrete
