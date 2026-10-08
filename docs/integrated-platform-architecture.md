@@ -216,6 +216,14 @@ Example logical resources (illustrative only):
 
 Each maps internally to Active Catalog tables/columns/relations.
 
+**Phase 29-A (contracts + validation):** see
+[semantic-resource-mapping.md](semantic-resource-mapping.md). Explicit mapping
+documents bind `resource_key` / `field_key` / Catalog FK relationships to one
+Active Catalog revision+fingerprint. Default runtime has **no** trusted
+mappings (`NOT_CONFIGURED`). Approval/persistence is a future boundary;
+arbitrary mapping JSON is not approved authority. Field capabilities are an
+explicit allowlist (`SELECT` / `FILTER` / `SORT` / `GROUP_BY` / `AGGREGATE`).
+
 **Caution:** Do not implement production Patient/LabResult mappings as
 constants before real DEMIS structure is confirmed. Admin Data Discovery UI
 may still show physical table/column metadata when needed for operators.
