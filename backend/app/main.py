@@ -27,7 +27,8 @@ def create_app(*, check_migrations_on_startup: bool = True) -> FastAPI:
         description=(
             "DEMIS Query Assistant backend. "
             "Provides Catalog Package validation/import/activation, Catalog metadata "
-            "query APIs, approved Query Template management, LLM-assisted template "
+            "query APIs, Data Discovery schema search (keyword/semantic/hybrid), "
+            "approved Query Template management, LLM-assisted template "
             "recommendation and parameter extraction, deterministic execution "
             "preview, audited read-only DEMIS query execution, and operational "
             "health/readiness endpoints."

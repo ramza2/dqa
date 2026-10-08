@@ -1,7 +1,6 @@
-"""Pydantic contracts for Data Discovery (Phases 27-A / 27-B).
+"""Pydantic contracts for Data Discovery (Phases 27-A / 27-B / 27-C).
 
-Search request/response contracts are used by the backend search engine.
-HTTP routes are deferred to Phase 27-C.
+Search request/response contracts and HTTP index-management contracts.
 """
 
 from __future__ import annotations
@@ -19,6 +18,13 @@ from app.domain.data_discovery import (
 SearchModeLiteral = Literal["keyword", "semantic", "hybrid"]
 ObjectTypeLiteral = Literal["TABLE", "COLUMN"]
 IdentityKindLiteral = Literal["PHYSICAL", "LOGICAL"]
+DocumentStateLiteral = Literal["READY", "NOT_READY"]
+EmbeddingStateLiteral = Literal[
+    "NOT_CONFIGURED",
+    "CONFIGURATION_ERROR",
+    "NOT_READY",
+    "READY",
+]
 
 
 class PhysicalDiscoveryIdentityModel(BaseModel):
@@ -197,7 +203,73 @@ class DataDiscoverySearchResponse(BaseModel):
     )
 
 
+class DataDiscoveryEmbeddingCoverageModel(BaseModel):
+    """Coverage counts for one revision + model_key (no vectors)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    document_count: int = Field(ge=0)
+    embedding_count: int = Field(ge=0)
+    current_count: int = Field(ge=0)
+    stale_count: int = Field(ge=0)
+    missing_count: int = Field(ge=0)
+
+
+class DataDiscoveryIndexStatusResponse(BaseModel):
+    """Active-revision discovery document + embedding readiness (no network)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_name: str
+    catalog_revision_id: int
+    schema_fingerprint: str
+    document_count: int = Field(ge=0)
+    document_state: DocumentStateLiteral
+    embedding_state: EmbeddingStateLiteral
+    provider: str | None = None
+    model_name: str | None = None
+    model_revision: str | None = None
+    model_key: str | None = None
+    dimension: int | None = None
+    normalized: bool | None = None
+    coverage: DataDiscoveryEmbeddingCoverageModel | None = None
+    embedding_error_code: str | None = None
+
+
+class DataDiscoveryRebuildResponse(BaseModel):
+    """Result of an explicit discovery-document rebuild for the active revision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_name: str
+    catalog_revision_id: int
+    schema_fingerprint: str
+    document_count: int = Field(ge=0)
+    upserted_count: int = Field(ge=0)
+    deleted_count: int = Field(ge=0)
+    builder_version: str
+
+
+class DataDiscoveryEmbeddingSyncResponse(BaseModel):
+    """Result of an explicit embedding sync for the active revision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_name: str
+    catalog_revision_id: int
+    schema_fingerprint: str
+    model_key: str
+    document_count: int = Field(ge=0)
+    embedded_count: int = Field(ge=0)
+    skipped_count: int = Field(ge=0)
+    coverage: DataDiscoveryEmbeddingCoverageModel
+
+
 __all__ = [
+    "DataDiscoveryEmbeddingCoverageModel",
+    "DataDiscoveryEmbeddingSyncResponse",
+    "DataDiscoveryIndexStatusResponse",
+    "DataDiscoveryRebuildResponse",
     "DataDiscoveryRelatedTableModel",
     "DataDiscoveryRelationHopModel",
     "DataDiscoverySearchRequest",
