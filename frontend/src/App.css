@@ -77,6 +77,12 @@
   color: var(--warn);
 }
 
+.badge-error {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
 .badge-muted {
   background: #eef1f4;
   color: var(--muted);
@@ -541,6 +547,181 @@
   min-width: 480px;
 }
 
+.dd-portal {
+  min-height: calc(100vh - 48px);
+}
+
+.dd-subnav {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.55rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+
+.dd-panel {
+  padding: 1rem 1.25rem 1.5rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.dd-panel-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.dd-panel-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.dd-meta-grid {
+  margin-top: 0.25rem;
+}
+
+.dd-search-form {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 960px;
+}
+
+.dd-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.dd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.dd-field span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dd-field input,
+.dd-field select {
+  font: inherit;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.dd-check-row {
+  align-items: center;
+}
+
+.dd-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.dd-primary-btn,
+.dd-secondary-btn {
+  justify-self: start;
+  font: inherit;
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+}
+
+.dd-primary-btn {
+  border: 1px solid #1e293b;
+  background: #1e293b;
+  color: #fff;
+}
+
+.dd-primary-btn:disabled,
+.dd-secondary-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dd-secondary-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: #0f172a;
+}
+
+.dd-action-row {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.dd-search-results {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.dd-expansion {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.dd-term-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+}
+
+.dd-term-list code,
+.dd-path-list code {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+.dd-snippet {
+  max-width: 280px;
+  font-size: 0.82rem;
+}
+
+.dd-related h3,
+.dd-index-section h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.95rem;
+}
+
+.dd-path-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.dd-path-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.dd-index-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.dd-index-section {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.dd-guidance {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 @media (max-width: 960px) {
   .qa-layout {
     padding: 0.85rem;
@@ -549,5 +730,8 @@
   .app-top-nav {
     align-items: flex-start;
   }
-}
 
+  .dd-panel {
+    padding: 0.85rem;
+  }
+}

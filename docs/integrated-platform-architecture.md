@@ -106,10 +106,10 @@ Capabilities proven in the former Schema Search PoC are **migrated into DQA**
 as Data Discovery / Schema Intelligence — not kept as a separate final product.
 
 Implementation note: Phase 27-A search-document contracts exist; Phase 27-B
-implements the Data Discovery backend search engine (keyword / semantic /
-hybrid, terminology, relation expansion, embedding lifecycle). HTTP/React UI
-are Phase 27-C; MCP is Phase 28; Dynamic Query is Phase 29 — none of those are
-implemented yet.
+backend search engine is implemented (keyword / semantic / hybrid, terminology,
+relation expansion, embedding lifecycle). Phase 27-C is integrating the Web
+Data Discovery portal and HTTP API (`feat/data-discovery-react-portal`). MCP is
+Phase 28; Dynamic Query is Phase 29 — neither is implemented yet.
 
 Capabilities to promote into DQA:
 

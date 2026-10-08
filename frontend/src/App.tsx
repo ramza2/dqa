@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { CatalogExplorer } from "./components/CatalogExplorer";
+import { DataDiscoveryPortal } from "./components/DataDiscoveryPortal";
 import { QueryAssistant } from "./components/QueryAssistant";
 import "./App.css";
 
-type AppView = "assistant" | "catalog";
+type AppView = "assistant" | "discovery";
 
 export default function App() {
   const [view, setView] = useState<AppView>("assistant");
@@ -25,15 +25,15 @@ export default function App() {
           <button
             type="button"
             role="tab"
-            aria-selected={view === "catalog"}
-            className={view === "catalog" ? "nav-tab active" : "nav-tab"}
-            onClick={() => setView("catalog")}
+            aria-selected={view === "discovery"}
+            className={view === "discovery" ? "nav-tab active" : "nav-tab"}
+            onClick={() => setView("discovery")}
           >
-            Catalog Explorer
+            Data Discovery
           </button>
         </div>
       </nav>
-      {view === "assistant" ? <QueryAssistant /> : <CatalogExplorer />}
+      {view === "assistant" ? <QueryAssistant /> : <DataDiscoveryPortal />}
     </div>
   );
 }

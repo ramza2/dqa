@@ -70,7 +70,8 @@ dqa/
 
 The current implementation includes Catalog management, approved Query Template
 workflow, LLM-assisted recommendation/parameter extraction, deterministic
-preview, audited read-only execution, Catalog Explorer, and Query Assistant UI.
+preview, audited read-only execution, Data Discovery (Schema Search / Schema
+Explorer / Index Status), and Query Assistant UI.
 
 ## Key safety rule
 
