@@ -86,19 +86,20 @@ def test_normalize_mount_path() -> None:
     assert normalize_mcp_mount_path("") == "/mcp"
 
 
-def test_foundation_registry_includes_discovery_excludes_query() -> None:
+def test_foundation_registry_includes_discovery_and_template_query() -> None:
     registry = build_foundation_registry()
     names = registry.names()
     assert names == [
         "demis.describe_resource",
+        "demis.execute_query",
+        "demis.prepare_query",
         "demis.search_schema",
         "dqa.mcp_ready",
     ]
-    assert registry.get("demis.search_schema") is not None
     assert registry.get("demis.search_schema").permission == Permission.CATALOG_READ
     assert registry.get("demis.describe_resource").permission == Permission.CATALOG_READ
-    assert "demis.execute_query" not in names
-    assert "demis.prepare_query" not in names
+    assert registry.get("demis.prepare_query").permission == Permission.QUERY_OPERATE
+    assert registry.get("demis.execute_query").permission == Permission.QUERY_OPERATE
 
 
 def test_mcp_disabled_by_default(test_settings_env: dict[str, str]) -> None:
@@ -144,10 +145,11 @@ def test_initialize_and_list_tools(mcp_client: TestClient) -> None:
     names = sorted(t["name"] for t in tools)
     assert names == [
         "demis.describe_resource",
+        "demis.execute_query",
+        "demis.prepare_query",
         "demis.search_schema",
         "dqa.mcp_ready",
     ]
-    assert "demis.execute_query" not in names
 
 
 def test_mcp_ready_tool_no_side_effects(
@@ -179,7 +181,7 @@ def test_mcp_ready_tool_no_side_effects(
     assert "result" in payload
     # structured content / text content depending on SDK serialization
     raw = json.dumps(payload)
-    assert "28-B" in raw
+    assert "28-C" in raw
     assert "mcp-tester" in raw
     assert calls == []
     assert "password" not in raw.lower()
@@ -363,7 +365,7 @@ def test_adapter_readiness_is_side_effect_free() -> None:
         provider="dev_headers",
     )
     result = McpApplicationAdapter().readiness(actor)
-    assert result["phase"] == "28-B"
+    assert result["phase"] == "28-C"
     assert result["client"] == "MCP"
     assert result["actor_id"] == "a1"
 
@@ -654,6 +656,8 @@ def test_initialize_list_and_tools_call_happy_path(mcp_client: TestClient) -> No
     names = sorted(t["name"] for t in listed.json()["result"]["tools"])
     assert names == [
         "demis.describe_resource",
+        "demis.execute_query",
+        "demis.prepare_query",
         "demis.search_schema",
         "dqa.mcp_ready",
     ]
@@ -667,4 +671,4 @@ def test_initialize_list_and_tools_call_happy_path(mcp_client: TestClient) -> No
         },
     )
     assert called.status_code == 200
-    assert "28-B" in json.dumps(called.json())
+    assert "28-C" in json.dumps(called.json())

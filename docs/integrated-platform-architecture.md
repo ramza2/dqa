@@ -106,11 +106,9 @@ Capabilities proven in the former Schema Search PoC are **migrated into DQA**
 as Data Discovery / Schema Intelligence — not kept as a separate final product.
 
 Implementation note: Phase 27 Data Discovery (contracts, search engine, Web
-portal/API) is implemented. Phase 28-A adds an internal-only MCP Streamable HTTP
-foundation (tool registry + DQA IdentityProvider auth). Phase 28-B adds Discovery
-MCP tools (`demis.search_schema`, `demis.describe_resource`) over the same
-application services as the Web APIs. Template Query MCP tools are Phase 28-C;
-Dynamic Query is Phase 29.
+portal/API) is implemented. Phase 28-A/B/C add internal-only MCP Streamable HTTP
+(auth/ingress, Discovery tools, and Template Query prepare/execute over the
+shared eligibility/audit/DEMIS path). Dynamic Query is Phase 29.
 
 Capabilities to promote into DQA:
 
@@ -255,8 +253,14 @@ Phase 28-A foundation + 28-B Discovery tools (implemented):
 - Discovery tools (require `CATALOG_READ`; reuse application services; no HTTP loopback):
   - `demis.search_schema` — active Catalog search (keyword/semantic/hybrid)
   - `demis.describe_resource` — Catalog table/column/PK/FK/index metadata
-- No Query tools yet (`demis.prepare_query` / `demis.execute_query` are Phase 28-C)
+- Template Query tools (require `QUERY_OPERATE`; shared eligibility/execute/audit core):
+  - `demis.prepare_query` — READY / NEEDS_CLARIFICATION / BLOCKED; opaque short-TTL
+    AES-GCM execution token only when READY; no DEMIS/credentials/SQL/audit
+  - `demis.execute_query` — token-only execute; revalidates actor/TTL/eligibility;
+    opt-in via `DQA_MCP_QUERY_EXECUTION_ENABLED` (default false); tokens are **not**
+    single-use within TTL (every execute revalidates + audits independently)
 - No invented logical clinical mappings or executable field capabilities (Phase 29)
+- No Dynamic Query / arbitrary SQL via MCP
 
 Future trusted gateway + approved production IdentityProvider (OIDC/JWT/SSO
 claim formats) are still required before exposing MCP beyond an internal network.

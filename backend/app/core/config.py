@@ -123,6 +123,21 @@ class Settings(BaseSettings):
         ge=1024,
         le=8_388_608,
     )
+    # Phase 28-C Template Query MCP path. Execution remains opt-in and disabled
+    # by default until an approved production IdP / trusted gateway exists.
+    # Token key is required to issue/verify opaque execution tokens (no default).
+    dqa_mcp_query_execution_enabled: bool = Field(
+        default=False, alias="DQA_MCP_QUERY_EXECUTION_ENABLED"
+    )
+    dqa_mcp_execution_token_key: SecretStr | None = Field(
+        default=None, alias="DQA_MCP_EXECUTION_TOKEN_KEY"
+    )
+    dqa_mcp_execution_token_ttl_seconds: int = Field(
+        default=300,
+        alias="DQA_MCP_EXECUTION_TOKEN_TTL_SECONDS",
+        ge=30,
+        le=300,
+    )
 
     @property
     def sqlalchemy_database_url(self) -> URL:

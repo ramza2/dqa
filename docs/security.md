@@ -45,8 +45,15 @@ development/test). Forged identity headers and tool-argument identity claims
 are rejected. Discovery tools (`demis.search_schema`, `demis.describe_resource`)
 require `CATALOG_READ` at middleware and tool/service boundaries, reuse the same
 application services as Web APIs, and must not call DEMIS adapters or execute
-queries. Do not expose MCP on a public interface until a trusted gateway and
-approved production IdP exist; do not invent production IdP formats here.
+queries. Template Query tools (`demis.prepare_query`, `demis.execute_query`)
+require `QUERY_OPERATE`; prepare issues AES-GCM opaque tokens (dedicated key,
+short TTL, subject-bound; parameters only inside ciphertext; never logged).
+Execute is additionally gated by `DQA_MCP_QUERY_EXECUTION_ENABLED` (default
+false), revalidates token/eligibility/catalog/profile, and reuses the shared
+read-only DEMIS + durable audit path. Tokens are not single-use within TTL —
+every execute independently revalidates and audits. Do not expose MCP on a
+public interface until a trusted gateway and approved production IdP exist;
+do not invent production IdP formats here.
 
 A static regression guard scans API route source for common exception-leak
 patterns. Route code must not directly stringify typed exceptions, interpolate

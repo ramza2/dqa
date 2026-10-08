@@ -1,7 +1,7 @@
-"""MCP tool handlers (Phase 28-A foundation + 28-B Discovery).
+"""MCP tool handlers (Phase 28-A/B/C).
 
-No DEMIS adapter access, no query execution, no Catalog mutation.
 Identity always comes from MCP request context — never from tool arguments.
+Template Query tools require QUERY_OPERATE and reuse shared execution services.
 """
 
 from __future__ import annotations
@@ -77,3 +77,36 @@ def describe_resource(
         schema_name=schema_name,
         table_name=table_name,
     )
+
+
+def prepare_query(
+    *,
+    source_name: str,
+    environment: str,
+    template_id: int,
+    version_id: int,
+    parameters: dict[str, Any] | None = None,
+    adapter: McpApplicationAdapter | None = None,
+) -> dict[str, Any]:
+    """demis.prepare_query — Approved Template prepare (no DEMIS execute)."""
+    actor = _require_actor()
+    facade = adapter or get_mcp_application_adapter()
+    return facade.prepare_query(
+        actor,
+        source_name=source_name,
+        environment=environment,
+        template_id=template_id,
+        version_id=version_id,
+        parameters=parameters,
+    )
+
+
+def execute_query_tool(
+    *,
+    execution_token: str,
+    adapter: McpApplicationAdapter | None = None,
+) -> dict[str, Any]:
+    """demis.execute_query — execute via opaque server-issued token only."""
+    actor = _require_actor()
+    facade = adapter or get_mcp_application_adapter()
+    return facade.execute_query(actor, execution_token=execution_token)

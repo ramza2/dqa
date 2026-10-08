@@ -1,7 +1,8 @@
-"""Sanitized public error contracts for MCP Discovery tools (Phase 28-B).
+"""Sanitized public error contracts for MCP Discovery + Template Query tools.
 
-Reuses the same reviewed code/message pairs as the Data Discovery and Catalog
-Query HTTP APIs. Never forward exception text, SQL, secrets, or patient data.
+Reuses reviewed code/message pairs from Data Discovery, Catalog Query, and
+Query Execution HTTP APIs. Never forward exception text, SQL, secrets, tokens,
+or patient data.
 """
 
 from __future__ import annotations
@@ -13,7 +14,15 @@ from mcp.server.fastmcp.exceptions import ToolError
 
 from app.adapters.catalog.query_errors import CatalogQueryError, CatalogQueryErrorCode
 from app.adapters.data_discovery.errors import DataDiscoveryError, DataDiscoveryErrorCode
+from app.adapters.demis.errors import DemisAdapterError, DemisAdapterErrorCode
+from app.adapters.execution.errors import (
+    ExecutionError,
+    ExecutionErrorCode,
+    ExecutionPreviewError,
+    ExecutionPreviewErrorCode,
+)
 from app.api.public_errors import PublicErrorSpec
+from app.mcp.execution_token import McpExecutionTokenError, McpExecutionTokenErrorCode
 
 # Shared with HTTP Data Discovery / Catalog Query public contracts.
 _MCP_PUBLIC_ERRORS: dict[str, PublicErrorSpec] = {
@@ -78,6 +87,104 @@ _FALLBACK_CATALOG = PublicErrorSpec(500, "catalog metadata query failed")
 # Stable public code for mid-request active-revision mismatch (fail closed).
 MCP_CATALOG_REVISION_CHANGED = "MCP_CATALOG_REVISION_CHANGED"
 
+_MCP_EXECUTION_PUBLIC_ERRORS: dict[str, PublicErrorSpec] = {
+    ExecutionPreviewErrorCode.TEMPLATE_NOT_FOUND: PublicErrorSpec(
+        404, "query template not found"
+    ),
+    ExecutionPreviewErrorCode.ACTIVE_CATALOG_NOT_FOUND: PublicErrorSpec(
+        404, "active catalog revision not found"
+    ),
+    ExecutionPreviewErrorCode.CONNECTION_PROFILE_NOT_FOUND: PublicErrorSpec(
+        404, "connection profile not found"
+    ),
+    ExecutionPreviewErrorCode.TEMPLATE_NOT_ELIGIBLE: PublicErrorSpec(
+        409, "query template is not eligible for execution"
+    ),
+    ExecutionPreviewErrorCode.STALE_TEMPLATE_VERSION: PublicErrorSpec(
+        409, "requested template version is stale"
+    ),
+    ExecutionPreviewErrorCode.CATALOG_MISMATCH: PublicErrorSpec(
+        409, "query template is incompatible with the active catalog"
+    ),
+    ExecutionPreviewErrorCode.CONNECTION_PROFILE_DISABLED: PublicErrorSpec(
+        409, "connection profile is disabled"
+    ),
+    ExecutionPreviewErrorCode.CONNECTION_PROFILE_INCOMPLETE: PublicErrorSpec(
+        409, "connection profile is incomplete"
+    ),
+    ExecutionPreviewErrorCode.SQL_UNSAFE: PublicErrorSpec(
+        422, "query template SQL does not pass safety validation"
+    ),
+    ExecutionPreviewErrorCode.PARAMETER_SCHEMA_INVALID: PublicErrorSpec(
+        422, "query template parameter schema is invalid"
+    ),
+    ExecutionPreviewErrorCode.PARAMETER_UNDECLARED: PublicErrorSpec(
+        422, "request contains an undeclared parameter"
+    ),
+    ExecutionPreviewErrorCode.PARAMETER_INVALID: PublicErrorSpec(
+        422, "query parameter values are invalid"
+    ),
+    ExecutionErrorCode.AUDIT_UNAVAILABLE: PublicErrorSpec(
+        503, "query audit is unavailable"
+    ),
+    ExecutionErrorCode.DEMIS_ADAPTER_UNAVAILABLE: PublicErrorSpec(
+        503, "DEMIS read-only adapter is unavailable"
+    ),
+    DemisAdapterErrorCode.TIMEOUT: PublicErrorSpec(
+        504, "DEMIS read-only query execution timed out"
+    ),
+    DemisAdapterErrorCode.UNSUPPORTED_DBMS: PublicErrorSpec(
+        503, "DEMIS database type is not supported"
+    ),
+    DemisAdapterErrorCode.CREDENTIAL_UNAVAILABLE: PublicErrorSpec(
+        503, "DEMIS credential is unavailable"
+    ),
+    DemisAdapterErrorCode.CONNECTION_FAILED: PublicErrorSpec(
+        503, "DEMIS read-only connection could not be established"
+    ),
+    DemisAdapterErrorCode.ADAPTER_NOT_CONFIGURED: PublicErrorSpec(
+        503, "DEMIS read-only adapter is not configured"
+    ),
+    DemisAdapterErrorCode.PROFILE_DISABLED: PublicErrorSpec(
+        503, "DEMIS connection profile is disabled"
+    ),
+    DemisAdapterErrorCode.EXECUTION_FAILED: PublicErrorSpec(
+        502, "DEMIS read-only query execution failed"
+    ),
+    DemisAdapterErrorCode.RESULT_LIMIT_ERROR: PublicErrorSpec(
+        502, "DEMIS query result limit could not be enforced"
+    ),
+    DemisAdapterErrorCode.INVALID_REQUEST: PublicErrorSpec(
+        422, "DEMIS read-only query request is invalid"
+    ),
+    McpExecutionTokenErrorCode.KEY_UNAVAILABLE: PublicErrorSpec(
+        503, "mcp execution token key is not configured"
+    ),
+    McpExecutionTokenErrorCode.INVALID: PublicErrorSpec(
+        401, "mcp execution token is invalid"
+    ),
+    McpExecutionTokenErrorCode.EXPIRED: PublicErrorSpec(
+        401, "mcp execution token has expired"
+    ),
+    McpExecutionTokenErrorCode.SUBJECT_MISMATCH: PublicErrorSpec(
+        403, "mcp execution token subject does not match the authenticated actor"
+    ),
+    "MCP_QUERY_EXECUTION_DISABLED": PublicErrorSpec(
+        403, "mcp query execution is disabled"
+    ),
+    "MCP_EXECUTION_BINDING_MISMATCH": PublicErrorSpec(
+        409, "execution token binding no longer matches current eligibility"
+    ),
+}
+
+_FALLBACK_EXECUTION = PublicErrorSpec(500, "query execution request failed")
+_CLARIFICATION_CODES = frozenset(
+    {
+        ExecutionPreviewErrorCode.PARAMETER_INVALID,
+        ExecutionPreviewErrorCode.PARAMETER_UNDECLARED,
+    }
+)
+
 
 def public_error_payload(
     *,
@@ -134,3 +241,51 @@ def raise_from_discovery_or_catalog_error(
             fallback=_FALLBACK_DISCOVERY,
         )
     raise_mcp_tool_error(payload)
+
+
+def raise_from_execution_error(
+    exc: ExecutionPreviewError | ExecutionError | DemisAdapterError | McpExecutionTokenError,
+) -> NoReturn:
+    code = exc.code
+    payload = public_error_payload(
+        error_code=code,
+        contracts=_MCP_EXECUTION_PUBLIC_ERRORS,
+        fallback_code=ExecutionErrorCode.INTERNAL_ERROR,
+        fallback=_FALLBACK_EXECUTION,
+    )
+    raise_mcp_tool_error(payload)
+
+
+def raise_query_execution_disabled() -> NoReturn:
+    raise_mcp_tool_error(
+        public_error_payload(
+            error_code="MCP_QUERY_EXECUTION_DISABLED",
+            contracts=_MCP_EXECUTION_PUBLIC_ERRORS,
+            fallback_code="MCP_QUERY_EXECUTION_DISABLED",
+            fallback=_MCP_EXECUTION_PUBLIC_ERRORS["MCP_QUERY_EXECUTION_DISABLED"],
+        )
+    )
+
+
+def raise_execution_binding_mismatch() -> NoReturn:
+    raise_mcp_tool_error(
+        public_error_payload(
+            error_code="MCP_EXECUTION_BINDING_MISMATCH",
+            contracts=_MCP_EXECUTION_PUBLIC_ERRORS,
+            fallback_code="MCP_EXECUTION_BINDING_MISMATCH",
+            fallback=_MCP_EXECUTION_PUBLIC_ERRORS["MCP_EXECUTION_BINDING_MISMATCH"],
+        )
+    )
+
+
+def public_execution_error_payload(code: str) -> dict[str, str]:
+    return public_error_payload(
+        error_code=code,
+        contracts=_MCP_EXECUTION_PUBLIC_ERRORS,
+        fallback_code=ExecutionErrorCode.INTERNAL_ERROR,
+        fallback=_FALLBACK_EXECUTION,
+    )
+
+
+def is_clarification_error(code: str) -> bool:
+    return code in _CLARIFICATION_CODES

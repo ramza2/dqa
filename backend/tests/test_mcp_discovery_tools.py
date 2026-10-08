@@ -324,11 +324,9 @@ def test_initialize_list_and_discovery_calls(
     )
     assert listed.status_code == 200
     names = sorted(t["name"] for t in listed.json()["result"]["tools"])
-    assert names == [
-        "demis.describe_resource",
-        "demis.search_schema",
-        "dqa.mcp_ready",
-    ]
+    assert "demis.search_schema" in names
+    assert "demis.describe_resource" in names
+    assert "dqa.mcp_ready" in names
 
     search = _tool_call(
         mcp_db_client,
