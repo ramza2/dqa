@@ -34,6 +34,17 @@ security requirements**, not current runtime claims:
 - production authentication details remain deferred until an approved
   IdentityProvider / agent interface is selected
 
+Phase 28-A MCP foundation adds an optional internal Streamable HTTP endpoint
+mounted on the shared backend ASGI app (not a separate listen socket).
+`DQA_MCP_BIND_HOST` is a private-boundary declaration (loopback required) and
+does **not** control Uvicorn bind; non-loopback values refuse the MCP mount.
+When mounted, non-loopback peers are rejected and request bodies are hard-bounded
+(`DQA_MCP_MAX_BODY_BYTES`, HTTP 413). Auth reuses `DQA_AUTH_PROVIDER`
+fail-closed semantics (`disabled` / production blocks; `dev_headers` only in
+development/test). Forged identity headers and tool-argument identity claims
+are rejected. Do not expose MCP on a public interface until a trusted gateway
+and approved production IdP exist; do not invent production IdP formats here.
+
 A static regression guard scans API route source for common exception-leak
 patterns. Route code must not directly stringify typed exceptions, interpolate
 their values into public messages, or feed typed-exception state into
