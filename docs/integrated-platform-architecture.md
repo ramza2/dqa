@@ -267,7 +267,7 @@ Target concept only (not an approved IdP design):
   strings from SNUH.AI as authority
 - Future linkage: trusted service authentication + verified end-user
   identity/context
-- OIDC / JWT / SSO / claim names deferred until Infmedics / site auth is
+- OIDC / JWT / SSO / claim names deferred until Inframedix / site auth is
   approved
 - Distinguish clinical context (`patient_id`, `encounter_id`, …) from
   authorization identity
