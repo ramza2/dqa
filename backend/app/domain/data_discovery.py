@@ -23,7 +23,11 @@ class DiscoveryObjectType(StrEnum):
 
 
 class DiscoveryIdentityKind(StrEnum):
-    """PHYSICAL documents are built in 27-A; LOGICAL is reserved for Phase 29-A."""
+    """PHYSICAL documents are built in 27-A; LOGICAL identities are Phase 29-A.
+
+    LOGICAL search-document materialization remains a future Discovery concern.
+    Semantic resource contracts live in ``app.domain.semantic_resource``.
+    """
 
     PHYSICAL = "PHYSICAL"
     LOGICAL = "LOGICAL"

@@ -426,13 +426,18 @@ Dependency order is fixed. Names may be refined; do not invert phases.
   Status: completed (merged via `feat/mcp-discovery-tools`).
   `demis.search_schema`, `demis.describe_resource` (CATALOG_READ; active Catalog only).
 - **PR 28-C — Template query MCP path**
-  Status: in progress (`feat/mcp-template-query`).
+  Status: completed (merged via `feat/mcp-template-query`).
   `demis.prepare_query`, `demis.execute_query` reusing Approved Template
   execution core (shared safety/audit; opaque AES-GCM tokens; no parallel path).
 
 ### Phase 29 - Structured Dynamic Query
 
 - **PR 29-A — Semantic Resource Model**
+  Status: in progress (`feat/semantic-resource-model`).
+  Logical resource/field/relationship contracts; deterministic validation
+  against one Active Catalog revision; injectable empty-by-default registry.
+  See [semantic-resource-mapping.md](semantic-resource-mapping.md).
+  No SQL compiler, Dynamic Query execution, MCP tools, UI, or migrations.
 - **PR 29-B — Structured Query Plan contract + validation**
 - **PR 29-C — Deterministic query compiler**
   No arbitrary SQL; parameterized SQL only; Catalog/allowlist driven.
