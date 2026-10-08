@@ -303,6 +303,20 @@ or via the Production Readiness Report.
 Administrators may run an explicit live probe with
 `POST /api/v1/connection-profiles/{profile_id}/test-connection` after migrate/up.
 
+## 10.1 Real DEMIS onboarding
+
+For first-time real DEMIS linkage and controlled acceptance, follow the
+authoritative runbook:
+
+- [Real DEMIS Onboarding & Acceptance Runbook](real-demis-onboarding.md)
+
+That document covers Catalog onboarding, Connection Profile registration,
+explicit live probe interpretation, DBA privilege verification,
+Production Readiness Report usage, first controlled query acceptance, and
+stop/rollback criteria. It does not change runtime behavior.
+Oracle mock E2E success is development evidence only and is not production
+readiness.
+
 ## 11. Frontend nginx edge policy
 
 The production frontend image uses nginx as the LAN entrypoint:

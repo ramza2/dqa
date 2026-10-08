@@ -51,7 +51,8 @@ dqa/
 │  ├─ query-template-design.md
 │  ├─ security.md
 │  ├─ roadmap.md
-│  └─ runtime-and-deployment.md
+│  ├─ runtime-and-deployment.md
+│  └─ real-demis-onboarding.md
 └─ scripts/
    └─ README.md
 ```
@@ -90,8 +91,9 @@ Start here:
 5. [Security](docs/security.md)
 6. [Roadmap](docs/roadmap.md)
 7. [Runtime and Deployment](docs/runtime-and-deployment.md)
-8. [Cursor Handoff Guide](docs/cursor-handoff.md)
-9. [Bootstrap Design Review](docs/design-review.md)
+8. [Real DEMIS Onboarding & Acceptance Runbook](docs/real-demis-onboarding.md)
+9. [Cursor Handoff Guide](docs/cursor-handoff.md)
+10. [Bootstrap Design Review](docs/design-review.md)
 
 ## On-prem deployment (foundation)
 
@@ -115,7 +117,9 @@ approved production IdentityProvider, operator network/credential wiring,
 read-only privilege validation, approved TLS termination, and retention/storage
 policy decisions.
 
-Do not treat repository capability as readiness for real DEMIS clinical use.
+Do not treat repository capability or Oracle mock E2E success as readiness for
+real DEMIS clinical use. See
+[Real DEMIS Onboarding & Acceptance Runbook](docs/real-demis-onboarding.md).
 
 ## Development workflow
 
