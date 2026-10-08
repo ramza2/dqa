@@ -47,8 +47,8 @@ def create_app(*, check_migrations_on_startup: bool = True) -> FastAPI:
             "approved Query Template management, LLM-assisted template "
             "recommendation and parameter extraction, deterministic execution "
             "preview, audited read-only DEMIS query execution, optional internal "
-            "MCP Streamable HTTP foundation (Phase 28-A; no Discovery/Query tools "
-            "yet), and operational health/readiness endpoints."
+            "MCP Streamable HTTP with Discovery tools (Phase 28-B; Query tools "
+            "deferred to 28-C), and operational health/readiness endpoints."
         ),
         lifespan=lifespan,
         docs_url=docs_urls["docs_url"],

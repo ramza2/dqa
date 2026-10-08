@@ -1,4 +1,4 @@
-"""Minimal MCP tool registry (Phase 28-A foundation only)."""
+"""MCP tool registry (Phase 28-A foundation + 28-B Discovery tools)."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ class McpToolRegistry:
 
 
 def build_foundation_registry() -> McpToolRegistry:
-    """Registry for Phase 28-A — no Discovery/Query tools."""
+    """Registry for Phase 28-A/B — foundation + Discovery tools (no Query tools)."""
     registry = McpToolRegistry()
     registry.register(
         McpToolRegistration(
@@ -52,6 +52,33 @@ def build_foundation_registry() -> McpToolRegistry:
             ),
             permission=None,
             handler_name="mcp_ready",
+        )
+    )
+    registry.register(
+        McpToolRegistration(
+            name="demis.search_schema",
+            description=(
+                "Search the active Catalog Package schema metadata for one source "
+                "(keyword, semantic, or hybrid). Requires CATALOG_READ. Returns "
+                "source, active revision, schema fingerprint, and ranked evidence. "
+                "Does not execute DEMIS queries or mutate Catalog/index state."
+            ),
+            permission=Permission.CATALOG_READ,
+            handler_name="search_schema",
+        )
+    )
+    registry.register(
+        McpToolRegistration(
+            name="demis.describe_resource",
+            description=(
+                "Describe one Catalog table: columns, primary keys, foreign-key "
+                "relations, and indexes for the active revision. Requires "
+                "source_name, schema_name, and table_name plus CATALOG_READ. "
+                "Does not invent logical clinical mappings or executable field "
+                "capabilities (Phase 29)."
+            ),
+            permission=Permission.CATALOG_READ,
+            handler_name="describe_resource",
         )
     )
     return registry

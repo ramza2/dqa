@@ -363,7 +363,7 @@ DQA PostgreSQL stores:
 
 Volume: Compose named volume `dqa_pgdata`.
 
-## 13. MCP endpoint (Phase 28-A foundation)
+## 13. MCP endpoint (Phase 28-A/B)
 
 Optional internal MCP Streamable HTTP endpoint **mounted on the shared backend
 ASGI process**. Enabling MCP does **not** create a separate listen socket;
@@ -387,10 +387,15 @@ Auth for MCP uses the same `DQA_AUTH_PROVIDER` as Web APIs:
 - production / `disabled` → fail-closed (MCP requests rejected)
 - `dev_headers` → development/test only (never a production fallback)
 
-Phase 28-A exposes only the foundation tool `dqa.mcp_ready`. Discovery/Query
-MCP tools (`demis.*`) are later PRs. MCP must remain internal-only until a
-trusted gateway and approved production IdentityProvider exist. Do not invent
-production IdP claim formats here.
+Phase 28-B exposes:
+
+- `dqa.mcp_ready` (authenticated readiness)
+- `demis.search_schema` (`CATALOG_READ`; active Catalog discovery search)
+- `demis.describe_resource` (`CATALOG_READ`; Catalog table metadata)
+
+Template Query MCP tools (`demis.prepare_query`, `demis.execute_query`) are
+Phase 28-C. MCP must remain internal-only until a trusted gateway and approved
+production IdentityProvider exist. Do not invent production IdP claim formats.
 
 ## 14. Outstanding external blockers
 
