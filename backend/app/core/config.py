@@ -106,6 +106,15 @@ class Settings(BaseSettings):
         default=None, alias="DATA_DISCOVERY_MEDICAL_TERMS_PATH"
     )
 
+    # MCP server foundation (Phase 28-A). Disabled by default; bind is internal-only.
+    # Enabling exposes Streamable HTTP under ``dqa_mcp_mount_path`` on the backend
+    # process. Production IdP / trusted gateway requirements are not satisfied by
+    # ``dev_headers`` — keep disabled until an approved IdentityProvider exists.
+    dqa_mcp_enabled: bool = Field(default=False, alias="DQA_MCP_ENABLED")
+    dqa_mcp_mount_path: str = Field(default="/mcp", alias="DQA_MCP_MOUNT_PATH")
+    # Documented intended bind interface for operators (uvicorn still owns listen).
+    dqa_mcp_bind_host: str = Field(default="127.0.0.1", alias="DQA_MCP_BIND_HOST")
+
     @property
     def sqlalchemy_database_url(self) -> URL:
         """SQLAlchemy URL object for the DQA application PostgreSQL database."""

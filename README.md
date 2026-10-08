@@ -71,7 +71,8 @@ dqa/
 The current implementation includes Catalog management, approved Query Template
 workflow, LLM-assisted recommendation/parameter extraction, deterministic
 preview, audited read-only execution, Data Discovery (Schema Search / Schema
-Explorer / Index Status), and Query Assistant UI.
+Explorer / Index Status), Query Assistant UI, and an optional internal MCP
+Streamable HTTP foundation (Phase 28-A; no Discovery/Query tools yet).
 
 ## Key safety rule
 

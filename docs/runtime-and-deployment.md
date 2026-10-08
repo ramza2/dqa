@@ -363,7 +363,26 @@ DQA PostgreSQL stores:
 
 Volume: Compose named volume `dqa_pgdata`.
 
-## 13. Outstanding external blockers
+## 13. MCP endpoint (Phase 28-A foundation)
+
+Optional internal MCP Streamable HTTP endpoint mounted on the backend process.
+
+| Variable | Default | Notes |
+|----------|---------|--------|
+| `DQA_MCP_ENABLED` | `false` | Opt-in; keep false in production Compose until approved IdP + gateway |
+| `DQA_MCP_MOUNT_PATH` | `/mcp` | ASGI mount path (trailing slash normalized) |
+| `DQA_MCP_BIND_HOST` | `127.0.0.1` | Documented intended bind; do not advertise a public DNS target |
+
+Auth for MCP uses the same `DQA_AUTH_PROVIDER` as Web APIs:
+
+- production / `disabled` → fail-closed (MCP requests rejected)
+- `dev_headers` → development/test only (never a production fallback)
+
+Phase 28-A exposes only the foundation tool `dqa.mcp_ready`. Discovery/Query
+MCP tools (`demis.*`) are later PRs. MCP must remain internal-only until a
+trusted gateway and approved production IdentityProvider exist.
+
+## 14. Outstanding external blockers
 
 This foundation does **not** make DQA ready for real DEMIS clinical use.
 
@@ -372,5 +391,6 @@ Still required externally:
 2. Confirmed DEMIS DBMS and concrete read-only driver requirements
 3. Approved TLS termination for real medical-data use
 4. Approved audit/backup retention duration and storage/encryption policy
+5. Trusted MCP gateway / agent interface before any non-loopback MCP exposure
 
 Live execution also still requires the full production execution gate in `docs/architecture.md`.

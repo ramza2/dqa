@@ -105,11 +105,10 @@ UI consolidation must not merge backend responsibilities.
 Capabilities proven in the former Schema Search PoC are **migrated into DQA**
 as Data Discovery / Schema Intelligence — not kept as a separate final product.
 
-Implementation note: Phase 27-A search-document contracts exist; Phase 27-B
-backend search engine is implemented (keyword / semantic / hybrid, terminology,
-relation expansion, embedding lifecycle). Phase 27-C is integrating the Web
-Data Discovery portal and HTTP API (`feat/data-discovery-react-portal`). MCP is
-Phase 28; Dynamic Query is Phase 29 — neither is implemented yet.
+Implementation note: Phase 27 Data Discovery (contracts, search engine, Web
+portal/API) is implemented. Phase 28-A adds an internal-only MCP Streamable HTTP
+foundation (tool registry + DQA IdentityProvider auth; no Discovery/Query tools
+yet). MCP Discovery/Query tools are Phase 28-B/C; Dynamic Query is Phase 29.
 
 Capabilities to promote into DQA:
 
@@ -235,8 +234,21 @@ Architecture-level tool surface (four tools):
 MCP tools are adapters that call existing DQA application services. They must
 not re-implement a parallel safety/execution core.
 
-MCP transport / auth details are future PRs. Do not invent production
-IdentityProvider claim formats here.
+Phase 28-A foundation (implemented):
+
+- Official Python MCP SDK Streamable HTTP transport, mounted under a configurable
+  path (default `/mcp`), intended for loopback/internal bind only
+  (`DQA_MCP_ENABLED`, `DQA_MCP_MOUNT_PATH`, `DQA_MCP_BIND_HOST`)
+- Auth uses the existing DQA `IdentityProvider` / actor / RBAC path; fail-closed
+  when auth is disabled or unavailable
+- Caller-supplied `user_id` / `role` / `permissions` headers or tool arguments
+  are rejected (not trusted identity)
+- `dev_headers` remains development/test only and is never a production fallback
+- Foundation tool `dqa.mcp_ready` only; no `demis.*` Discovery/Query tools yet
+
+Future trusted gateway + approved production IdentityProvider (OIDC/JWT/SSO
+claim formats) are still required before exposing MCP beyond an internal network.
+Do not invent production IdentityProvider claim formats here.
 
 ## 9. Human Web vs MCP
 

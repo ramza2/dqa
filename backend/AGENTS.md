@@ -26,6 +26,7 @@ backend/
     schemas/
     services/
     repositories/
+    mcp/              # MCP transport/registry/auth boundary (Phase 28+)
     adapters/
       catalog/
       connection_profile/
@@ -40,6 +41,11 @@ Keep FastAPI route handlers thin.
 Business rules belong in services/domain code.
 Persistence belongs in repositories.
 External systems belong in adapters.
+
+MCP transport handlers must not access DEMIS or execute SQL. MCP tools call
+application-service adapters only and reuse the same IdentityProvider / RBAC
+fail-closed rules as Web APIs. Never trust caller-supplied `user_id` / `role` /
+`permissions` as identity.
 
 ## Database access
 

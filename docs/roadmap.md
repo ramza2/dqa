@@ -414,12 +414,13 @@ Dependency order is fixed. Names may be refined; do not invert phases.
   Keyword / semantic / hybrid search; terminology + relation expansion;
   revision-scoped embedding lifecycle; no HTTP API / React UI yet.
 - **PR 27-C — Data Discovery React Portal**
-  Status: in progress (`feat/data-discovery-react-portal`).
+  Status: completed (merged via `feat/data-discovery-react-portal`).
   Schema Search, Schema Explorer, relation view, embedding/index status.
 
 ### Phase 28 - MCP integration
 
 - **PR 28-A — MCP server foundation**
+  Status: in progress (`feat/mcp-server-foundation`).
   Transport, tool registration, auth abstraction only; no new query semantics.
 - **PR 28-B — Discovery MCP tools**
   `demis.search_schema`, `demis.describe_resource`.
