@@ -439,14 +439,18 @@ Dependency order is fixed. Names may be refined; do not invert phases.
   See [semantic-resource-mapping.md](semantic-resource-mapping.md).
   No SQL compiler, Dynamic Query execution, MCP tools, UI, or migrations.
 - **PR 29-B — Structured Query Plan contract + validation**
-  Status: in progress (`feat/structured-query-plan`).
+  Status: completed (merged via `feat/structured-query-plan`).
   Strict StructuredQueryPlan contracts; deterministic validation against
   Active Catalog + Semantic Resource mapping; immutable validation-only
   logical plan (not executable authority).
   See [structured-query-plan.md](structured-query-plan.md).
   No SQL compiler, Dynamic Query execution, MCP/API/UI, or migrations.
 - **PR 29-C — Deterministic query compiler**
-  No arbitrary SQL; parameterized SQL only; Catalog/allowlist driven.
+  Status: in progress (`feat/deterministic-query-compiler`).
+  Oracle SELECT compiler from server-revalidated StructuredQueryPlan;
+  named binds; Catalog FK joins; preview-only output (`approved=false`,
+  `executable=false`). See [deterministic-query-compiler.md](deterministic-query-compiler.md).
+  No DEMIS execution, MCP/API/UI, approval workflow, or migrations.
 - **PR 29-D — Dynamic Query execution integration**
   Shared eligibility/safety/audit core for MCP + Web.
 

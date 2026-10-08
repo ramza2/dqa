@@ -18,7 +18,8 @@ This PR delivers:
 
 It does **not** deliver:
 
-- SQL compiler (Phase 29-C)
+- SQL compiler (Phase 29-C; see
+  [deterministic-query-compiler.md](deterministic-query-compiler.md))
 - Dynamic Query execution / DEMIS access (Phase 29-D)
 - MCP tools, Web APIs, or UI
 - semantic mapping approval/persistence
@@ -119,6 +120,7 @@ and every `sort` field must also appear in `group_by`.
 
 ## Future boundary (not in 29-B)
 
-- Deterministic SQL compiler (29-C)
+- Deterministic SQL compiler (29-C; in progress — see
+  [deterministic-query-compiler.md](deterministic-query-compiler.md))
 - Shared Dynamic Query execution + audit (29-D)
 - Mapping approval/persistence enabling production Path B
