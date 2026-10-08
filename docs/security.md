@@ -18,6 +18,22 @@ Trust boundaries include:
 
 Each boundary requires validation and sanitized error handling.
 
+### Target platform boundaries (not all implemented yet)
+
+See [Integrated DQA Platform Architecture](integrated-platform-architecture.md)
+for the target product shape (Web Portal + MCP → shared Safety/Execution/Audit
+Core → DEMIS). Until those features ship, treat the following as **target
+security requirements**, not current runtime claims:
+
+- MCP must not bypass DQA authorization, query safety, or audit
+- caller-supplied arbitrary SQL remains prohibited for Template and future
+  Dynamic Query paths
+- future Dynamic Query must use server-generated parameterized SQL only
+  (no LLM/agent SQL direct execution)
+- MCP caller-supplied role/permission strings are not trusted identity
+- production authentication details remain deferred until an approved
+  IdentityProvider / agent interface is selected
+
 A static regression guard scans API route source for common exception-leak
 patterns. Route code must not directly stringify typed exceptions, interpolate
 their values into public messages, or feed typed-exception state into

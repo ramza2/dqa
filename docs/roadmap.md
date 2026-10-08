@@ -373,7 +373,7 @@ Scope:
 - no HTTP readiness API in this PR; no new Alembic revision
 
 ### PR 26-A - Real DEMIS onboarding & acceptance runbook
-Status: in progress (`docs/real-demis-onboarding-runbook`).
+Status: completed (merged via `docs/real-demis-onboarding-runbook`).
 Scope:
 - real DEMIS onboarding sequence
 - automated vs external prerequisites
@@ -385,7 +385,7 @@ Scope:
 - no runtime behavior changes
 
 ### PR 26-B - Integrated DQA platform architecture rebaseline
-Status: planned.
+Status: in progress (`docs/integrated-dqa-platform-architecture`).
 Scope:
 - redefine DQA as DEMIS Data Access & Query Platform
 - SNUH.AI Agent Workflow → MCP → DQA → DEMIS target architecture
@@ -396,6 +396,52 @@ Scope:
 - define MCP tool surface at architecture level
 - rebaseline subsequent implementation roadmap
 - no runtime implementation in this PR
+
+Authoritative target doc: `docs/integrated-platform-architecture.md`.
+
+## Rebaselined implementation sequence (after 26-B)
+
+Dependency order is fixed. Names may be refined; do not invert phases.
+
+### Phase 27 - Data Discovery integration
+
+- **PR 27-A — Data Discovery domain/contracts**
+  Catalog-derived search documents; source/revision scope; logical/physical
+  identity; embedding model metadata; no UI.
+- **PR 27-B — Schema search engine integration**
+  Keyword / semantic / hybrid search; terminology + relation expansion;
+  migrate proven PoC search logic into DQA service boundary.
+- **PR 27-C — Data Discovery React Portal**
+  Schema Search, Schema Explorer, relation view, embedding/index status.
+
+### Phase 28 - MCP integration
+
+- **PR 28-A — MCP server foundation**
+  Transport, tool registration, auth abstraction only; no new query semantics.
+- **PR 28-B — Discovery MCP tools**
+  `demis.search_schema`, `demis.describe_resource`.
+- **PR 28-C — Template query MCP path**
+  `demis.prepare_query`, `demis.execute_query` reusing Approved Template
+  execution core (shared safety/audit; no parallel execute path).
+
+### Phase 29 - Structured Dynamic Query
+
+- **PR 29-A — Semantic Resource Model**
+- **PR 29-B — Structured Query Plan contract + validation**
+- **PR 29-C — Deterministic query compiler**
+  No arbitrary SQL; parameterized SQL only; Catalog/allowlist driven.
+- **PR 29-D — Dynamic Query execution integration**
+  Shared eligibility/safety/audit core for MCP + Web.
+
+### Phase 30 - Integrated acceptance / hardening
+
+- Web/MCP equivalence tests
+- Data Discovery regression vs former Schema Search PoC evidence
+- security / adversarial tests
+- Oracle mock E2E
+- SNUH.AI integration acceptance (when interface exists)
+- real DEMIS remains external acceptance
+  ([real-demis-onboarding.md](real-demis-onboarding.md))
 
 ## Exit criteria before real DEMIS use
 

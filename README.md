@@ -21,6 +21,16 @@ DEMIS DB (read-only)
 DQA does not crawl or analyze DEMIS schema directly.
 The imported and activated Catalog Package is the schema source of truth.
 
+Target direction (architecture rebaseline; not all features implemented yet):
+
+- human users via DQA Web Portal
+- external AI agents (SNUH.AI) via MCP
+- both share one controlled DEMIS data-access core
+  (Catalog / Authorization / Safety / Execution / Audit)
+- Approved Query Template path retained; Structured Dynamic Query Plan is future
+
+See [Integrated DQA Platform Architecture](docs/integrated-platform-architecture.md).
+
 ## Stack
 
 - Backend: FastAPI / Python 3.11+ / SQLAlchemy / Pydantic
@@ -52,7 +62,8 @@ dqa/
 │  ├─ security.md
 │  ├─ roadmap.md
 │  ├─ runtime-and-deployment.md
-│  └─ real-demis-onboarding.md
+│  ├─ real-demis-onboarding.md
+│  └─ integrated-platform-architecture.md
 └─ scripts/
    └─ README.md
 ```
@@ -85,15 +96,16 @@ Natural language
 Start here:
 
 1. [AGENTS.md](AGENTS.md)
-2. [Architecture](docs/architecture.md)
-3. [Catalog Package Contract](docs/catalog-package-contract.md)
-4. [Query Template Design](docs/query-template-design.md)
-5. [Security](docs/security.md)
-6. [Roadmap](docs/roadmap.md)
-7. [Runtime and Deployment](docs/runtime-and-deployment.md)
-8. [Real DEMIS Onboarding & Acceptance Runbook](docs/real-demis-onboarding.md)
-9. [Cursor Handoff Guide](docs/cursor-handoff.md)
-10. [Bootstrap Design Review](docs/design-review.md)
+2. [Architecture](docs/architecture.md) (current implementation)
+3. [Integrated Platform Architecture](docs/integrated-platform-architecture.md) (target)
+4. [Catalog Package Contract](docs/catalog-package-contract.md)
+5. [Query Template Design](docs/query-template-design.md)
+6. [Security](docs/security.md)
+7. [Roadmap](docs/roadmap.md)
+8. [Runtime and Deployment](docs/runtime-and-deployment.md)
+9. [Real DEMIS Onboarding & Acceptance Runbook](docs/real-demis-onboarding.md)
+10. [Cursor Handoff Guide](docs/cursor-handoff.md)
+11. [Bootstrap Design Review](docs/design-review.md)
 
 ## On-prem deployment (foundation)
 
