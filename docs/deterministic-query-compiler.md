@@ -72,7 +72,12 @@ Identical validated inputs produce identical SQL text and bind names/order.
   `IS NULL`, `IS NOT NULL`
 - Aggregations: `COUNT` / `SUM` / `AVG` / `MIN` / `MAX`
 - Bounded rows via outer `WHERE ROWNUM <= :p_limit` (literal bind; not inlined)
-- Identifiers double-quoted after strict Oracle identifier validation
+- Identifiers double-quoted using **authoritative Catalog spelling** (mapping
+  case may differ; compiler does not blindly uppercase)
+- Projection aliases (select / explicit agg / generated agg) must be unique and
+  must not collide with the outer wrapper alias `q`
+- Post-validation semantic re-resolve must remain `VALID` with identical
+  source/revision/fingerprint/mapping version (`SNAPSHOT_DRIFT` otherwise)
 
 ### Limitations
 

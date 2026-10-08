@@ -572,3 +572,175 @@ def test_unknown_relationship_and_invalid_plan(db_session: Session) -> None:
     assert result.status == CompilerStatus.INVALID
     assert result.sql_text is None
     assert CompilerIssueCode.PLAN_INVALID in _issue_codes(result)
+
+
+def test_projection_alias_collision_rejected(db_session: Session) -> None:
+    _, registry = _registry(db_session)
+    # Explicit aggregation alias collides with a selected field alias.
+    plan = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["ward_code"],
+        group_by=["ward_code"],
+        aggregations=[
+            PlanAggregationSpec(
+                function="COUNT", field_key="admission_id", alias="ward_code"
+            )
+        ],
+        limit=10,
+    )
+    result = compile_structured_query_plan(db_session, plan, registry=registry)
+    assert result.status == CompilerStatus.INVALID
+    assert CompilerIssueCode.ALIAS_COLLISION in _issue_codes(result)
+    assert result.sql_text is None
+    assert result.bind_parameters == {}
+
+    # Collision with outer wrapper alias "q".
+    plan_outer = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["ward_code"],
+        group_by=["ward_code"],
+        aggregations=[
+            PlanAggregationSpec(function="COUNT", field_key="admission_id", alias="q")
+        ],
+        limit=10,
+    )
+    result_outer = compile_structured_query_plan(
+        db_session, plan_outer, registry=registry
+    )
+    assert result_outer.status == CompilerStatus.INVALID
+    assert CompilerIssueCode.ALIAS_COLLISION in _issue_codes(result_outer)
+    assert result_outer.sql_text is None
+
+
+def test_catalog_authoritative_identifier_spelling(db_session: Session) -> None:
+    """Mismatched-case mapping must quote Catalog spelling; correct case still works."""
+    rev = _seed_active(db_session)
+    # Mapping uses lowercase physical names; Catalog is uppercase Oracle style.
+    mismatched = _mapping(rev.id)
+    admission = mismatched.resources[0]
+    lowered_fields = []
+    for field_def in admission.fields:
+        lowered_fields.append(
+            field_def.model_copy(
+                update={
+                    "physical_column": PhysicalColumnRef(
+                        schema_name="demis_owner",
+                        table_name="tb_adm_hist",
+                        column_name=field_def.physical_column.column_name.lower(),
+                    )
+                }
+            )
+        )
+    lowered_rels = []
+    for rel in admission.relationships:
+        fk = rel.catalog_fk
+        lowered_rels.append(
+            rel.model_copy(
+                update={
+                    "catalog_fk": fk.model_copy(
+                        update={
+                            "source_schema_name": "demis_owner",
+                            "source_table_name": "tb_adm_hist",
+                            "target_schema_name": "demis_owner",
+                            "target_table_name": "tb_ward",
+                            "column_mappings": [
+                                CatalogFkColumnBinding(
+                                    source_column=m.source_column.lower(),
+                                    target_column=m.target_column.lower(),
+                                )
+                                for m in fk.column_mappings
+                            ],
+                        }
+                    )
+                }
+            )
+        )
+    ward = mismatched.resources[1].model_copy(
+        update={
+            "physical_table": PhysicalTableRef(
+                schema_name="demis_owner", table_name="tb_ward"
+            ),
+            "fields": [
+                mismatched.resources[1].fields[0].model_copy(
+                    update={
+                        "physical_column": PhysicalColumnRef(
+                            schema_name="demis_owner",
+                            table_name="tb_ward",
+                            column_name="ward_cd",
+                        )
+                    }
+                )
+            ],
+        }
+    )
+    mismatched = mismatched.model_copy(
+        update={
+            "resources": [
+                admission.model_copy(
+                    update={
+                        "physical_table": PhysicalTableRef(
+                            schema_name="demis_owner", table_name="tb_adm_hist"
+                        ),
+                        "fields": lowered_fields,
+                        "relationships": lowered_rels,
+                    }
+                ),
+                ward,
+            ]
+        }
+    )
+    registry = SemanticResourceRegistry.from_mapping(mismatched)
+    plan = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["admission_id", "ward_code"],
+        relationships=["admission_ward"],
+        limit=10,
+    )
+    result = compile_structured_query_plan(db_session, plan, registry=registry)
+    assert result.status == CompilerStatus.VALID
+    sql = result.sql_text or ""
+    assert '"DEMIS_OWNER"."TB_ADM_HIST"' in sql
+    assert '"ADM_ID"' in sql
+    assert '"WARD_CD"' in sql
+    assert '"DEMIS_OWNER"."TB_WARD"' in sql
+    # Must not emit lowercase mapping spelling as quoted identifiers.
+    assert '"demis_owner"' not in sql
+    assert '"tb_adm_hist"' not in sql
+    assert '"adm_id"' not in sql
+
+    # Correctly cased mapping still compiles to Catalog spelling.
+    registry_ok = SemanticResourceRegistry.from_mapping(_mapping(rev.id))
+    result_ok = compile_structured_query_plan(db_session, plan, registry=registry_ok)
+    assert result_ok.status == CompilerStatus.VALID
+    assert '"DEMIS_OWNER"."TB_ADM_HIST"' in (result_ok.sql_text or "")
+
+
+def test_snapshot_drift_after_reresolve_rejected(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, registry = _registry(db_session)
+    plan = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["admission_id"],
+        limit=10,
+    )
+    import app.services.query_compiler as compiler_mod
+
+    original = compiler_mod.resolve_semantic_resources
+
+    def _drifted(*args: Any, **kwargs: Any):
+        # Compiler's post-validation re-resolve only — leave plan validation untouched.
+        result = original(*args, **kwargs)
+        return result.model_copy(update={"schema_fingerprint": "fp-drifted-other"})
+
+    monkeypatch.setattr(compiler_mod, "resolve_semantic_resources", _drifted)
+
+    result = compile_structured_query_plan(db_session, plan, registry=registry)
+    assert result.status == CompilerStatus.INVALID
+    assert CompilerIssueCode.SNAPSHOT_DRIFT in _issue_codes(result)
+    assert result.sql_text is None
+    assert result.bind_parameters == {}
