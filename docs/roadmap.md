@@ -433,12 +433,18 @@ Dependency order is fixed. Names may be refined; do not invert phases.
 ### Phase 29 - Structured Dynamic Query
 
 - **PR 29-A — Semantic Resource Model**
-  Status: in progress (`feat/semantic-resource-model`).
+  Status: completed (merged via `feat/semantic-resource-model`).
   Logical resource/field/relationship contracts; deterministic validation
   against one Active Catalog revision; injectable empty-by-default registry.
   See [semantic-resource-mapping.md](semantic-resource-mapping.md).
   No SQL compiler, Dynamic Query execution, MCP tools, UI, or migrations.
 - **PR 29-B — Structured Query Plan contract + validation**
+  Status: in progress (`feat/structured-query-plan`).
+  Strict StructuredQueryPlan contracts; deterministic validation against
+  Active Catalog + Semantic Resource mapping; immutable validation-only
+  logical plan (not executable authority).
+  See [structured-query-plan.md](structured-query-plan.md).
+  No SQL compiler, Dynamic Query execution, MCP/API/UI, or migrations.
 - **PR 29-C — Deterministic query compiler**
   No arbitrary SQL; parameterized SQL only; Catalog/allowlist driven.
 - **PR 29-D — Dynamic Query execution integration**
