@@ -123,6 +123,7 @@ def db_session(test_settings_env: dict[str, str]):
         "query_template_review_events",
         "query_template_versions",
         "query_templates",
+        "data_discovery_documents",
         "catalog_activation_events",
         "catalog_active_revisions",
         "catalog_import_revisions",

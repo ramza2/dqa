@@ -10,13 +10,14 @@ from sqlalchemy import inspect, text
 
 from app.core.config import get_settings
 
-_HEAD = "20261007_hist01"
-_PREV = "20260929_audit01"
+_HEAD = "20261008_dd01"
+_PREV = "20261007_hist01"
 
 _DQA_TABLES = (
     "query_template_review_events",
     "query_template_versions",
     "query_templates",
+    "data_discovery_documents",
     "catalog_activation_events",
     "catalog_active_revisions",
     "catalog_import_revisions",

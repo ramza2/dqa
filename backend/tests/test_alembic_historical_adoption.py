@@ -22,10 +22,12 @@ _ADOPTED = (
 _ALL_OWNED = _ADOPTED + (
     "connection_profiles",
     "query_audit_events",
+    "data_discovery_documents",
 )
 
-_HEAD = "20261007_hist01"
-_PREV = "20260929_audit01"
+_HEAD = "20261008_dd01"
+_HIST01 = "20261007_hist01"
+_AUDIT01 = "20260929_audit01"
 
 
 def _drop_dqa_tables(engine) -> None:
@@ -33,6 +35,7 @@ def _drop_dqa_tables(engine) -> None:
         "query_template_review_events",
         "query_template_versions",
         "query_templates",
+        "data_discovery_documents",
         "catalog_activation_events",
         "catalog_active_revisions",
         "catalog_import_revisions",
@@ -99,9 +102,12 @@ def test_alembic_chain_hist01_follows_audit01() -> None:
 
     cfg = Config("alembic.ini")
     script = ScriptDirectory.from_config(cfg)
-    rev = script.get_revision(_HEAD)
-    assert rev is not None
-    assert rev.down_revision == _PREV
+    hist = script.get_revision(_HIST01)
+    assert hist is not None
+    assert hist.down_revision == _AUDIT01
+    dd01 = script.get_revision(_HEAD)
+    assert dd01 is not None
+    assert dd01.down_revision == _HIST01
     heads = script.get_heads()
     assert list(heads) == [_HEAD]
 
@@ -147,8 +153,8 @@ def test_legacy_create_all_adoption_preserves_rows(
     _drop_dqa_tables(engine)
 
     # Baseline Alembic-owned tables only (pre-adoption head).
-    _alembic_upgrade(_PREV)
-    assert _current_revision(engine) == _PREV
+    _alembic_upgrade(_AUDIT01)
+    assert _current_revision(engine) == _AUDIT01
     assert inspect(engine).has_table("connection_profiles")
     assert inspect(engine).has_table("query_audit_events")
     for name in _ADOPTED:
@@ -157,6 +163,10 @@ def test_legacy_create_all_adoption_preserves_rows(
     # Historical fixture only: simulate pre-24-B create_all-era tables in-test.
     # Production runtime no longer exposes init_db_schema / create_all.
     Base.metadata.create_all(bind=engine)
+    # data_discovery_documents is post-create_all-era (Phase 27-A); exclude it from
+    # the legacy snapshot so dd01 can create it during upgrade-to-head.
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS data_discovery_documents CASCADE"))
     for name in _ADOPTED:
         assert inspect(engine).has_table(name), name
 
@@ -237,8 +247,8 @@ def test_incompatible_legacy_schema_refuses_hist01_adoption(
     engine = get_engine()
     _drop_dqa_tables(engine)
 
-    _alembic_upgrade(_PREV)
-    assert _current_revision(engine) == _PREV
+    _alembic_upgrade(_AUDIT01)
+    assert _current_revision(engine) == _AUDIT01
 
     # Deliberately incompatible fixture: same table name, missing required columns /
     # uniques / indexes / JSONB payload columns that current ORM + hist01 require.
@@ -274,7 +284,7 @@ def test_incompatible_legacy_schema_refuses_hist01_adoption(
     assert "postgresql://" not in message.casefold()
 
     # Fail closed: revision must remain at audit01; hist01 must not be stamped.
-    assert _current_revision(engine) == _PREV
+    assert _current_revision(engine) == _AUDIT01
 
     # No repair/create of sibling adopted tables after refusal.
     for name in _ADOPTED:
@@ -423,10 +433,10 @@ def test_hist01_downgrade_is_non_destructive(
         )
 
     cfg = Config("alembic.ini")
-    command.downgrade(cfg, _PREV)
-    assert _current_revision(engine) == _PREV
+    command.downgrade(cfg, _AUDIT01)
+    assert _current_revision(engine) == _AUDIT01
 
-    # Tables and rows must remain after non-destructive downgrade.
+    # Tables and rows must remain after non-destructive hist01 downgrade.
     for name in _ADOPTED:
         assert inspect(engine).has_table(name), name
     with engine.begin() as conn:

@@ -56,8 +56,11 @@ def test_alembic_chain_includes_audit_revision() -> None:
     hist = script.get_revision("20261007_hist01")
     assert hist is not None
     assert hist.down_revision == "20260929_audit01"
+    dd01 = script.get_revision("20261008_dd01")
+    assert dd01 is not None
+    assert dd01.down_revision == "20261007_hist01"
     heads = script.get_heads()
-    assert list(heads) == ["20261007_hist01"]
+    assert list(heads) == ["20261008_dd01"]
 
 
 def test_record_and_list_get_audit_events(
@@ -331,4 +334,4 @@ def test_migration_upgrade_chain(test_settings_env: dict[str, str]) -> None:
     assert inspect(engine).has_table("query_templates")
     with engine.begin() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert version == "20261007_hist01"
+    assert version == "20261008_dd01"

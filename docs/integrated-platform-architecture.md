@@ -105,6 +105,10 @@ UI consolidation must not merge backend responsibilities.
 Capabilities proven in the former Schema Search PoC are **migrated into DQA**
 as Data Discovery / Schema Intelligence — not kept as a separate final product.
 
+Implementation note (Phase 27-A): revision-scoped search-document domain /
+persistence contracts exist; keyword/semantic/hybrid search, embeddings, MCP,
+and Dynamic Query are **not** implemented yet.
+
 Capabilities to promote into DQA:
 
 - Table / Column Explorer
