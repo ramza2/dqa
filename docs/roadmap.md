@@ -410,10 +410,11 @@ Dependency order is fixed. Names may be refined; do not invert phases.
   Catalog-derived search documents; source/revision scope; logical/physical
   identity; embedding model metadata; no UI; no search engine/API.
 - **PR 27-B — Schema search engine integration**
-  Status: in progress (`feat/data-discovery-search-engine`).
+  Status: completed (merged via `feat/data-discovery-search-engine`).
   Keyword / semantic / hybrid search; terminology + relation expansion;
   revision-scoped embedding lifecycle; no HTTP API / React UI yet.
 - **PR 27-C — Data Discovery React Portal**
+  Status: in progress (`feat/data-discovery-react-portal`).
   Schema Search, Schema Explorer, relation view, embedding/index status.
 
 ### Phase 28 - MCP integration
