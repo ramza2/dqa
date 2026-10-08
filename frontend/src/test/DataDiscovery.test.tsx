@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
@@ -14,6 +14,7 @@ import {
   defaultCatalogHandlers,
   installFetchMock,
   jsonResponse,
+  secondSource,
 } from "./mocks";
 
 type FetchHandler = (
@@ -494,6 +495,231 @@ describe("DataDiscoveryIndexStatus", () => {
     expect(await screen.findByTestId("index-action-error")).toHaveTextContent(
       /Administrator permission is required/i,
     );
+    restore();
+  });
+
+  it("ignores rebuild response after source change during the operation", async () => {
+    const user = userEvent.setup();
+    let resolveRebuild: ((value: Response) => void) | null = null;
+    const secondStatus: DataDiscoveryIndexStatusResponse = {
+      ...indexNotConfigured,
+      source_name: secondSource.source_name,
+      catalog_revision_id: secondSource.revision_id,
+      schema_fingerprint: secondSource.schema_fingerprint,
+      document_count: 3,
+      document_state: "READY",
+    };
+    const restore = installFetchMock([
+      (url) => {
+        if (url.pathname === "/api/v1/catalog/active") {
+          return jsonResponse([activeSource, secondSource]);
+        }
+        return null;
+      },
+      (url) => {
+        const match = url.pathname.match(/^\/api\/v1\/catalog\/active\/([^/]+)$/);
+        if (!match) {
+          return null;
+        }
+        const name = decodeURIComponent(match[1]);
+        const found = [activeSource, secondSource].find((s) => s.source_name === name);
+        return found ? jsonResponse(found) : null;
+      },
+      (url) => {
+        const match = url.pathname.match(/^\/api\/v1\/data-discovery\/([^/]+)\/index-status$/);
+        if (!match) {
+          return null;
+        }
+        const name = decodeURIComponent(match[1]);
+        if (name === secondSource.source_name) {
+          return jsonResponse(secondStatus);
+        }
+        return jsonResponse({
+          ...indexNotConfigured,
+          source_name: activeSource.source_name,
+        });
+      },
+      (url, init) => {
+        if (
+          !url.pathname.match(/\/documents\/rebuild$/) ||
+          (init?.method ?? "GET") !== "POST"
+        ) {
+          return null;
+        }
+        return new Promise<Response>((resolve) => {
+          resolveRebuild = resolve;
+        });
+      },
+      ...defaultCatalogHandlers({ actives: [activeSource, secondSource] }),
+    ]);
+
+    render(<DataDiscoveryIndexStatus />);
+    expect(await screen.findByTestId("document-state")).toHaveTextContent("READY");
+    const sourceSelect = screen.getByLabelText("Active Catalog source");
+    expect(sourceSelect).toHaveValue(activeSource.source_name);
+
+    await user.click(screen.getByTestId("rebuild-documents"));
+    await waitFor(() => expect(resolveRebuild).not.toBeNull());
+    expect(sourceSelect).toBeDisabled();
+
+    // Synthetic change still exercises actionSeq invalidation while select is disabled.
+    fireEvent.change(sourceSelect, { target: { value: secondSource.source_name } });
+
+    resolveRebuild!(
+      jsonResponse({
+        source_name: activeSource.source_name,
+        catalog_revision_id: activeSource.revision_id,
+        schema_fingerprint: activeSource.schema_fingerprint,
+        document_count: 99,
+        upserted_count: 99,
+        deleted_count: 0,
+        builder_version: "1",
+      }),
+    );
+
+    expect(await screen.findByTestId("document-count")).toHaveTextContent("3");
+    expect(screen.queryByTestId("index-action-message")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Rebuilt 99 documents/i)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId("index-status-loading")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("index-status-body")).toHaveTextContent(secondSource.source_name);
+    restore();
+  });
+
+  it("ignores sync response when revision snapshot no longer matches", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const restore = installFetchMock(
+      discoveryHandlers({
+        status: () =>
+          jsonResponse({
+            ...indexReady,
+            embedding_state: "NOT_READY",
+            coverage: {
+              document_count: 10,
+              embedding_count: 0,
+              current_count: 0,
+              stale_count: 0,
+              missing_count: 10,
+            },
+          }),
+        sync: () =>
+          jsonResponse({
+            source_name: activeSource.source_name,
+            catalog_revision_id: 99,
+            schema_fingerprint: "stale-fingerprint-during-sync",
+            model_key: "a".repeat(64),
+            document_count: 10,
+            embedded_count: 10,
+            skipped_count: 0,
+            coverage: indexReady.coverage,
+          }),
+      }),
+    );
+    render(<DataDiscoveryIndexStatus />);
+    expect(await screen.findByTestId("embedding-state")).toHaveTextContent("NOT_READY");
+    await user.click(screen.getByTestId("sync-embeddings"));
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(await screen.findByTestId("index-stale-warning")).toHaveTextContent(
+      /Catalog revision changed during the operation/i,
+    );
+    expect(screen.queryByTestId("index-action-message")).not.toBeInTheDocument();
+    restore();
+  });
+
+  it("disables Sync Embeddings when discovery documents are NOT_READY", async () => {
+    const restore = installFetchMock(
+      discoveryHandlers({
+        status: () =>
+          jsonResponse({
+            ...indexNotConfigured,
+            document_count: 0,
+            document_state: "NOT_READY",
+            embedding_state: "NOT_READY",
+            provider: "openai_compatible",
+            model_name: "stub-model",
+            model_revision: "test",
+            model_key: "a".repeat(64),
+            dimension: 1024,
+            normalized: true,
+            coverage: {
+              document_count: 0,
+              embedding_count: 0,
+              current_count: 0,
+              stale_count: 0,
+              missing_count: 0,
+            },
+          }),
+      }),
+    );
+    render(<DataDiscoveryIndexStatus />);
+    expect(await screen.findByTestId("document-state")).toHaveTextContent("NOT_READY");
+    expect(screen.getByTestId("sync-embeddings")).toBeDisabled();
+    restore();
+  });
+
+  it("shows CONFIGURATION_ERROR guidance and disables sync", async () => {
+    const restore = installFetchMock(
+      discoveryHandlers({
+        status: () =>
+          jsonResponse({
+            ...indexReady,
+            embedding_state: "CONFIGURATION_ERROR",
+            embedding_error_code: "EMBEDDING_DIMENSION_MISMATCH",
+            coverage: null,
+          }),
+      }),
+    );
+    render(<DataDiscoveryIndexStatus />);
+    expect(await screen.findByTestId("embedding-state")).toHaveTextContent(
+      "CONFIGURATION_ERROR",
+    );
+    expect(screen.getByTestId("emb-guidance")).toHaveTextContent(
+      /Embedding configuration is invalid/i,
+    );
+    expect(screen.getByTestId("emb-guidance")).toHaveTextContent("EMBEDDING_DIMENSION_MISMATCH");
+    expect(screen.getByTestId("sync-embeddings")).toBeDisabled();
+    restore();
+  });
+});
+
+describe("refreshSources fail-closed", () => {
+  it("clears SchemaSearch active metadata when catalog list fails", async () => {
+    const restore = installFetchMock([
+      (url) => {
+        if (url.pathname === "/api/v1/catalog/active") {
+          return jsonResponse(
+            { detail: { code: "AUTH_PROVIDER_UNAVAILABLE", message: "down" } },
+            503,
+          );
+        }
+        return null;
+      },
+    ]);
+    render(<SchemaSearch />);
+    expect(await screen.findByText(/Catalog data could not be loaded/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("search-active-meta")).not.toBeInTheDocument();
+    expect(screen.getByTestId("search-submit")).toBeDisabled();
+    restore();
+  });
+
+  it("clears Index Status active metadata when catalog list fails", async () => {
+    const restore = installFetchMock([
+      (url) => {
+        if (url.pathname === "/api/v1/catalog/active") {
+          return jsonResponse(
+            { detail: { code: "AUTH_PROVIDER_UNAVAILABLE", message: "down" } },
+            503,
+          );
+        }
+        return null;
+      },
+    ]);
+    render(<DataDiscoveryIndexStatus />);
+    expect(await screen.findByText(/Catalog data could not be loaded/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("index-status-body")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("rebuild-documents")).not.toBeInTheDocument();
     restore();
   });
 });

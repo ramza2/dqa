@@ -69,3 +69,6 @@ export const STALE_SEARCH_MESSAGE =
 
 export const STALE_STATUS_MESSAGE =
   "Catalog revision changed. Please refresh index status.";
+
+export const STALE_ACTION_MESSAGE =
+  "Catalog revision changed during the operation. Refresh the status before retrying.";

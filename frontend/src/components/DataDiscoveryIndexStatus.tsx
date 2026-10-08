@@ -5,11 +5,16 @@ import {
   rebuildDataDiscoveryDocuments,
   syncDataDiscoveryEmbeddings,
 } from "../api/dataDiscovery";
-import type { CatalogActiveSummary } from "../types/catalog";
-import type { DataDiscoveryIndexStatusResponse } from "../types/dataDiscovery";
 import type { LoadState } from "../hooks/useCatalogExplorer";
+import type { CatalogActiveSummary } from "../types/catalog";
 import { CatalogApiError } from "../types/catalog";
+import type {
+  DataDiscoveryEmbeddingSyncResponse,
+  DataDiscoveryIndexStatusResponse,
+  DataDiscoveryRebuildResponse,
+} from "../types/dataDiscovery";
 import {
+  STALE_ACTION_MESSAGE,
   STALE_STATUS_MESSAGE,
   formatDiscoveryError,
   shortenFingerprint,
@@ -23,6 +28,13 @@ const idleState: LoadState = {
   message: null,
   code: null,
   httpStatus: null,
+};
+
+type ActionSnapshot = {
+  source_name: string;
+  revision_id: number;
+  schema_fingerprint: string;
+  token: number;
 };
 
 function toErrorState(error: unknown): LoadState {
@@ -55,6 +67,38 @@ function stateBadgeClass(state: string): string {
   }
 }
 
+function actionStillCurrent(
+  snapshot: ActionSnapshot,
+  actionSeq: number,
+  selectedSource: string | null,
+): boolean {
+  return snapshot.token === actionSeq && selectedSource === snapshot.source_name;
+}
+
+function responseMatchesSnapshot(
+  snapshot: ActionSnapshot,
+  response: {
+    source_name: string;
+    catalog_revision_id: number;
+    schema_fingerprint: string;
+  },
+  active: CatalogActiveSummary | null,
+): boolean {
+  if (
+    !active ||
+    active.source_name !== snapshot.source_name ||
+    active.revision_id !== snapshot.revision_id ||
+    active.schema_fingerprint !== snapshot.schema_fingerprint
+  ) {
+    return false;
+  }
+  return (
+    response.source_name === snapshot.source_name &&
+    response.catalog_revision_id === snapshot.revision_id &&
+    response.schema_fingerprint === snapshot.schema_fingerprint
+  );
+}
+
 export function DataDiscoveryIndexStatus() {
   const [sources, setSources] = useState<CatalogActiveSummary[]>([]);
   const [sourcesState, setSourcesState] = useState<LoadState>({
@@ -73,6 +117,7 @@ export function DataDiscoveryIndexStatus() {
   const [busyAction, setBusyAction] = useState<"rebuild" | "sync" | null>(null);
 
   const requestSeq = useRef(0);
+  const actionSeq = useRef(0);
   const activeRef = useRef<CatalogActiveSummary | null>(null);
   const selectedSourceRef = useRef<string | null>(null);
 
@@ -82,6 +127,11 @@ export function DataDiscoveryIndexStatus() {
   useEffect(() => {
     selectedSourceRef.current = selectedSource;
   }, [selectedSource]);
+
+  const clearActionUi = useCallback(() => {
+    setActionError(null);
+    setActionMessage(null);
+  }, []);
 
   const refreshSources = useCallback(async () => {
     setSourcesState({
@@ -102,6 +152,7 @@ export function DataDiscoveryIndexStatus() {
         });
         setSelectedSource(null);
         setActive(null);
+        setStatus(null);
         return;
       }
       setSourcesState({
@@ -117,58 +168,69 @@ export function DataDiscoveryIndexStatus() {
         return items[0].source_name;
       });
     } catch (error) {
+      setSources([]);
+      setSelectedSource(null);
+      setActive(null);
+      setStatus(null);
+      clearActionUi();
       setSourcesState(toErrorState(error));
     }
-  }, []);
+  }, [clearActionUi]);
 
-  const loadStatus = useCallback(async (sourceName: string, snapshot: CatalogActiveSummary) => {
-    const seq = ++requestSeq.current;
-    setStatusState({
-      status: "loading",
-      message: null,
-      code: null,
-      httpStatus: null,
-    });
-    setStaleWarning(null);
-    try {
-      const response = await getDataDiscoveryIndexStatus(sourceName);
-      if (seq !== requestSeq.current) {
-        return;
-      }
-      if (selectedSourceRef.current !== sourceName) {
-        return;
-      }
-      const current = activeRef.current;
-      if (
-        !current ||
-        current.source_name !== response.source_name ||
-        current.revision_id !== response.catalog_revision_id ||
-        current.schema_fingerprint !== response.schema_fingerprint ||
-        current.source_name !== snapshot.source_name ||
-        current.revision_id !== snapshot.revision_id ||
-        current.schema_fingerprint !== snapshot.schema_fingerprint
-      ) {
-        setStatus(null);
-        setStaleWarning(STALE_STATUS_MESSAGE);
-        setStatusState(idleState);
-        void refreshSources();
-        return;
-      }
-      setStatus(response);
+  const loadStatus = useCallback(
+    async (sourceName: string, snapshot: CatalogActiveSummary) => {
+      const seq = ++requestSeq.current;
       setStatusState({
-        status: "ready",
+        status: "loading",
         message: null,
         code: null,
         httpStatus: null,
       });
-    } catch (error) {
-      if (seq !== requestSeq.current) {
-        return;
+      setStaleWarning(null);
+      try {
+        const response = await getDataDiscoveryIndexStatus(sourceName);
+        if (seq !== requestSeq.current) {
+          return;
+        }
+        if (selectedSourceRef.current !== sourceName) {
+          return;
+        }
+        const current = activeRef.current;
+        if (
+          !current ||
+          current.source_name !== response.source_name ||
+          current.revision_id !== response.catalog_revision_id ||
+          current.schema_fingerprint !== response.schema_fingerprint ||
+          current.source_name !== snapshot.source_name ||
+          current.revision_id !== snapshot.revision_id ||
+          current.schema_fingerprint !== snapshot.schema_fingerprint
+        ) {
+          setStatus(null);
+          setStaleWarning(STALE_STATUS_MESSAGE);
+          setStatusState(idleState);
+          void refreshSources();
+          return;
+        }
+        setStatus(response);
+        setStatusState({
+          status: "ready",
+          message: null,
+          code: null,
+          httpStatus: null,
+        });
+      } catch (error) {
+        if (seq !== requestSeq.current) {
+          return;
+        }
+        if (selectedSourceRef.current !== sourceName) {
+          return;
+        }
+        setStatus(null);
+        setStatusState(toErrorState(error));
       }
-      setStatus(null);
-      setStatusState(toErrorState(error));
-    }
-  }, [refreshSources]);
+    },
+    [refreshSources],
+  );
 
   useEffect(() => {
     void refreshSources();
@@ -187,23 +249,56 @@ export function DataDiscoveryIndexStatus() {
     }
   }, [selectedSource, sources, loadStatus]);
 
+  const rejectStaleActionOnCurrentSource = useCallback(() => {
+    clearActionUi();
+    setStaleWarning(STALE_ACTION_MESSAGE);
+    // Only invalidate status loads for the still-selected source.
+    requestSeq.current += 1;
+    setStatus(null);
+    setStatusState(idleState);
+    void refreshSources();
+  }, [clearActionUi, refreshSources]);
+
   const onRebuild = async () => {
     if (!selectedSource || !active || busyAction) {
       return;
     }
+    const snapshot: ActionSnapshot = {
+      source_name: active.source_name,
+      revision_id: active.revision_id,
+      schema_fingerprint: active.schema_fingerprint,
+      token: ++actionSeq.current,
+    };
     setBusyAction("rebuild");
-    setActionError(null);
-    setActionMessage(null);
+    clearActionUi();
+    setStaleWarning(null);
     try {
-      const result = await rebuildDataDiscoveryDocuments(selectedSource);
+      const result: DataDiscoveryRebuildResponse =
+        await rebuildDataDiscoveryDocuments(snapshot.source_name);
+      if (!actionStillCurrent(snapshot, actionSeq.current, selectedSourceRef.current)) {
+        // Source/action already invalidated; never commit onto the new screen.
+        return;
+      }
+      if (!responseMatchesSnapshot(snapshot, result, activeRef.current)) {
+        rejectStaleActionOnCurrentSource();
+        return;
+      }
       setActionMessage(
         `Rebuilt ${result.document_count} documents (upserted ${result.upserted_count}, deleted ${result.deleted_count}).`,
       );
-      await loadStatus(selectedSource, active);
+      const current = activeRef.current;
+      if (current && current.source_name === snapshot.source_name) {
+        await loadStatus(snapshot.source_name, current);
+      }
     } catch (error) {
+      if (!actionStillCurrent(snapshot, actionSeq.current, selectedSourceRef.current)) {
+        return;
+      }
       setActionError(formatDiscoveryError(error));
     } finally {
-      setBusyAction(null);
+      if (snapshot.token === actionSeq.current) {
+        setBusyAction(null);
+      }
     }
   };
 
@@ -217,25 +312,48 @@ export function DataDiscoveryIndexStatus() {
     if (!confirmed) {
       return;
     }
+    const snapshot: ActionSnapshot = {
+      source_name: active.source_name,
+      revision_id: active.revision_id,
+      schema_fingerprint: active.schema_fingerprint,
+      token: ++actionSeq.current,
+    };
     setBusyAction("sync");
-    setActionError(null);
-    setActionMessage(null);
+    clearActionUi();
+    setStaleWarning(null);
     try {
-      const result = await syncDataDiscoveryEmbeddings(selectedSource);
+      const result: DataDiscoveryEmbeddingSyncResponse =
+        await syncDataDiscoveryEmbeddings(snapshot.source_name);
+      if (!actionStillCurrent(snapshot, actionSeq.current, selectedSourceRef.current)) {
+        return;
+      }
+      if (!responseMatchesSnapshot(snapshot, result, activeRef.current)) {
+        rejectStaleActionOnCurrentSource();
+        return;
+      }
       setActionMessage(
         `Synced embeddings: embedded ${result.embedded_count}, skipped ${result.skipped_count}.`,
       );
-      await loadStatus(selectedSource, active);
+      const current = activeRef.current;
+      if (current && current.source_name === snapshot.source_name) {
+        await loadStatus(snapshot.source_name, current);
+      }
     } catch (error) {
+      if (!actionStillCurrent(snapshot, actionSeq.current, selectedSourceRef.current)) {
+        return;
+      }
       setActionError(formatDiscoveryError(error));
     } finally {
-      setBusyAction(null);
+      if (snapshot.token === actionSeq.current) {
+        setBusyAction(null);
+      }
     }
   };
 
   const syncDisabled =
     busyAction !== null ||
     !status ||
+    status.document_state !== "READY" ||
     status.embedding_state === "NOT_CONFIGURED" ||
     status.embedding_state === "CONFIGURATION_ERROR";
 
@@ -251,13 +369,15 @@ export function DataDiscoveryIndexStatus() {
         selectedSource={selectedSource ?? ""}
         onSelect={(name) => {
           requestSeq.current += 1;
+          actionSeq.current += 1;
           setSelectedSource(name);
           setStatus(null);
+          setStatusState(idleState);
           setStaleWarning(null);
-          setActionError(null);
-          setActionMessage(null);
+          clearActionUi();
+          setBusyAction(null);
         }}
-        disabled={sourcesState.status === "loading"}
+        disabled={sourcesState.status === "loading" || busyAction !== null}
       />
 
       {sourcesState.status === "loading" ||
@@ -266,7 +386,11 @@ export function DataDiscoveryIndexStatus() {
         <StatusBanner state={sourcesState} emptyLabel="No active Catalog" />
       ) : null}
 
-      {staleWarning ? <div className="banner banner-warn">{staleWarning}</div> : null}
+      {staleWarning ? (
+        <div className="banner banner-warn" data-testid="index-stale-warning">
+          {staleWarning}
+        </div>
+      ) : null}
       {actionError ? (
         <div className="banner banner-error" data-testid="index-action-error">
           {actionError}
@@ -279,7 +403,9 @@ export function DataDiscoveryIndexStatus() {
       ) : null}
 
       {statusState.status === "loading" ? (
-        <div className="banner banner-empty">Loading index status…</div>
+        <div className="banner banner-empty" data-testid="index-status-loading">
+          Loading index status…
+        </div>
       ) : null}
       {statusState.status === "error" ? (
         <div className="banner banner-error" data-testid="index-status-error">
@@ -379,6 +505,18 @@ export function DataDiscoveryIndexStatus() {
             {status.embedding_state === "NOT_READY" ? (
               <p className="dd-guidance" data-testid="emb-guidance">
                 Keyword search is available. Sync embeddings for Semantic/Hybrid search.
+              </p>
+            ) : null}
+            {status.embedding_state === "CONFIGURATION_ERROR" ? (
+              <p className="dd-guidance" data-testid="emb-guidance">
+                Embedding configuration is invalid. Keyword search is available; check the server
+                embedding settings.
+                {status.embedding_error_code ? (
+                  <>
+                    {" "}
+                    <code>{status.embedding_error_code}</code>
+                  </>
+                ) : null}
               </p>
             ) : null}
           </section>

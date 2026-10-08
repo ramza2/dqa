@@ -111,6 +111,12 @@ export function SchemaSearch() {
         return items[0].source_name;
       });
     } catch (error) {
+      setSources([]);
+      setSelectedSource(null);
+      setActive(null);
+      setResult(null);
+      setStaleWarning(null);
+      setSearchState(idleState);
       setSourcesState(toErrorState(error));
     }
   }, []);
