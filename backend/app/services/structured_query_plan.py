@@ -8,6 +8,7 @@ logical plan. Does not compile SQL, issue execution tokens, or approve mappings.
 from __future__ import annotations
 
 import math
+import re
 from datetime import date, datetime
 from typing import Any
 
@@ -61,6 +62,9 @@ _FORBIDDEN_VALUE_FRAGMENTS = (
     "*/",
     "\x00",
 )
+
+# Strict calendar date shape before date.fromisoformat (rejects compact/week forms).
+_ISO_CALENDAR_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def validate_structured_query_plan(
@@ -459,7 +463,17 @@ def _coerce_scalar(
                 )
             )
             return _VALUE_INVALID
-        numeric = float(value)
+        try:
+            numeric = float(value)
+        except OverflowError:
+            issues.append(
+                PlanValidationIssue(
+                    code=PlanIssueCode.INVALID_FILTER_VALUE,
+                    message="number filter value overflows float range",
+                    field_key=field_key,
+                )
+            )
+            return _VALUE_INVALID
         if math.isnan(numeric) or math.isinf(numeric):
             issues.append(
                 PlanValidationIssue(
@@ -557,8 +571,9 @@ def _normalize_iso_date(
             )
         )
         return _VALUE_INVALID
-    # Strict calendar date only — reject datetimes and malformed/impossible dates.
-    if "T" in value or " " in value or "t" in value:
+    # Enforce exactly YYYY-MM-DD before fromisoformat so compact/week-date forms
+    # accepted by Python (e.g. 20240229, 2024-W09-4) are rejected.
+    if not _ISO_CALENDAR_DATE_RE.fullmatch(value):
         issues.append(
             PlanValidationIssue(
                 code=PlanIssueCode.INVALID_FILTER_VALUE,
@@ -638,7 +653,6 @@ def _validate_sort(
     issues: list[PlanValidationIssue],
 ) -> list[ValidatedSortSpec]:
     refs: list[ValidatedSortSpec] = []
-    group_set = set(plan.group_by)
     for spec in plan.sort:
         field = _require_field(spec.field_key, fields_by_key, issues)
         if field is None:
@@ -648,18 +662,6 @@ def _validate_sort(
                 PlanValidationIssue(
                     code=PlanIssueCode.MISSING_CAPABILITY,
                     message=f"field {spec.field_key!r} lacks SORT capability",
-                    field_key=spec.field_key,
-                )
-            )
-            continue
-        if plan.aggregations and spec.field_key not in group_set:
-            issues.append(
-                PlanValidationIssue(
-                    code=PlanIssueCode.INVALID_GROUPING,
-                    message=(
-                        f"sort field {spec.field_key!r} must appear in group_by "
-                        "when aggregations are present"
-                    ),
                     field_key=spec.field_key,
                 )
             )
@@ -842,6 +844,18 @@ def _validate_grouping_consistency(
                         "when aggregations are present"
                     ),
                     field_key=field_key,
+                )
+            )
+    for spec in plan.sort:
+        if spec.field_key not in group_set:
+            issues.append(
+                PlanValidationIssue(
+                    code=PlanIssueCode.INVALID_GROUPING,
+                    message=(
+                        f"sort field {spec.field_key!r} must appear in group_by "
+                        "when aggregations are present"
+                    ),
+                    field_key=spec.field_key,
                 )
             )
 

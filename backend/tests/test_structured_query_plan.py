@@ -647,6 +647,9 @@ def test_iso_date_and_datetime_boundaries(db_session: Session) -> None:
             PlanFilterPredicate(
                 field_key="adm_date", operator="EQ", value="2024-01-01T00:00:00"
             ),
+            # Compact / week-date forms accepted by Python fromisoformat — reject.
+            PlanFilterPredicate(field_key="adm_date", operator="EQ", value="20240229"),
+            PlanFilterPredicate(field_key="adm_date", operator="EQ", value="2024-W09-4"),
             PlanFilterPredicate(field_key="adm_ts", operator="EQ", value="2024-01-01"),
             PlanFilterPredicate(
                 field_key="adm_ts", operator="EQ", value="2024-01-01T25:00:00"
@@ -658,7 +661,7 @@ def test_iso_date_and_datetime_boundaries(db_session: Session) -> None:
     result_bad = validate_structured_query_plan(db_session, bad, registry=registry)
     assert result_bad.status == PlanValidationStatus.INVALID
     assert PlanIssueCode.INVALID_FILTER_VALUE in _issue_codes(result_bad)
-    assert len(result_bad.issues) >= 6
+    assert len(result_bad.issues) >= 8
 
 
 def test_number_rejects_nan_and_infinity(db_session: Session) -> None:
@@ -693,6 +696,23 @@ def test_number_rejects_nan_and_infinity(db_session: Session) -> None:
     assert result_bad.status == PlanValidationStatus.INVALID
     assert PlanIssueCode.INVALID_FILTER_VALUE in _issue_codes(result_bad)
     assert sum(1 for i in result_bad.issues if str(i.code) == "INVALID_FILTER_VALUE") == 3
+
+
+def test_number_rejects_integer_beyond_float_range(db_session: Session) -> None:
+    """float(very_large_int) OverflowError must fail closed as INVALID_FILTER_VALUE."""
+    _, registry = _registry(db_session)
+    huge = 10**400
+    plan = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["score"],
+        filters=[PlanFilterPredicate(field_key="score", operator="EQ", value=huge)],
+        limit=10,
+    )
+    result = validate_structured_query_plan(db_session, plan, registry=registry)
+    assert result.status == PlanValidationStatus.INVALID
+    assert PlanIssueCode.INVALID_FILTER_VALUE in _issue_codes(result)
+    assert any("overflows float range" in i.message for i in result.issues)
 
 
 def test_grouped_sort_must_be_in_group_by(db_session: Session) -> None:

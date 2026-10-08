@@ -74,11 +74,11 @@ Forbidden in the contract:
 
 Value rules:
 
-- `date`: ISO-8601 calendar date (`YYYY-MM-DD`); impossible dates rejected;
-  normalized to `YYYY-MM-DD`
+- `date`: exactly `YYYY-MM-DD` (compact/week-date forms rejected); impossible
+  calendar dates rejected; normalized to `YYYY-MM-DD`
 - `datetime`: ISO-8601 datetime with an explicit time component; normalized via
   `datetime.isoformat()`
-- `number`: finite values only (`NaN` / `±Infinity` rejected)
+- `number`: finite values only (`NaN` / `±Infinity` / float-overflow ints rejected)
 - `IN` / `BETWEEN` lists are stored as immutable tuples (JSON arrays on dump)
 
 ### Aggregations
