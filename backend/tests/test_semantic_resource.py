@@ -562,3 +562,137 @@ def test_no_hardcoded_patient_encounter_in_default_registry() -> None:
     source = inspect.getsource(mod)
     assert "Patient" not in source
     assert "Encounter" not in source
+
+
+def test_relationship_binding_matches_from_and_to_physical_tables(
+    db_session: Session,
+) -> None:
+    """Catalog-valid FK must align with resolved from/to resource physical tables."""
+    rev = _seed_active(db_session)
+    mapping = _valid_mapping(rev.id)
+    result = validate_semantic_mapping(mapping, resolve_active_revision(db_session, SOURCE))
+    assert result.status == SemanticMappingStatus.VALID
+    admission = next(r for r in result.resources if r.resource_key == "synthetic.admission")
+    rel = admission.relationships[0]
+    assert rel.from_resource_key == "synthetic.admission"
+    assert rel.to_resource_key == "synthetic.ward"
+    assert rel.catalog_fk.source_table_name == "TB_ADM_HIST"
+    assert rel.catalog_fk.target_table_name == "TB_WARD"
+    assert result.issues == []
+
+
+def test_relationship_rejects_catalog_fk_with_mismatched_logical_target(
+    db_session: Session,
+) -> None:
+    """Catalog-valid FK bound to a different logical target table is INVALID_RELATIONSHIP."""
+    rev = _seed_active(db_session)
+    mapping = _valid_mapping(rev.id)
+    other = LogicalResourceDefinition(
+        resource_key="synthetic.other_admission",
+        physical_table=PhysicalTableRef(
+            schema_name="OTHER_OWNER", table_name="TB_ADM_HIST"
+        ),
+        fields=[
+            LogicalFieldDefinition(
+                field_key="admission_id",
+                data_type="integer",
+                physical_column=PhysicalColumnRef(
+                    schema_name="OTHER_OWNER",
+                    table_name="TB_ADM_HIST",
+                    column_name="ADM_ID",
+                ),
+                capabilities=[FieldCapability.SELECT],
+            )
+        ],
+    )
+    admission = mapping.resources[0].model_copy(
+        update={
+            "relationships": [
+                LogicalRelationshipDefinition(
+                    relationship_key="admission_to_wrong_logical_target",
+                    from_resource_key="synthetic.admission",
+                    # Logical target is OTHER_OWNER.TB_ADM_HIST, but FK targets TB_WARD.
+                    to_resource_key="synthetic.other_admission",
+                    catalog_fk=CatalogFkBinding(
+                        constraint_name="FK_ADM_WARD",
+                        source_schema_name="DEMIS_OWNER",
+                        source_table_name="TB_ADM_HIST",
+                        target_schema_name="DEMIS_OWNER",
+                        target_table_name="TB_WARD",
+                        column_mappings=[
+                            CatalogFkColumnBinding(
+                                source_column="WARD_CD", target_column="WARD_CD"
+                            )
+                        ],
+                    ),
+                )
+            ]
+        }
+    )
+    mapping = mapping.model_copy(
+        update={"resources": [admission, mapping.resources[1], other]}
+    )
+    result = validate_semantic_mapping(mapping, resolve_active_revision(db_session, SOURCE))
+    assert result.status == SemanticMappingStatus.INVALID
+    assert SemanticIssueCode.INVALID_RELATIONSHIP in _issue_codes(result)
+    assert any(
+        i.relationship_key == "admission_to_wrong_logical_target"
+        and "does not match to_resource" in i.message
+        for i in result.issues
+    )
+    # FK itself is Catalog-valid; rejection is logical-target mismatch only.
+    assert SemanticIssueCode.MISSING_FK not in _issue_codes(result)
+
+
+def test_relationship_undefined_target_fails_closed(db_session: Session) -> None:
+    rev = _seed_active(db_session)
+    mapping = _valid_mapping(rev.id)
+    admission = mapping.resources[0].model_copy(
+        update={
+            "relationships": [
+                LogicalRelationshipDefinition(
+                    relationship_key="admission_undefined_target",
+                    from_resource_key="synthetic.admission",
+                    to_resource_key="synthetic.does_not_exist",
+                    catalog_fk=CatalogFkBinding(
+                        constraint_name="FK_ADM_WARD",
+                        source_schema_name="DEMIS_OWNER",
+                        source_table_name="TB_ADM_HIST",
+                        target_schema_name="DEMIS_OWNER",
+                        target_table_name="TB_WARD",
+                        column_mappings=[
+                            CatalogFkColumnBinding(
+                                source_column="WARD_CD", target_column="WARD_CD"
+                            )
+                        ],
+                    ),
+                )
+            ]
+        }
+    )
+    mapping = mapping.model_copy(update={"resources": [admission, mapping.resources[1]]})
+    result = validate_semantic_mapping(mapping, resolve_active_revision(db_session, SOURCE))
+    assert result.status == SemanticMappingStatus.INVALID
+    assert SemanticIssueCode.INVALID_RELATIONSHIP in _issue_codes(result)
+    assert any(
+        i.relationship_key == "admission_undefined_target"
+        and "to_resource_key 'synthetic.does_not_exist' is not defined" in i.message
+        for i in result.issues
+    )
+
+
+def test_relationship_duplicate_target_resource_fails_closed(db_session: Session) -> None:
+    rev = _seed_active(db_session)
+    mapping = _valid_mapping(rev.id)
+    dup_ward = mapping.resources[1].model_copy()
+    mapping = mapping.model_copy(
+        update={"resources": [mapping.resources[0], mapping.resources[1], dup_ward]}
+    )
+    result = validate_semantic_mapping(mapping, resolve_active_revision(db_session, SOURCE))
+    assert result.status == SemanticMappingStatus.INVALID
+    codes = _issue_codes(result)
+    assert SemanticIssueCode.DUPLICATE_RESOURCE_KEY in codes
+    assert SemanticIssueCode.INVALID_RELATIONSHIP in codes
+    assert any(
+        "to_resource_key 'synthetic.ward' is ambiguous" in i.message for i in result.issues
+    )

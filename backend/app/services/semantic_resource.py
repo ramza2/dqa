@@ -210,8 +210,8 @@ def validate_semantic_mapping(
         )
 
     index = _build_catalog_index(active)
-    resource_keys = _collect_resource_keys(mapping, issues)
-    _validate_resources(mapping, index, resource_keys, issues)
+    resources_by_key = _index_resources_by_key(mapping, issues)
+    _validate_resources(mapping, index, resources_by_key, issues)
 
     status = _status_from_issues(issues, stale=stale)
     resources: list[ResolvedLogicalResource] = []
@@ -298,17 +298,15 @@ def _table_key(schema_name: str, table_name: str) -> tuple[str, str]:
     return (schema_name.casefold(), table_name.casefold())
 
 
-def _collect_resource_keys(
+def _index_resources_by_key(
     mapping: SemanticMappingDocument,
     issues: list[SemanticValidationIssue],
-) -> set[str]:
-    seen: set[str] = set()
-    duplicates: set[str] = set()
+) -> dict[str, list[LogicalResourceDefinition]]:
+    """Index resources by key; duplicate keys are recorded and fail closed later."""
+    by_key: dict[str, list[LogicalResourceDefinition]] = {}
     for resource in mapping.resources:
-        if resource.resource_key in seen:
-            duplicates.add(resource.resource_key)
-        seen.add(resource.resource_key)
-    for key in sorted(duplicates):
+        by_key.setdefault(resource.resource_key, []).append(resource)
+    for key in sorted(k for k, items in by_key.items() if len(items) > 1):
         issues.append(
             SemanticValidationIssue(
                 code=SemanticIssueCode.DUPLICATE_RESOURCE_KEY,
@@ -316,13 +314,13 @@ def _collect_resource_keys(
                 resource_key=key,
             )
         )
-    return seen
+    return by_key
 
 
 def _validate_resources(
     mapping: SemanticMappingDocument,
     index: _CatalogSnapshotIndex,
-    resource_keys: set[str],
+    resources_by_key: dict[str, list[LogicalResourceDefinition]],
     issues: list[SemanticValidationIssue],
 ) -> None:
     relationship_keys_seen: set[str] = set()
@@ -340,7 +338,7 @@ def _validate_resources(
                     )
                 )
             relationship_keys_seen.add(rel.relationship_key)
-            _validate_relationship(resource, rel, resource_keys, index, issues)
+            _validate_relationship(resource, rel, resources_by_key, index, issues)
 
 
 def _validate_table(
@@ -502,10 +500,59 @@ def _validate_column(
         )
 
 
+def _resolve_unique_resource(
+    resource_key: str,
+    resources_by_key: dict[str, list[LogicalResourceDefinition]],
+    *,
+    owning_resource_key: str,
+    relationship_key: str,
+    endpoint: str,
+    issues: list[SemanticValidationIssue],
+) -> LogicalResourceDefinition | None:
+    """Resolve one logical endpoint; missing/duplicate keys fail closed."""
+    matches = resources_by_key.get(resource_key, [])
+    if not matches:
+        issues.append(
+            SemanticValidationIssue(
+                code=SemanticIssueCode.INVALID_RELATIONSHIP,
+                message=f"{endpoint}_resource_key {resource_key!r} is not defined",
+                resource_key=owning_resource_key,
+                relationship_key=relationship_key,
+            )
+        )
+        return None
+    if len(matches) > 1:
+        issues.append(
+            SemanticValidationIssue(
+                code=SemanticIssueCode.INVALID_RELATIONSHIP,
+                message=(
+                    f"{endpoint}_resource_key {resource_key!r} is ambiguous "
+                    "(duplicate logical resource definitions)"
+                ),
+                resource_key=owning_resource_key,
+                relationship_key=relationship_key,
+            )
+        )
+        return None
+    return matches[0]
+
+
+def _physical_tables_equal(
+    left_schema: str,
+    left_table: str,
+    right_schema: str,
+    right_table: str,
+) -> bool:
+    return (
+        left_schema.casefold() == right_schema.casefold()
+        and left_table.casefold() == right_table.casefold()
+    )
+
+
 def _validate_relationship(
     resource: LogicalResourceDefinition,
     rel: LogicalRelationshipDefinition,
-    resource_keys: set[str],
+    resources_by_key: dict[str, list[LogicalResourceDefinition]],
     index: _CatalogSnapshotIndex,
     issues: list[SemanticValidationIssue],
 ) -> None:
@@ -522,37 +569,61 @@ def _validate_relationship(
                 relationship_key=rel.relationship_key,
             )
         )
-    if rel.from_resource_key not in resource_keys:
-        issues.append(
-            SemanticValidationIssue(
-                code=SemanticIssueCode.INVALID_RELATIONSHIP,
-                message=f"from_resource_key {rel.from_resource_key!r} is not defined",
-                resource_key=resource.resource_key,
-                relationship_key=rel.relationship_key,
-            )
-        )
-    if rel.to_resource_key not in resource_keys:
-        issues.append(
-            SemanticValidationIssue(
-                code=SemanticIssueCode.INVALID_RELATIONSHIP,
-                message=f"to_resource_key {rel.to_resource_key!r} is not defined",
-                resource_key=resource.resource_key,
-                relationship_key=rel.relationship_key,
-            )
-        )
+
+    from_resource = _resolve_unique_resource(
+        rel.from_resource_key,
+        resources_by_key,
+        owning_resource_key=resource.resource_key,
+        relationship_key=rel.relationship_key,
+        endpoint="from",
+        issues=issues,
+    )
+    to_resource = _resolve_unique_resource(
+        rel.to_resource_key,
+        resources_by_key,
+        owning_resource_key=resource.resource_key,
+        relationship_key=rel.relationship_key,
+        endpoint="to",
+        issues=issues,
+    )
 
     fk = rel.catalog_fk
-    # Source side of FK should match the owning resource's physical table.
-    if (
-        fk.source_schema_name.casefold() != resource.physical_table.schema_name.casefold()
-        or fk.source_table_name.casefold() != resource.physical_table.table_name.casefold()
+    if from_resource is not None and not _physical_tables_equal(
+        fk.source_schema_name,
+        fk.source_table_name,
+        from_resource.physical_table.schema_name,
+        from_resource.physical_table.table_name,
     ):
         issues.append(
             SemanticValidationIssue(
                 code=SemanticIssueCode.INVALID_RELATIONSHIP,
                 message=(
                     f"relationship {rel.relationship_key!r} catalog_fk source table "
-                    "does not match owning resource physical_table"
+                    f"{fk.source_schema_name}.{fk.source_table_name} does not match "
+                    f"from_resource {from_resource.resource_key!r} physical_table "
+                    f"{from_resource.physical_table.schema_name}."
+                    f"{from_resource.physical_table.table_name}"
+                ),
+                resource_key=resource.resource_key,
+                relationship_key=rel.relationship_key,
+            )
+        )
+
+    if to_resource is not None and not _physical_tables_equal(
+        fk.target_schema_name,
+        fk.target_table_name,
+        to_resource.physical_table.schema_name,
+        to_resource.physical_table.table_name,
+    ):
+        issues.append(
+            SemanticValidationIssue(
+                code=SemanticIssueCode.INVALID_RELATIONSHIP,
+                message=(
+                    f"relationship {rel.relationship_key!r} catalog_fk target table "
+                    f"{fk.target_schema_name}.{fk.target_table_name} does not match "
+                    f"to_resource {to_resource.resource_key!r} physical_table "
+                    f"{to_resource.physical_table.schema_name}."
+                    f"{to_resource.physical_table.table_name}"
                 ),
                 resource_key=resource.resource_key,
                 relationship_key=rel.relationship_key,
