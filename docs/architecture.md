@@ -6,6 +6,23 @@ DEMIS Query Assistant (DQA) consumes a finalized Catalog Package from DEMIS Sche
 
 DQA is not a schema crawler and is not a free-form Text-to-SQL execution engine.
 
+### Current vs target
+
+| | Current implementation (this document) | Target integrated platform |
+|--|----------------------------------------|----------------------------|
+| Product role | Query Assistant over Catalog Package + Templates | DEMIS Data Access & Query Platform |
+| Clients | Human Web Portal | Human Web Portal **and** external AI via MCP |
+| Execution | Approved Query Template path | Template path **plus** policy-controlled Structured Dynamic Query Plan |
+| Discovery | Catalog Explorer / search as implemented | Schema Search PoC capabilities integrated as DQA Data Discovery |
+
+Authoritative **target** architecture (MCP, Data Discovery integration,
+Dynamic Query Plan boundaries, Analyzer/DQA contexts):
+
+→ [Integrated DQA Platform Architecture](integrated-platform-architecture.md)
+
+Do not read that target document as already-implemented runtime behavior.
+Existing sections below describe the **current** system.
+
 ## 2. System context
 
 ```text
