@@ -5,6 +5,7 @@ from app.models.catalog_active import CatalogActivationEvent, CatalogActiveRevis
 from app.models.catalog_import import CatalogImportRevision
 from app.models.connection_profile import ConnectionProfile
 from app.models.data_discovery import DataDiscoveryDocument
+from app.models.data_discovery_embedding import DataDiscoveryEmbedding
 from app.models.query_audit import QueryAuditEvent
 from app.models.query_template import (
     QueryTemplate,
@@ -19,6 +20,7 @@ __all__ = [
     "CatalogImportRevision",
     "ConnectionProfile",
     "DataDiscoveryDocument",
+    "DataDiscoveryEmbedding",
     "QueryAuditEvent",
     "QueryTemplate",
     "QueryTemplateReviewEvent",

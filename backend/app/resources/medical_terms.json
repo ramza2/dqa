@@ -1,0 +1,188 @@
+{
+  "concepts": [
+    {
+      "id": "liver_function",
+      "label": "Liver function",
+      "triggers": [
+        "간수치",
+        "간기능",
+        "간 기능",
+        "AST",
+        "ALT",
+        "GOT",
+        "GPT",
+        "liver function",
+        "hepatic"
+      ],
+      "expansion_terms": [
+        "liver",
+        "hepatic",
+        "AST",
+        "ALT",
+        "bilirubin",
+        "albumin",
+        "간",
+        "간기능",
+        "간수치"
+      ]
+    },
+    {
+      "id": "blood_glucose",
+      "label": "Blood glucose",
+      "triggers": [
+        "혈당",
+        "당화혈색소",
+        "HbA1c",
+        "A1c",
+        "glucose",
+        "blood sugar",
+        "blood glucose"
+      ],
+      "expansion_terms": [
+        "glucose",
+        "blood glucose",
+        "HbA1c",
+        "glycemic",
+        "혈당",
+        "당화혈색소"
+      ]
+    },
+    {
+      "id": "renal_function",
+      "label": "Renal function",
+      "triggers": [
+        "신장기능",
+        "신기능",
+        "신장 기능",
+        "creatinine",
+        "eGFR",
+        "GFR",
+        "renal function",
+        "kidney function"
+      ],
+      "expansion_terms": [
+        "renal",
+        "kidney",
+        "creatinine",
+        "eGFR",
+        "BUN",
+        "신기능",
+        "신장"
+      ]
+    },
+    {
+      "id": "laboratory_test",
+      "label": "Laboratory test",
+      "triggers": [
+        "검체검사",
+        "임상병리",
+        "lab test",
+        "laboratory",
+        "lab result",
+        "blood test"
+      ],
+      "expansion_terms": [
+        "laboratory",
+        "lab",
+        "specimen",
+        "assay",
+        "검체",
+        "검사"
+      ]
+    },
+    {
+      "id": "hypertension",
+      "label": "Hypertension",
+      "triggers": [
+        "고혈압",
+        "hypertension",
+        "high blood pressure",
+        "HTN"
+      ],
+      "expansion_terms": [
+        "hypertension",
+        "blood pressure",
+        "HTN",
+        "고혈압"
+      ]
+    },
+    {
+      "id": "radiology_report",
+      "label": "Radiology report",
+      "triggers": [
+        "영상의학",
+        "영상의학과",
+        "방사선",
+        "radiology",
+        "imaging report",
+        "x-ray",
+        "CT",
+        "MRI"
+      ],
+      "expansion_terms": [
+        "radiology",
+        "imaging",
+        "radiograph",
+        "CT",
+        "MRI",
+        "영상"
+      ]
+    },
+    {
+      "id": "discharge_summary",
+      "label": "Discharge summary",
+      "triggers": [
+        "퇴원요약",
+        "퇴원 요약",
+        "퇴원기록",
+        "discharge summary",
+        "discharge note"
+      ],
+      "expansion_terms": [
+        "discharge",
+        "summary",
+        "퇴원",
+        "퇴원요약"
+      ]
+    },
+    {
+      "id": "medication",
+      "label": "Medication",
+      "triggers": [
+        "투약",
+        "처방약",
+        "약물",
+        "medication",
+        "medicine",
+        "drug",
+        "prescription"
+      ],
+      "expansion_terms": [
+        "medication",
+        "drug",
+        "prescription",
+        "pharmacy",
+        "투약",
+        "약물"
+      ]
+    },
+    {
+      "id": "admission",
+      "label": "Admission",
+      "triggers": [
+        "입원",
+        "입퇴원",
+        "admission",
+        "hospitalization",
+        "inpatient"
+      ],
+      "expansion_terms": [
+        "admission",
+        "admit",
+        "inpatient",
+        "hospitalization",
+        "입원"
+      ]
+    }
+  ]
+}
