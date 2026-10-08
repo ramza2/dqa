@@ -384,6 +384,19 @@ Scope:
 - acceptance record template
 - no runtime behavior changes
 
+### PR 26-B - Integrated DQA platform architecture rebaseline
+Status: planned.
+Scope:
+- redefine DQA as DEMIS Data Access & Query Platform
+- SNUH.AI Agent Workflow → MCP → DQA → DEMIS target architecture
+- integrate proven Schema Search PoC capabilities into DQA Data Discovery
+- human Web Portal + MCP clients share one Safety/Execution/Audit Core
+- define Approved Template path vs Structured Dynamic Query Plan path
+- define Schema Analyzer / DQA bounded-context boundary
+- define MCP tool surface at architecture level
+- rebaseline subsequent implementation roadmap
+- no runtime implementation in this PR
+
 ## Exit criteria before real DEMIS use
 
 - Catalog Package import validated against a real finalized package

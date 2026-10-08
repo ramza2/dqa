@@ -11,16 +11,33 @@ controlled acceptance. This document does **not** change runtime behavior.
 - 운영/실증 전 acceptance 기록
 - 개발용 Oracle mock 검증과 production readiness를 혼동하지 않기
 
-적용 범위:
+적용 범위 (이 runbook의 acceptance 대상):
 
 - finalized Catalog Package v2를 소비하는 DQA consumer path
-- approved + enabled Query Template 기반 read-only 실행
+- **현재 구현된** production execution path: Approved + Enabled Query Template
+  기반 read-only 실행
 - Connection Profile + explicit live probe + Production Readiness Report
 
-적용하지 않는 범위:
+현재 구현 vs 장기 목표 (혼동 금지):
 
-- DEMIS Schema Analyzer crawling / metadata inspection
-- arbitrary LLM Text-to-SQL 실행
+| | Current implemented | Target integrated platform |
+|--|---------------------|----------------------------|
+| Human | DQA Web Portal (partial) | DQA Web Portal |
+| External AI | (not yet) | SNUH.AI Agent Workflow → MCP → DQA |
+| Execution | Approved Query Template | Approved Query Template **and** policy-controlled Structured Dynamic Query Plan |
+| Discovery | Catalog Explorer (as implemented) | Schema Search / Explorer / Semantic-Hybrid / Relation Expansion integrated into DQA Data Discovery |
+| Core | Catalog / Safety / Execution / Audit | Shared by Web Portal and MCP clients |
+
+Structured Dynamic Query Plan, MCP tool surface, 및 Schema Search PoC 통합은
+**현재 acceptance 대상이 아니다.** 별도 architecture / implementation PR에서만
+진행한다. 제품·문서에서 `demis-schema-search-poc`를 최종 시스템명으로 쓰지 않는다.
+
+적용하지 않는 범위 (이 PR / 이 runbook):
+
+- Dynamic Query Plan / MCP / Schema Search 코드 구현 또는 이관
+- DEMIS Schema Analyzer crawling을 DQA에 흡수하는 구현
+  (metadata 수집 책임은 논리적으로 분리 가능)
+- arbitrary LLM Text-to-SQL 직접 실행
 - production IdentityProvider 구현 (별도 승인 PR)
 - DBA privilege의 자동 PASS 판정
 
@@ -29,8 +46,11 @@ production readiness, production IdP readiness, 또는 DBA privilege acceptance�
 의미하지 않는다.
 
 DQA는 schema crawler가 아니며, LLM이 생성한 임의 SQL을 즉시 실행하는
-시스템이 아니다. 실행 가능한 SQL은 APPROVED + ENABLED Query Template에서만
-온다.
+시스템이 아니다. **현재 구현된** production execution path에서는 executable SQL이
+APPROVED + ENABLED Query Template에서만 온다. 향후 도입될 Structured Dynamic
+Query Plan도 동일한 authorization / Catalog / deterministic safety / read-only /
+audit gate를 통과해야 하며, arbitrary LLM-generated SQL의 직접 실행은 계속
+금지한다. 이 문서는 Dynamic Query Plan이나 MCP를 구현하지 않는다.
 
 ## 2. 사전 선결조건
 
