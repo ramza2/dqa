@@ -406,12 +406,13 @@ Dependency order is fixed. Names may be refined; do not invert phases.
 ### Phase 27 - Data Discovery integration
 
 - **PR 27-A — Data Discovery domain/contracts**
-  Status: in progress (`feat/data-discovery-domain-contracts`).
+  Status: completed (merged via `feat/data-discovery-domain-contracts`).
   Catalog-derived search documents; source/revision scope; logical/physical
   identity; embedding model metadata; no UI; no search engine/API.
 - **PR 27-B — Schema search engine integration**
+  Status: in progress (`feat/data-discovery-search-engine`).
   Keyword / semantic / hybrid search; terminology + relation expansion;
-  migrate proven PoC search logic into DQA service boundary.
+  revision-scoped embedding lifecycle; no HTTP API / React UI yet.
 - **PR 27-C — Data Discovery React Portal**
   Schema Search, Schema Explorer, relation view, embedding/index status.
 

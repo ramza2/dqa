@@ -31,7 +31,7 @@ from app.services.data_discovery_document import (
 
 pytestmark = pytest.mark.integration
 
-_HEAD = "20261008_dd01"
+_HEAD = "20261008_dd02"
 
 
 def _catalog_payload(*, fingerprint: str = "fp-dd-a") -> dict[str, Any]:
@@ -454,7 +454,7 @@ def test_migration_creates_data_discovery_table(
     assert list(script.get_heads()) == [_HEAD]
     rev = script.get_revision(_HEAD)
     assert rev is not None
-    assert rev.down_revision == "20261007_hist01"
+    assert rev.down_revision == "20261008_dd01"
 
     engine = get_engine()
     command.upgrade(cfg, "head")

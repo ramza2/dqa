@@ -1,7 +1,7 @@
-"""Pydantic contracts for Data Discovery (Phase 27-A).
+"""Pydantic contracts for Data Discovery (Phases 27-A / 27-B).
 
-Defines search-document and future search-request shapes. No HTTP routes and
-no search algorithm are implemented here.
+Search request/response contracts are used by the backend search engine.
+HTTP routes are deferred to Phase 27-C.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.domain.data_discovery import (
     DataDiscoverySearchMode,
-    DiscoveryIdentityKind,
     DiscoveryObjectType,
     build_embedding_model_key,
 )
@@ -102,7 +101,7 @@ class EmbeddingModelMetadata(BaseModel):
 
 
 class DataDiscoverySearchRequest(BaseModel):
-    """Contract for a future search endpoint (27-B). Not wired to routes yet."""
+    """Backend search request contract (HTTP wiring deferred to 27-C)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -138,9 +137,44 @@ class DataDiscoverySearchResultItem(BaseModel):
     document_key: str
     object_type: ObjectTypeLiteral
     keyword_score: float | None = None
+    keyword_rank: int | None = None
     semantic_score: float | None = None
+    semantic_rank: int | None = None
     rrf_score: float | None = None
+    evidence: list[str] = Field(default_factory=list)
     evidence_snippet: str | None = Field(default=None, max_length=2000)
+
+
+class DataDiscoveryRelationHopModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    from_schema: str
+    from_table: str
+    to_schema: str
+    to_table: str
+    constraint_name: str | None = None
+    direction: Literal["outbound", "inbound"]
+    from_columns: list[str] = Field(default_factory=list)
+    to_columns: list[str] = Field(default_factory=list)
+
+
+class DataDiscoveryRelatedTableModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_name: str
+    table_name: str
+    hop_distance: int = Field(ge=1)
+    seed_schema: str
+    seed_table: str
+    path: list[DataDiscoveryRelationHopModel] = Field(default_factory=list)
+
+
+class DataDiscoverySearchTimings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    keyword_ms: float = 0.0
+    semantic_ms: float = 0.0
+    total_ms: float = 0.0
 
 
 class DataDiscoverySearchResponse(BaseModel):
@@ -150,13 +184,26 @@ class DataDiscoverySearchResponse(BaseModel):
     catalog_revision_id: int
     schema_fingerprint: str
     mode: SearchModeLiteral
+    model_key: str | None = None
+    original_query: str
+    normalized_query: str
+    expanded_query: str = ""
+    matched_concepts: list[str] = Field(default_factory=list)
+    expanded_terms: list[str] = Field(default_factory=list)
     results: list[DataDiscoverySearchResultItem] = Field(default_factory=list)
+    related_tables: list[DataDiscoveryRelatedTableModel] = Field(default_factory=list)
+    timings: DataDiscoverySearchTimings = Field(
+        default_factory=DataDiscoverySearchTimings
+    )
 
 
 __all__ = [
+    "DataDiscoveryRelatedTableModel",
+    "DataDiscoveryRelationHopModel",
     "DataDiscoverySearchRequest",
     "DataDiscoverySearchResponse",
     "DataDiscoverySearchResultItem",
+    "DataDiscoverySearchTimings",
     "EmbeddingModelMetadata",
     "PhysicalDiscoveryIdentityModel",
     "SearchDocumentContract",

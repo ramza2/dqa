@@ -69,6 +69,43 @@ class Settings(BaseSettings):
         alias="DQA_DEMIS_CREDENTIAL_ENV_PREFIX",
     )
 
+    # Optional OpenAI-compatible Embedding provider (Data Discovery).
+    # Startup succeeds without these; completeness is checked at provider create.
+    embedding_base_url: str | None = Field(default=None, alias="EMBEDDING_BASE_URL")
+    embedding_api_key: SecretStr | None = Field(default=None, alias="EMBEDDING_API_KEY")
+    embedding_model: str | None = Field(default=None, alias="EMBEDDING_MODEL")
+    embedding_model_revision: str | None = Field(
+        default=None, alias="EMBEDDING_MODEL_REVISION"
+    )
+    embedding_dimension: int = Field(default=1024, alias="EMBEDDING_DIMENSION")
+    embedding_normalize: bool = Field(default=True, alias="EMBEDDING_NORMALIZE")
+    embedding_batch_size: int = Field(default=16, alias="EMBEDDING_BATCH_SIZE")
+    embedding_timeout_seconds: float = Field(
+        default=60.0, alias="EMBEDDING_TIMEOUT_SECONDS"
+    )
+    embedding_connect_timeout_seconds: float = Field(
+        default=10.0, alias="EMBEDDING_CONNECT_TIMEOUT_SECONDS"
+    )
+    embedding_query_prefix: str | None = Field(
+        default=None, alias="EMBEDDING_QUERY_PREFIX"
+    )
+    embedding_document_prefix: str | None = Field(
+        default=None, alias="EMBEDDING_DOCUMENT_PREFIX"
+    )
+
+    data_discovery_search_rrf_k: int = Field(
+        default=60, alias="DATA_DISCOVERY_SEARCH_RRF_K"
+    )
+    data_discovery_search_candidate_multiplier: int = Field(
+        default=3, alias="DATA_DISCOVERY_SEARCH_CANDIDATE_MULTIPLIER"
+    )
+    data_discovery_search_candidate_min: int = Field(
+        default=20, alias="DATA_DISCOVERY_SEARCH_CANDIDATE_MIN"
+    )
+    data_discovery_medical_terms_path: str | None = Field(
+        default=None, alias="DATA_DISCOVERY_MEDICAL_TERMS_PATH"
+    )
+
     @property
     def sqlalchemy_database_url(self) -> URL:
         """SQLAlchemy URL object for the DQA application PostgreSQL database."""

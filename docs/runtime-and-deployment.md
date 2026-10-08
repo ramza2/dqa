@@ -75,12 +75,14 @@ Local Vite development against `docker-compose.dev.yml` remains supported separa
 |---------|------|
 | `frontend` | nginx static SPA; proxies `/api/` (and `/health`) to backend |
 | `backend` | FastAPI; no `--reload`; readiness = DQA PostgreSQL reachable |
-| `dqa-db` | DQA PostgreSQL; persistent named volume; Compose-internal only |
+| `dqa-db` | DQA PostgreSQL 16 with pgvector (`pgvector/pgvector:pg16`); persistent named volume; Compose-internal only |
 | `migrate` | one-shot profile (`--profile migrate`) running `alembic upgrade head` |
 
 Live DEMIS DB remains external and is reached through an operator-managed Connection Profile.
-LLM endpoint remains external unless future requirements change.
+LLM and Embedding endpoints remain external optional providers (no hardcoded URLs).
 Query result rows are not sent to the LLM by default.
+Data Discovery semantic/hybrid search requires the `vector` extension (created by Alembic)
+and optional `EMBEDDING_*` settings; keyword search works without an embedding provider.
 
 Absence of a concrete DEMIS DBMS adapter for the selected profile is an
 application capability state (`DEMIS_ADAPTER_UNAVAILABLE` /
