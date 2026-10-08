@@ -15,7 +15,9 @@ from app.schemas.data_discovery import DataDiscoverySearchRequest
 from app.services.catalog_active import activate_catalog_revision
 from app.services.data_discovery_document import rebuild_for_revision
 from app.services.data_discovery_embedding import sync_embeddings_for_revision
+from app.models.data_discovery import DataDiscoveryDocument
 from app.services.data_discovery_search import search_schema
+from app.services.data_discovery_search.keyword import keyword_search
 from app.services.data_discovery_search.normalize import normalize_query
 from app.services.data_discovery_search.relation import expand_relations
 from app.services.data_discovery_search.rrf import RankedItem, reciprocal_rank_fusion
@@ -431,3 +433,162 @@ def test_model_key_stable_across_endpoint_change() -> None:
         document_prefix=None,
     )
     assert c != a
+
+
+def test_semantic_uses_expanded_query_when_expand_terms(
+    db_session: Session,
+) -> None:
+    rev = _prepare_active(db_session)
+    provider = StubEmbeddingProvider()
+    sync_embeddings_for_revision(db_session, rev.id, provider)
+    db_session.flush()
+
+    provider.query_texts.clear()
+    search_schema(
+        db_session,
+        DataDiscoverySearchRequest(
+            source_name=rev.source_name,
+            query="간수치",
+            mode="semantic",
+            expand_terms=True,
+            top_k=5,
+        ),
+        embedding_provider=provider,
+    )
+    assert provider.query_texts
+    joined = " ".join(provider.query_texts).casefold()
+    assert any(token in joined for token in ("ast", "alt", "hepatic", "liver", "bilirubin"))
+
+    provider.query_texts.clear()
+    search_schema(
+        db_session,
+        DataDiscoverySearchRequest(
+            source_name=rev.source_name,
+            query="간수치",
+            mode="semantic",
+            expand_terms=False,
+            top_k=5,
+        ),
+        embedding_provider=provider,
+    )
+    assert provider.query_texts == ["간수치"]
+
+
+def test_keyword_candidate_tiers_keep_exact_under_limit(
+    db_session: Session,
+) -> None:
+    rev = _prepare_active(db_session)
+    # Expanded-only docs sort before the exact table alphabetically.
+    for index in range(5):
+        db_session.add(
+            DataDiscoveryDocument(
+                catalog_import_revision_id=rev.id,
+                source_name=rev.source_name,
+                schema_fingerprint=rev.schema_fingerprint,
+                object_type="TABLE",
+                identity_kind="PHYSICAL",
+                schema_name="AAA",
+                table_name=f"FILLER_{index:02d}",
+                column_name=None,
+                document_key=f"TABLE:AAA.FILLER_{index:02d}",
+                searchable_text="hepatic liver panel filler",
+                source_fingerprint="f" * 64,
+                document_fingerprint="d" * 64,
+                builder_version="1.0.0",
+            )
+        )
+    db_session.flush()
+
+    hits = keyword_search(
+        db_session,
+        catalog_import_revision_id=rev.id,
+        original_terms=["tb_special_exact"],
+        expanded_terms=["hepatic"],
+        full_query="tb_lab_result",
+        object_type="TABLE",
+        top_k=5,
+        candidate_multiplier=1,
+        candidate_min=1,
+        candidate_limit=3,
+    )
+    keys = {hit.document.document_key for hit in hits}
+    assert "TABLE:DEMIS_OWNER.TB_LAB_RESULT" in keys
+    assert len(hits) <= 3
+
+
+def test_related_tables_exclude_direct_result_tables(db_session: Session) -> None:
+    rev = _prepare_active(db_session)
+    docs = _catalog_docs()
+    docs["relations"].append(
+        {
+            "constraint_name": "FK_LAB_ADM",
+            "source_table_key": "DEMIS_OWNER.TB_LAB_RESULT",
+            "target_table_key": "DEMIS_OWNER.TB_ADM_HIST",
+            "column_mapping": [
+                {
+                    "ordinal_position": 1,
+                    "source_column": "GLUCOSE",
+                    "target_column": "ADM_ID",
+                }
+            ],
+        }
+    )
+    rev.relations_json = {"relations": docs["relations"]}
+    db_session.flush()
+
+    # Broad query so both ADM and LAB tables appear in direct results.
+    response = search_schema(
+        db_session,
+        DataDiscoverySearchRequest(
+            source_name=rev.source_name,
+            query="DEMIS_OWNER",
+            mode="keyword",
+            expand_relations=True,
+            max_relation_hops=1,
+            top_k=20,
+        ),
+    )
+    direct_keys = {
+        (item.identity.schema_name, item.identity.table_name) for item in response.results
+    }
+    related_keys = {
+        (item.schema_name, item.table_name) for item in response.related_tables
+    }
+    assert ("DEMIS_OWNER", "TB_ADM_HIST") in direct_keys
+    assert ("DEMIS_OWNER", "TB_LAB_RESULT") in direct_keys
+    assert related_keys.isdisjoint(direct_keys)
+
+
+def test_medical_terms_dictionary_has_no_schema_leakage() -> None:
+    import json
+    from importlib import resources
+
+    raw = json.loads(
+        resources.files("app.resources")
+        .joinpath("medical_terms.json")
+        .read_text(encoding="utf-8")
+    )
+    forbidden_substrings = (
+        "TB_",
+        "table:",
+        "column:",
+        "->",
+        "→",
+        "DEMIS_OWNER",
+        "TB_LAB_RESULT",
+        "TB_ADM_HIST",
+        "GLUCOSE",
+        "ADM_ID",
+    )
+    values: list[str] = []
+    for concept in raw.get("concepts") or []:
+        values.extend(str(v) for v in (concept.get("triggers") or []))
+        values.extend(str(v) for v in (concept.get("expansion_terms") or []))
+    joined = "\n".join(values)
+    for token in forbidden_substrings:
+        assert token not in joined, token
+    # Clinical English phrases may use spaces/hyphens; bare schema.table forms are banned.
+    for value in values:
+        assert not value.startswith("TB_")
+        assert "table:" not in value.casefold()
+        assert "column:" not in value.casefold()

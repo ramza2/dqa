@@ -85,7 +85,8 @@ def sync_embeddings_for_revision(
                     DataDiscoveryErrorCode.EMBEDDING_DIMENSION_MISMATCH,
                     "embedding provider vector dimension mismatch",
                 )
-            emb_repo.upsert(
+            emb_repo.apply_to_existing_map(
+                existing,
                 DataDiscoveryEmbedding(
                     data_discovery_document_id=doc.id,
                     model_key=provider.model_key,
@@ -96,7 +97,7 @@ def sync_embeddings_for_revision(
                     normalized=provider.normalized,
                     document_fingerprint=doc.document_fingerprint,
                     embedding=list(vector),
-                )
+                ),
             )
             embedded += 1
 

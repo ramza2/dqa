@@ -105,24 +105,49 @@ class DataDiscoveryEmbeddingRepository:
         )
 
     def upsert(self, row: DataDiscoveryEmbedding) -> DataDiscoveryEmbedding:
-        existing = self._session.scalars(
+        """Single-row upsert (SELECT per call). Prefer ``apply_to_existing_map``."""
+        existing = self.map_for_revision_document(
+            row.data_discovery_document_id, row.model_key
+        )
+        return self.apply_to_existing_map(
+            {row.data_discovery_document_id: existing}
+            if existing is not None
+            else {},
+            row,
+        )
+
+    def map_for_revision_document(
+        self,
+        data_discovery_document_id: int,
+        model_key: str,
+    ) -> DataDiscoveryEmbedding | None:
+        return self._session.scalars(
             select(DataDiscoveryEmbedding).where(
                 DataDiscoveryEmbedding.data_discovery_document_id
-                == row.data_discovery_document_id,
-                DataDiscoveryEmbedding.model_key == row.model_key,
+                == data_discovery_document_id,
+                DataDiscoveryEmbedding.model_key == model_key,
             )
         ).first()
-        if existing is None:
+
+    def apply_to_existing_map(
+        self,
+        existing_by_document_id: dict[int, DataDiscoveryEmbedding],
+        row: DataDiscoveryEmbedding,
+    ) -> DataDiscoveryEmbedding:
+        """Update or add using a preloaded revision/model map (no per-row SELECT)."""
+        current = existing_by_document_id.get(row.data_discovery_document_id)
+        if current is None:
             self._session.add(row)
+            existing_by_document_id[row.data_discovery_document_id] = row
             return row
-        existing.provider = row.provider
-        existing.model_name = row.model_name
-        existing.model_revision = row.model_revision
-        existing.dimension = row.dimension
-        existing.normalized = row.normalized
-        existing.document_fingerprint = row.document_fingerprint
-        existing.embedding = row.embedding
-        return existing
+        current.provider = row.provider
+        current.model_name = row.model_name
+        current.model_revision = row.model_revision
+        current.dimension = row.dimension
+        current.normalized = row.normalized
+        current.document_fingerprint = row.document_fingerprint
+        current.embedding = row.embedding
+        return current
 
     def count_for_revision_and_model(
         self,

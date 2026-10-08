@@ -110,12 +110,18 @@ def search_schema(
                 "embedding provider is not configured",
             )
         model_key = embedding_provider.model_key
+        # Terminology expansion applies to the semantic query text as well.
+        semantic_query = (
+            expanded_query
+            if request.expand_terms and expanded_query.strip()
+            else normalized
+        )
         t0 = time.perf_counter()
         semantic_hits = semantic_search(
             session,
             catalog_import_revision_id=revision.id,
             provider=embedding_provider,
-            query=normalized,
+            query=semantic_query,
             object_type=object_type,
             candidate_limit=candidate_limit,
         )
@@ -194,11 +200,18 @@ def search_schema(
     related_tables: list[DataDiscoveryRelatedTableModel] = []
     if request.expand_relations and request.max_relation_hops > 0:
         seeds = _seed_tables(results)
-        related = expand_relations(
-            revision,
-            seed_tables=seeds,
-            max_hops=request.max_relation_hops,
-        )
+        direct_keys = {
+            (item.identity.schema_name, item.identity.table_name) for item in results
+        }
+        related = [
+            item
+            for item in expand_relations(
+                revision,
+                seed_tables=seeds,
+                max_hops=request.max_relation_hops,
+            )
+            if (item.schema_name, item.table_name) not in direct_keys
+        ]
         related_tables = [
             DataDiscoveryRelatedTableModel(
                 schema_name=item.schema_name,

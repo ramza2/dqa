@@ -30,6 +30,8 @@ class StubEmbeddingProvider:
         self._query_prefix = query_prefix
         self._document_prefix = document_prefix
         self._closed = False
+        self.query_texts: list[str] = []
+        self.document_texts: list[str] = []
         self._model_key = build_embedding_model_key(
             provider=provider_name,
             model_name=model_name,
@@ -65,10 +67,12 @@ class StubEmbeddingProvider:
         return self._model_key
 
     def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        self.document_texts.extend(list(texts))
         prefix = self._document_prefix or ""
         return [self._embed(prefix + text) for text in texts]
 
     def embed_queries(self, texts: Sequence[str]) -> list[list[float]]:
+        self.query_texts.extend(list(texts))
         prefix = self._query_prefix or ""
         return [self._embed(prefix + text) for text in texts]
 
