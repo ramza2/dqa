@@ -176,8 +176,13 @@ execution.
 **Phase 29-B:** strict `StructuredQueryPlan` contracts and deterministic
 validation produce an immutable validation-only logical plan (not SQL, not an
 execution token, not approved/executable authority). See
-[structured-query-plan.md](structured-query-plan.md). Compiler/execution remain
-29-C / 29-D.
+[structured-query-plan.md](structured-query-plan.md).
+
+**Phase 29-C:** deterministic Oracle SELECT compiler emits preview-only SQL +
+named binds from a server-revalidated plan (Catalog FK joins; sql_safety
+checked; `approved=false` / `executable=false`). See
+[deterministic-query-compiler.md](deterministic-query-compiler.md). Execution
+remains 29-D.
 
 ## 6. Dynamic Query safety boundary
 
