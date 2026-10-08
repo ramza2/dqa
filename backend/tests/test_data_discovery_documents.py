@@ -363,6 +363,26 @@ def test_rebuild_for_active_source_uses_pointer(db_session: Session) -> None:
     assert result.document_count == 5
 
 
+def test_rebuild_twice_idempotent_no_duplicates(db_session: Session) -> None:
+    rev = _make_revision(db_session)
+    first = rebuild_for_revision(db_session, rev.id)
+    db_session.flush()
+    repo = DataDiscoveryRepository(db_session)
+    count_after_first = repo.count_for_revision(rev.id)
+    assert count_after_first == first.document_count == 5
+
+    second = rebuild_for_revision(db_session, rev.id)
+    db_session.flush()
+    docs = repo.list_for_revision(rev.id)
+    assert second.document_count == first.document_count
+    assert second.deleted_count == 0
+    assert repo.count_for_revision(rev.id) == first.document_count
+    assert len(docs) == len({d.document_key for d in docs})
+    assert {d.document_key for d in docs} == {
+        d.document_key for d in build_documents_for_revision(rev)
+    }
+
+
 def test_embedding_model_key_deterministic() -> None:
     base = dict(
         provider="openai-compatible",

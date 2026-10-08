@@ -310,21 +310,17 @@ def rebuild_for_revision(session: Session, revision_id: int) -> RebuildResult:
 
     drafts = build_documents_for_revision(revision)
     repo = DataDiscoveryRepository(session)
-    upserted = 0
-    for draft in drafts:
-        repo.upsert(_draft_to_model(draft))
-        upserted += 1
-    deleted = repo.delete_for_revision_except_keys(
+    reconcile = repo.reconcile_for_revision(
         revision.id,
-        {d.document_key for d in drafts},
+        [_draft_to_model(draft) for draft in drafts],
     )
     return RebuildResult(
         catalog_import_revision_id=revision.id,
         source_name=revision.source_name,
         schema_fingerprint=revision.schema_fingerprint,
         document_count=len(drafts),
-        upserted_count=upserted,
-        deleted_count=deleted,
+        upserted_count=reconcile.upserted_count,
+        deleted_count=reconcile.deleted_count,
         builder_version=BUILDER_VERSION,
     )
 
