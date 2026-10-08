@@ -154,9 +154,9 @@ def test_migration_mismatch_blocked_sanitized(
         lambda: MigrationHeadStatus(
             ok=False,
             reason_code="not_at_head",
-            script_heads=("20261007_hist01",),
-            current_heads=("20260929_audit01",),
-            detail="missing heads=20261007_hist01",
+            script_heads=("20261008_dd01",),
+            current_heads=("20261007_hist01",),
+            detail="missing heads=20261008_dd01",
         ),
     )
     report = build_production_readiness_report(

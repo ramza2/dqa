@@ -385,7 +385,7 @@ Scope:
 - no runtime behavior changes
 
 ### PR 26-B - Integrated DQA platform architecture rebaseline
-Status: in progress (`docs/integrated-dqa-platform-architecture`).
+Status: completed (merged via `docs/integrated-dqa-platform-architecture`).
 Scope:
 - redefine DQA as DEMIS Data Access & Query Platform
 - SNUH.AI Agent Workflow → MCP → DQA → DEMIS target architecture
@@ -406,8 +406,9 @@ Dependency order is fixed. Names may be refined; do not invert phases.
 ### Phase 27 - Data Discovery integration
 
 - **PR 27-A — Data Discovery domain/contracts**
+  Status: in progress (`feat/data-discovery-domain-contracts`).
   Catalog-derived search documents; source/revision scope; logical/physical
-  identity; embedding model metadata; no UI.
+  identity; embedding model metadata; no UI; no search engine/API.
 - **PR 27-B — Schema search engine integration**
   Keyword / semantic / hybrid search; terminology + relation expansion;
   migrate proven PoC search logic into DQA service boundary.
