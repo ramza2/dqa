@@ -98,4 +98,6 @@ Each relationship:
 - Durable storage of mapping documents
 - Approval / enablement workflow analogous to Query Templates
 - LOGICAL Discovery search-document materialization
-- Structured Query Plan (29-B), compiler (29-C), execution (29-D)
+- Structured Query Plan validation (29-B; see
+  [structured-query-plan.md](structured-query-plan.md)), compiler (29-C),
+  execution (29-D)

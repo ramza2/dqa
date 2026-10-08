@@ -171,7 +171,13 @@ Conceptual plan fields (architecture-level only; no DSL freeze in 26-B):
 
 DQA then applies Catalog mapping, allowlists, binding, authorization, complexity
 policy, row limit, timeout, deterministic SQL generation, and read-only
-execution. JSON DSL details are deferred to Phase 29 design PRs.
+execution.
+
+**Phase 29-B:** strict `StructuredQueryPlan` contracts and deterministic
+validation produce an immutable validation-only logical plan (not SQL, not an
+execution token, not approved/executable authority). See
+[structured-query-plan.md](structured-query-plan.md). Compiler/execution remain
+29-C / 29-D.
 
 ## 6. Dynamic Query safety boundary
 
