@@ -107,8 +107,10 @@ as Data Discovery / Schema Intelligence — not kept as a separate final product
 
 Implementation note: Phase 27 Data Discovery (contracts, search engine, Web
 portal/API) is implemented. Phase 28-A adds an internal-only MCP Streamable HTTP
-foundation (tool registry + DQA IdentityProvider auth; no Discovery/Query tools
-yet). MCP Discovery/Query tools are Phase 28-B/C; Dynamic Query is Phase 29.
+foundation (tool registry + DQA IdentityProvider auth). Phase 28-B adds Discovery
+MCP tools (`demis.search_schema`, `demis.describe_resource`) over the same
+application services as the Web APIs. Template Query MCP tools are Phase 28-C;
+Dynamic Query is Phase 29.
 
 Capabilities to promote into DQA:
 
@@ -234,7 +236,7 @@ Architecture-level tool surface (four tools):
 MCP tools are adapters that call existing DQA application services. They must
 not re-implement a parallel safety/execution core.
 
-Phase 28-A foundation (implemented):
+Phase 28-A foundation + 28-B Discovery tools (implemented):
 
 - Official Python MCP SDK Streamable HTTP transport, mounted under a configurable
   path (default `/mcp`) on the **shared** backend ASGI process
@@ -249,7 +251,12 @@ Phase 28-A foundation (implemented):
   are rejected (not trusted identity)
 - Request bodies are hard-bounded (HTTP 413); disconnect/malformed streams fail closed
 - `dev_headers` remains development/test only and is never a production fallback
-- Foundation tool `dqa.mcp_ready` only; no `demis.*` Discovery/Query tools yet
+- Foundation tool `dqa.mcp_ready`
+- Discovery tools (require `CATALOG_READ`; reuse application services; no HTTP loopback):
+  - `demis.search_schema` — active Catalog search (keyword/semantic/hybrid)
+  - `demis.describe_resource` — Catalog table/column/PK/FK/index metadata
+- No Query tools yet (`demis.prepare_query` / `demis.execute_query` are Phase 28-C)
+- No invented logical clinical mappings or executable field capabilities (Phase 29)
 
 Future trusted gateway + approved production IdentityProvider (OIDC/JWT/SSO
 claim formats) are still required before exposing MCP beyond an internal network.

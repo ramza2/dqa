@@ -420,10 +420,11 @@ Dependency order is fixed. Names may be refined; do not invert phases.
 ### Phase 28 - MCP integration
 
 - **PR 28-A — MCP server foundation**
-  Status: in progress (`feat/mcp-server-foundation`).
-  Transport, tool registration, auth abstraction only; no new query semantics.
+  Status: completed (merged via `feat/mcp-server-foundation`).
+  Transport, tool registration, auth/ingress hardening; no Discovery/Query tools.
 - **PR 28-B — Discovery MCP tools**
-  `demis.search_schema`, `demis.describe_resource`.
+  Status: in progress (`feat/mcp-discovery-tools`).
+  `demis.search_schema`, `demis.describe_resource` (CATALOG_READ; active Catalog only).
 - **PR 28-C — Template query MCP path**
   `demis.prepare_query`, `demis.execute_query` reusing Approved Template
   execution core (shared safety/audit; no parallel execute path).

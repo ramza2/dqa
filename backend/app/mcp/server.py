@@ -1,4 +1,4 @@
-"""Build and mount the DQA MCP Streamable HTTP server (Phase 28-A)."""
+"""Build and mount the DQA MCP Streamable HTTP server (Phase 28-A/B)."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from app.core.config import Settings
 from app.mcp.auth import McpAuthMiddleware
 from app.mcp.ingress import should_mount_mcp, wrap_mcp_ingress
 from app.mcp.registry import McpToolRegistry, build_foundation_registry
-from app.mcp.tools import mcp_ready
+from app.mcp.tools import describe_resource, mcp_ready, search_schema
 
 
 def normalize_mcp_mount_path(path: str) -> str:
@@ -46,27 +46,27 @@ def _transport_security(settings: Settings) -> TransportSecuritySettings:
     return TransportSecuritySettings(enable_dns_rebinding_protection=False)
 
 
+def _tool_description(registry: McpToolRegistry, name: str, fallback: str) -> str:
+    entry = registry.get(name)
+    return entry.description if entry is not None else fallback
+
+
 def build_mcp_server(
     settings: Settings,
     *,
     registry: McpToolRegistry | None = None,
 ) -> tuple[FastMCP, McpToolRegistry]:
-    """Construct FastMCP with foundation tools (no Discovery/Query tools)."""
+    """Construct FastMCP with foundation + Discovery tools (no Query tools)."""
     tool_registry = registry or build_foundation_registry()
-    ready = tool_registry.get("dqa.mcp_ready")
-    description = (
-        ready.description
-        if ready is not None
-        else "MCP foundation readiness probe."
-    )
 
     mcp = FastMCP(
         name="dqa-mcp",
         instructions=(
-            "DEMIS Query Assistant MCP foundation (Phase 28-A). "
-            "Discovery and query tools are not available yet. "
+            "DEMIS Query Assistant MCP (Phase 28-B). "
+            "Discovery tools: demis.search_schema, demis.describe_resource. "
+            "Query preparation/execution tools are not available yet. "
             "Authenticate via the DQA IdentityProvider; never pass user_id/role "
-            "in tool arguments."
+            "in tool arguments. CATALOG_READ is required for Discovery tools."
         ),
         # Advisory only for standalone FastMCP.run(); mounted ASGI uses Uvicorn.
         host=settings.dqa_mcp_bind_host or "127.0.0.1",
@@ -77,9 +77,62 @@ def build_mcp_server(
         transport_security=_transport_security(settings),
     )
 
-    @mcp.tool(name="dqa.mcp_ready", description=description)
+    @mcp.tool(
+        name="dqa.mcp_ready",
+        description=_tool_description(
+            tool_registry, "dqa.mcp_ready", "MCP foundation readiness probe."
+        ),
+    )
     def _mcp_ready() -> dict[str, Any]:
         return mcp_ready()
+
+    @mcp.tool(
+        name="demis.search_schema",
+        description=_tool_description(
+            tool_registry,
+            "demis.search_schema",
+            "Search active Catalog schema metadata.",
+        ),
+    )
+    def _search_schema(
+        source_name: str,
+        query: str,
+        mode: str = "keyword",
+        object_type: str | None = None,
+        top_k: int = 10,
+        expand_terms: bool = False,
+        expand_relations: bool = False,
+        max_relation_hops: int = 0,
+    ) -> dict[str, Any]:
+        return search_schema(
+            source_name=source_name,
+            query=query,
+            mode=mode,
+            object_type=object_type,
+            top_k=top_k,
+            expand_terms=expand_terms,
+            expand_relations=expand_relations,
+            max_relation_hops=max_relation_hops,
+        )
+
+    @mcp.tool(
+        name="demis.describe_resource",
+        description=_tool_description(
+            tool_registry,
+            "demis.describe_resource",
+            "Describe one Catalog table resource.",
+        ),
+    )
+    def _describe_resource(
+        source_name: str,
+        schema_name: str,
+        table_name: str,
+    ) -> dict[str, Any]:
+        return describe_resource(
+            source_name=source_name,
+            schema_name=schema_name,
+            table_name=table_name,
+        )
 
     return mcp, tool_registry
 

@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.auth.errors import AuthErrorCode
+from app.auth.models import Permission
 from app.core.config import Settings, get_settings
 from app.mcp.adapter import McpApplicationAdapter
 from app.mcp.auth import (
@@ -85,12 +86,19 @@ def test_normalize_mount_path() -> None:
     assert normalize_mcp_mount_path("") == "/mcp"
 
 
-def test_foundation_registry_has_ready_only() -> None:
+def test_foundation_registry_includes_discovery_excludes_query() -> None:
     registry = build_foundation_registry()
     names = registry.names()
-    assert names == ["dqa.mcp_ready"]
-    assert "demis.search_schema" not in names
+    assert names == [
+        "demis.describe_resource",
+        "demis.search_schema",
+        "dqa.mcp_ready",
+    ]
+    assert registry.get("demis.search_schema") is not None
+    assert registry.get("demis.search_schema").permission == Permission.CATALOG_READ
+    assert registry.get("demis.describe_resource").permission == Permission.CATALOG_READ
     assert "demis.execute_query" not in names
+    assert "demis.prepare_query" not in names
 
 
 def test_mcp_disabled_by_default(test_settings_env: dict[str, str]) -> None:
@@ -133,9 +141,13 @@ def test_initialize_and_list_tools(mcp_client: TestClient) -> None:
     )
     assert listed.status_code == 200
     tools = listed.json()["result"]["tools"]
-    names = [t["name"] for t in tools]
-    assert names == ["dqa.mcp_ready"]
-    assert "demis.search_schema" not in names
+    names = sorted(t["name"] for t in tools)
+    assert names == [
+        "demis.describe_resource",
+        "demis.search_schema",
+        "dqa.mcp_ready",
+    ]
+    assert "demis.execute_query" not in names
 
 
 def test_mcp_ready_tool_no_side_effects(
@@ -167,7 +179,7 @@ def test_mcp_ready_tool_no_side_effects(
     assert "result" in payload
     # structured content / text content depending on SDK serialization
     raw = json.dumps(payload)
-    assert "28-A" in raw
+    assert "28-B" in raw
     assert "mcp-tester" in raw
     assert calls == []
     assert "password" not in raw.lower()
@@ -351,7 +363,7 @@ def test_adapter_readiness_is_side_effect_free() -> None:
         provider="dev_headers",
     )
     result = McpApplicationAdapter().readiness(actor)
-    assert result["phase"] == "28-A"
+    assert result["phase"] == "28-B"
     assert result["client"] == "MCP"
     assert result["actor_id"] == "a1"
 
@@ -639,8 +651,12 @@ def test_initialize_list_and_tools_call_happy_path(mcp_client: TestClient) -> No
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
     )
     assert listed.status_code == 200
-    names = [t["name"] for t in listed.json()["result"]["tools"]]
-    assert names == ["dqa.mcp_ready"]
+    names = sorted(t["name"] for t in listed.json()["result"]["tools"])
+    assert names == [
+        "demis.describe_resource",
+        "demis.search_schema",
+        "dqa.mcp_ready",
+    ]
     called = _mcp_post(
         mcp_client,
         {
@@ -651,4 +667,4 @@ def test_initialize_list_and_tools_call_happy_path(mcp_client: TestClient) -> No
         },
     )
     assert called.status_code == 200
-    assert "28-A" in json.dumps(called.json())
+    assert "28-B" in json.dumps(called.json())
