@@ -39,6 +39,7 @@ from app.mcp.errors import (
 )
 from app.mcp.execution_token import (
     McpExecutionTokenError,
+    connection_profile_binding_fingerprint,
     issue_execution_token,
     verify_execution_token,
 )
@@ -396,6 +397,9 @@ class McpApplicationAdapter:
                 }
 
             try:
+                profile_fp = connection_profile_binding_fingerprint(
+                    eligibility.connection_profile
+                )
                 token, expires_at = issue_execution_token(
                     actor=actor,
                     source_name=eligibility.source_name,
@@ -405,6 +409,7 @@ class McpApplicationAdapter:
                     catalog_revision_id=eligibility.catalog_revision_id,
                     catalog_fingerprint=eligibility.catalog_fingerprint,
                     connection_profile_id=eligibility.connection_profile.id,
+                    connection_profile_fingerprint=profile_fp,
                     parameters=dict(eligibility.resolved_parameters),
                     sensitive_parameter_names=list(eligibility.sensitive_parameter_names),
                     settings=cfg,
@@ -478,6 +483,9 @@ class McpApplicationAdapter:
             except ExecutionPreviewError as exc:
                 raise_from_execution_error(exc)
 
+            current_profile_fp = connection_profile_binding_fingerprint(
+                eligibility.connection_profile
+            )
             if (
                 eligibility.source_name != claims.source_name
                 or eligibility.environment != claims.environment
@@ -486,6 +494,7 @@ class McpApplicationAdapter:
                 or eligibility.catalog_revision_id != claims.catalog_revision_id
                 or eligibility.catalog_fingerprint != claims.catalog_fingerprint
                 or eligibility.connection_profile.id != claims.connection_profile_id
+                or current_profile_fp != claims.connection_profile_fingerprint
             ):
                 raise_execution_binding_mismatch()
 

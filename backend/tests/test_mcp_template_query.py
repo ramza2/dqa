@@ -24,9 +24,11 @@ from app.mcp.adapter import McpApplicationAdapter
 from app.mcp.execution_token import (
     McpExecutionTokenError,
     McpExecutionTokenErrorCode,
+    connection_profile_binding_fingerprint,
     issue_execution_token,
     verify_execution_token,
 )
+from app.models.connection_profile import ConnectionProfile
 from app.mcp.registry import build_foundation_registry
 from app.models.query_audit import QueryAuditEvent
 from app.schemas.audit import QueryAuditEventCreate
@@ -496,6 +498,8 @@ def test_token_tampering_expiry_wrong_actor_missing_key(
     )
     settings = get_settings()
     actor = _operator()
+    profile_row = db_session.get(ConnectionProfile, fixture["profile"]["id"])
+    assert profile_row is not None
     token, _ = issue_execution_token(
         actor=actor,
         source_name=SOURCE["source_name"],
@@ -505,6 +509,9 @@ def test_token_tampering_expiry_wrong_actor_missing_key(
         catalog_revision_id=fixture["revision"].id,
         catalog_fingerprint="fp-mcp-token",
         connection_profile_id=fixture["profile"]["id"],
+        connection_profile_fingerprint=connection_profile_binding_fingerprint(
+            profile_row
+        ),
         parameters={"ward_cd": "A01", "from_date": "2024-01-01"},
         sensitive_parameter_names=["ward_cd"],
         settings=settings,
@@ -561,6 +568,7 @@ def test_token_tampering_expiry_wrong_actor_missing_key(
             catalog_revision_id=1,
             catalog_fingerprint="x",
             connection_profile_id=1,
+            connection_profile_fingerprint="a" * 64,
             parameters={},
             sensitive_parameter_names=[],
             settings=bare,
@@ -796,3 +804,149 @@ def test_web_execution_preview_regression(
     assert preview.status_code == 200, preview.text
     assert preview.json()["execution_available"] is True
     assert "sql_text" not in preview.json()
+
+
+def test_profile_config_change_same_id_rejects_old_token(
+    mcp_db_client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same profile id with changed host/database/credential ref must fail closed."""
+    fixture = _setup_eligible(db_session, mcp_db_client, fingerprint="fp-mcp-prof-fp")
+    _patch_live_adapter(monkeypatch)
+    adapter = McpApplicationAdapter()
+    actor = _operator()
+    prepared = adapter.prepare_query(
+        actor,
+        source_name=SOURCE["source_name"],
+        environment=ENVIRONMENT,
+        template_id=fixture["template_id"],
+        version_id=fixture["version_id"],
+        parameters={"ward_cd": "A01"},
+        session=db_session,
+    )
+    assert prepared["status"] == "READY"
+    token = prepared["execution_token"]
+    profile_id = fixture["profile"]["id"]
+
+    admin = _headers("admin", "administrator")
+    patched = mcp_db_client.patch(
+        f"/api/v1/connection-profiles/{profile_id}",
+        headers=admin,
+        json={
+            "host": "demis.changed.example",
+            "database_name": "DEMIS_CHANGED",
+            "credential_secret_ref": "env:DEMIS_SECRET_PASSWORD_ALT",
+        },
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["id"] == profile_id
+    assert patched.json()["host"] == "demis.changed.example"
+
+    # Re-enable if patch somehow affected enabled state (should remain enabled).
+    mcp_db_client.post(
+        f"/api/v1/connection-profiles/{profile_id}/enable", headers=admin
+    )
+
+    with pytest.raises(ToolError) as exc_info:
+        adapter.execute_query(actor, execution_token=token, session=db_session)
+    err = str(exc_info.value)
+    assert "MCP_EXECUTION_BINDING_MISMATCH" in err
+    assert "demis.changed.example" not in err
+    assert "DEMIS_SECRET_PASSWORD" not in err
+    assert "A01" not in err
+    assert "select" not in err.lower()
+
+
+def test_asgi_prepare_then_execute_protocol(
+    mcp_db_client: TestClient,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ASGI tools/call prepare → execute success + denial/tamper/disabled paths."""
+    fixture = _setup_eligible(db_session, mcp_db_client, fingerprint="fp-mcp-asgi")
+    _patch_live_adapter(monkeypatch)
+
+    prepare_args = {
+        "source_name": SOURCE["source_name"],
+        "environment": ENVIRONMENT,
+        "template_id": fixture["template_id"],
+        "version_id": fixture["version_id"],
+        "parameters": {"ward_cd": "A01"},
+    }
+
+    # QUERY_OPERATE denied at middleware — no execute side effects.
+    denied = _tool_call(
+        mcp_db_client,
+        "demis.prepare_query",
+        prepare_args,
+        headers=_headers("viewer-only", "viewer"),
+        call_id=1,
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["code"] == AuthErrorCode.AUTHORIZATION_DENIED
+    _assert_no_sensitive_leak(denied.json())
+
+    prepare = _tool_call(
+        mcp_db_client, "demis.prepare_query", prepare_args, call_id=2
+    )
+    assert prepare.status_code == 200
+    assert not _tool_is_error(prepare.json())
+    prepared = _extract_tool_payload(prepare.json())
+    assert prepared["status"] == "READY"
+    token = prepared["execution_token"]
+    assert token.startswith("dqa1.")
+    assert "A01" not in json.dumps(prepared)
+    _assert_no_sensitive_leak(prepared)
+
+    # Success execute via tools/call.
+    executed = _tool_call(
+        mcp_db_client,
+        "demis.execute_query",
+        {"execution_token": token},
+        call_id=3,
+    )
+    assert executed.status_code == 200
+    assert not _tool_is_error(executed.json())
+    exec_payload = _extract_tool_payload(executed.json())
+    assert exec_payload["row_count"] == 2
+    assert "sql_text" not in exec_payload
+    assert "host" not in exec_payload
+    events = list(db_session.scalars(select(QueryAuditEvent)).all())
+    assert any(
+        e.event_type == "QUERY_EXECUTION" and e.status == "SUCCEEDED" for e in events
+    )
+
+    # Malformed / tampered token — no successful execution path.
+    before = len(events)
+    tampered = _tool_call(
+        mcp_db_client,
+        "demis.execute_query",
+        {"execution_token": token[:-6] + "XXXXXX"},
+        call_id=4,
+    )
+    assert tampered.status_code == 200
+    assert _tool_is_error(tampered.json())
+    tamper_text = json.dumps(tampered.json())
+    assert "MCP_EXECUTION_TOKEN_INVALID" in tamper_text
+    assert "A01" not in tamper_text
+    assert "sql" not in tamper_text.lower() or "token" in tamper_text.lower()
+    assert "demis.internal.example" not in tamper_text
+    after = list(db_session.scalars(select(QueryAuditEvent)).all())
+    assert len(after) == before  # rejected before durable execute lifecycle
+
+    # Execution disabled.
+    monkeypatch.setenv("DQA_MCP_QUERY_EXECUTION_ENABLED", "false")
+    _clear_caches()
+    # Recreate client settings by calling adapter-level path through tools on
+    # a fresh app would be heavy; probe via adapter with cleared settings.
+    disabled = McpApplicationAdapter()
+    with pytest.raises(ToolError) as disabled_exc:
+        disabled.execute_query(
+            _operator(),
+            execution_token=token,
+            session=db_session,
+            settings=get_settings(),
+        )
+    assert "MCP_QUERY_EXECUTION_DISABLED" in str(disabled_exc.value)
+    assert "A01" not in str(disabled_exc.value)

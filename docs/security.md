@@ -47,9 +47,12 @@ require `CATALOG_READ` at middleware and tool/service boundaries, reuse the same
 application services as Web APIs, and must not call DEMIS adapters or execute
 queries. Template Query tools (`demis.prepare_query`, `demis.execute_query`)
 require `QUERY_OPERATE`; prepare issues AES-GCM opaque tokens (dedicated key,
-short TTL, subject-bound; parameters only inside ciphertext; never logged).
-Execute is additionally gated by `DQA_MCP_QUERY_EXECUTION_ENABLED` (default
-false), revalidates token/eligibility/catalog/profile, and reuses the shared
+short TTL, subject-bound; Connection Profile id + non-secret config fingerprint
+including credential *reference*). AES-GCM protects token contents after issue —
+it does **not** encrypt the caller's original `tools/call` JSON arguments on the
+wire. Resolved parameters appear only inside the token ciphertext and must never
+be logged. Execute is gated by `DQA_MCP_QUERY_EXECUTION_ENABLED` (default false),
+revalidates token/eligibility/catalog/profile fingerprint, and reuses the shared
 read-only DEMIS + durable audit path. Tokens are not single-use within TTL —
 every execute independently revalidates and audits. Do not expose MCP on a
 public interface until a trusted gateway and approved production IdP exist;

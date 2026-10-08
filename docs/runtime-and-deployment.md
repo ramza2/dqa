@@ -393,9 +393,11 @@ Phase 28-C exposes:
 - `demis.search_schema` (`CATALOG_READ`; active Catalog discovery search)
 - `demis.describe_resource` (`CATALOG_READ`; Catalog table metadata)
 - `demis.prepare_query` (`QUERY_OPERATE`; READY/NEEDS_CLARIFICATION/BLOCKED;
-  opaque AES-GCM token when READY; no DEMIS execute)
+  opaque AES-GCM token when READY; no DEMIS execute). AES-GCM protects issued
+  token contents only — not the caller's original prepare JSON arguments.
 - `demis.execute_query` (`QUERY_OPERATE` + `DQA_MCP_QUERY_EXECUTION_ENABLED`;
-  token-only; shared read-only DEMIS + durable audit path)
+  token-only; rechecks Connection Profile config fingerprint; shared read-only
+  DEMIS + durable audit path)
 
 | Variable | Default | Notes |
 |----------|---------|--------|

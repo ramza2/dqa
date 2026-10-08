@@ -4,7 +4,10 @@ Security properties:
 - Authenticated encryption (AES-256-GCM) with a dedicated configured secret
 - Random 96-bit nonce per token; short TTL (default <= 5 minutes)
 - Subject binding (actor_id + provider)
-- Parameters live only inside the ciphertext (never plaintext on the wire)
+- Connection Profile binding: profile id + fingerprint of execution-relevant
+  non-secret configuration (includes credential *reference*, never secret value)
+- Resolved parameters live only inside the token ciphertext (AES-GCM). This does
+  **not** encrypt the caller's original ``tools/call`` JSON arguments on the wire.
 - Fail closed when the key is missing/invalid
 - Stateless: no process-local token store (safe for multi-worker deployments)
 
@@ -18,6 +21,7 @@ Never log the raw token or decrypted payload.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import secrets
 from dataclasses import dataclass
@@ -28,9 +32,10 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.auth.models import AuthenticatedActor
 from app.core.config import Settings
+from app.models.connection_profile import ConnectionProfile
 
 TOKEN_PREFIX = "dqa1."
-TOKEN_VERSION = 1
+TOKEN_VERSION = 2
 _NONCE_BYTES = 12
 _KEY_BYTES = 32
 
@@ -63,10 +68,32 @@ class ExecutionTokenClaims:
     catalog_revision_id: int
     catalog_fingerprint: str
     connection_profile_id: int
+    connection_profile_fingerprint: str
     parameters: dict[str, Any]
     sensitive_parameter_names: list[str]
     issued_at: datetime
     expires_at: datetime
+
+
+def connection_profile_binding_fingerprint(profile: ConnectionProfile) -> str:
+    """SHA-256 of execution-relevant, non-secret Connection Profile fields.
+
+    Includes ``credential_secret_ref`` (reference identifier only). Never hashes
+    or embeds credential secret values.
+    """
+    payload = {
+        "credential_secret_ref": profile.credential_secret_ref,
+        "database_name": profile.database_name,
+        "dbms_type": profile.dbms_type,
+        "enabled": bool(profile.enabled),
+        "environment": profile.environment,
+        "host": profile.host,
+        "port": profile.port,
+        "source_name": profile.source_name,
+        "username": profile.username,
+    }
+    canonical = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _load_aes_key(settings: Settings) -> bytes:
@@ -105,6 +132,7 @@ def issue_execution_token(
     catalog_revision_id: int,
     catalog_fingerprint: str,
     connection_profile_id: int,
+    connection_profile_fingerprint: str,
     parameters: dict[str, Any],
     sensitive_parameter_names: list[str],
     settings: Settings,
@@ -114,6 +142,9 @@ def issue_execution_token(
     now = datetime.now(UTC)
     ttl = int(settings.dqa_mcp_execution_token_ttl_seconds)
     expires_at = now + timedelta(seconds=ttl)
+    fingerprint = (connection_profile_fingerprint or "").strip()
+    if not fingerprint:
+        raise McpExecutionTokenError(McpExecutionTokenErrorCode.INVALID)
     payload = {
         "v": TOKEN_VERSION,
         "actor_id": actor.actor_id,
@@ -125,6 +156,7 @@ def issue_execution_token(
         "catalog_revision_id": int(catalog_revision_id),
         "catalog_fingerprint": catalog_fingerprint,
         "connection_profile_id": int(connection_profile_id),
+        "connection_profile_fingerprint": fingerprint,
         "parameters": parameters,
         "sensitive_parameter_names": list(sensitive_parameter_names),
         "iat": int(now.timestamp()),
@@ -174,6 +206,9 @@ def verify_execution_token(
         parameters = payload["parameters"]
         if not isinstance(parameters, dict):
             raise TypeError("parameters")
+        profile_fp = str(payload["connection_profile_fingerprint"]).strip()
+        if not profile_fp:
+            raise TypeError("connection_profile_fingerprint")
         claims = ExecutionTokenClaims(
             actor_id=actor_id,
             provider=provider,
@@ -184,6 +219,7 @@ def verify_execution_token(
             catalog_revision_id=int(payload["catalog_revision_id"]),
             catalog_fingerprint=str(payload["catalog_fingerprint"]),
             connection_profile_id=int(payload["connection_profile_id"]),
+            connection_profile_fingerprint=profile_fp,
             parameters=dict(parameters),
             sensitive_parameter_names=[
                 str(name) for name in (payload.get("sensitive_parameter_names") or [])

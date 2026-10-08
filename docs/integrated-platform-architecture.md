@@ -255,10 +255,13 @@ Phase 28-A foundation + 28-B Discovery tools (implemented):
   - `demis.describe_resource` — Catalog table/column/PK/FK/index metadata
 - Template Query tools (require `QUERY_OPERATE`; shared eligibility/execute/audit core):
   - `demis.prepare_query` — READY / NEEDS_CLARIFICATION / BLOCKED; opaque short-TTL
-    AES-GCM execution token only when READY; no DEMIS/credentials/SQL/audit
-  - `demis.execute_query` — token-only execute; revalidates actor/TTL/eligibility;
-    opt-in via `DQA_MCP_QUERY_EXECUTION_ENABLED` (default false); tokens are **not**
-    single-use within TTL (every execute revalidates + audits independently)
+    AES-GCM execution token only when READY (token ciphertext holds resolved
+    params + profile binding fingerprint; does not encrypt original call JSON);
+    no DEMIS/credentials/SQL/audit
+  - `demis.execute_query` — token-only execute; revalidates actor/TTL/eligibility/
+    catalog/profile fingerprint; opt-in via `DQA_MCP_QUERY_EXECUTION_ENABLED`
+    (default false); tokens are **not** single-use within TTL (every execute
+    revalidates + audits independently)
 - No invented logical clinical mappings or executable field capabilities (Phase 29)
 - No Dynamic Query / arbitrary SQL via MCP
 
