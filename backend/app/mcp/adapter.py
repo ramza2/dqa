@@ -1,9 +1,8 @@
 """Application-service adapter boundary for MCP tools.
 
-MCP transport handlers and tools call this facade only. It must not open DEMIS
-connections, execute SQL, or import Catalog packages. Discovery tools (28-B)
-delegate into existing DQA application services from here. Query tools (28-C)
-are out of scope.
+MCP transport handlers and tools call this facade only. Discovery tools (28-B)
+and Template Query tools (28-C) delegate into existing DQA application services.
+No parallel execution/audit path. Identity is never taken from tool arguments.
 """
 
 from __future__ import annotations
@@ -16,18 +15,36 @@ from sqlalchemy.orm import Session
 from app.adapters.catalog.query_errors import CatalogQueryError
 from app.adapters.data_discovery.errors import DataDiscoveryError
 from app.adapters.db.session import get_session_factory
+from app.adapters.demis.errors import DemisAdapterError
 from app.adapters.embedding.factory import create_embedding_provider
+from app.adapters.execution.errors import (
+    ExecutionError,
+    ExecutionErrorCode,
+    ExecutionPreviewError,
+)
 from app.auth.errors import AuthError, AuthErrorCode
 from app.auth.models import AuthenticatedActor, Permission
 from app.auth.rbac import actor_has_permission
 from app.core.config import Settings, get_settings
 from app.domain.data_discovery import DataDiscoverySearchMode
 from app.mcp.errors import (
+    is_clarification_error,
+    public_execution_error_payload,
     raise_catalog_revision_changed,
+    raise_execution_binding_mismatch,
     raise_from_discovery_or_catalog_error,
+    raise_from_execution_error,
     raise_invalid_tool_arguments,
+    raise_query_execution_disabled,
+)
+from app.mcp.execution_token import (
+    McpExecutionTokenError,
+    connection_profile_binding_fingerprint,
+    issue_execution_token,
+    verify_execution_token,
 )
 from app.schemas.data_discovery import DataDiscoverySearchRequest
+from app.schemas.execution_preview import ExecutionPreviewRequest
 from app.services.catalog_query import (
     PageResult,
     ResolvedActiveRevision,
@@ -37,9 +54,13 @@ from app.services.catalog_query import (
     list_relations,
 )
 from app.services.data_discovery_search import search_schema
+from app.services.execution_eligibility import evaluate_execution_eligibility
+from app.services.query_execution import execute_query
 
 # Bound for describe_resource metadata collections (columns / relations / indexes).
 _DESCRIBE_COLLECTION_LIMIT = 500
+
+PrepareStatus = str  # READY | NEEDS_CLARIFICATION | BLOCKED
 
 
 def _assert_same_active_revision(
@@ -68,6 +89,38 @@ def _bounded_collection(page: PageResult, *, limit: int) -> dict[str, Any]:
     }
 
 
+def _redacted_prepare_metadata(
+    *,
+    source_name: str,
+    environment: str,
+    catalog_revision_id: int | None,
+    catalog_fingerprint: str | None,
+    template_id: int | None,
+    version_id: int | None,
+    version: int | None,
+    connection_profile_id: int | None,
+    parameter_names: list[str],
+    sensitive_parameter_names: list[str],
+    row_limit: int | None,
+    timeout_seconds: int | None,
+) -> dict[str, Any]:
+    """Public prepare fields — never include SQL, credentials, or parameter values."""
+    return {
+        "source_name": source_name,
+        "environment": environment,
+        "catalog_revision_id": catalog_revision_id,
+        "catalog_fingerprint": catalog_fingerprint,
+        "template_id": template_id,
+        "version_id": version_id,
+        "version": version,
+        "connection_profile_id": connection_profile_id,
+        "parameter_names": parameter_names,
+        "sensitive_parameter_names": sensitive_parameter_names,
+        "row_limit": row_limit,
+        "timeout_seconds": timeout_seconds,
+    }
+
+
 class McpApplicationAdapter:
     """Facade used by MCP tools — reuses application services, never HTTP loopback."""
 
@@ -75,7 +128,7 @@ class McpApplicationAdapter:
         """Return MCP foundation readiness (no DB / DEMIS / LLM I/O)."""
         return {
             "status": "ready",
-            "phase": "28-B",
+            "phase": "28-C",
             "client": "MCP",
             "actor_id": actor.actor_id,
             "provider": actor.provider,
@@ -84,6 +137,14 @@ class McpApplicationAdapter:
     def require_catalog_read(self, actor: AuthenticatedActor) -> None:
         """Enforce CATALOG_READ at the tool/service boundary (defense in depth)."""
         if not actor_has_permission(actor, Permission.CATALOG_READ):
+            raise AuthError(
+                AuthErrorCode.AUTHORIZATION_DENIED,
+                "permission denied",
+            )
+
+    def require_query_operate(self, actor: AuthenticatedActor) -> None:
+        """Enforce QUERY_OPERATE at the tool/service boundary (defense in depth)."""
+        if not actor_has_permission(actor, Permission.QUERY_OPERATE):
             raise AuthError(
                 AuthErrorCode.AUTHORIZATION_DENIED,
                 "permission denied",
@@ -177,8 +238,6 @@ class McpApplicationAdapter:
         db = session or get_session_factory()()
         limit = _DESCRIBE_COLLECTION_LIMIT
         try:
-            # Each catalog_query helper re-resolves the active pointer. Anchor on
-            # the table snapshot, then fail closed if later pages disagree.
             resolved, table_detail = get_table(db, source, schema, table)
 
             columns_resolved, columns_page = list_columns(
@@ -211,8 +270,6 @@ class McpApplicationAdapter:
             )
             _assert_same_active_revision(resolved, indexes_resolved)
 
-            # Separate PK page so primary keys remain complete even when the
-            # general columns page is truncated (unless there are >limit PKs).
             pk_resolved, pk_page = list_columns(
                 db,
                 source,
@@ -236,6 +293,227 @@ class McpApplicationAdapter:
             }
         except CatalogQueryError as exc:
             raise_from_discovery_or_catalog_error(exc)
+        finally:
+            if owns_session:
+                db.close()
+
+    def prepare_query(
+        self,
+        actor: AuthenticatedActor,
+        *,
+        source_name: str,
+        environment: str,
+        template_id: int,
+        version_id: int,
+        parameters: dict[str, Any] | None = None,
+        settings: Settings | None = None,
+        session: Session | None = None,
+    ) -> dict[str, Any]:
+        """Prepare an Approved Template query (no DEMIS / credentials / audit / SQL run).
+
+        Returns deterministic READY / NEEDS_CLARIFICATION / BLOCKED. Issues an
+        opaque execution token only for READY.
+        """
+        self.require_query_operate(actor)
+        try:
+            request = ExecutionPreviewRequest(
+                source_name=source_name,
+                environment=environment,
+                template_id=template_id,
+                version_id=version_id,
+                parameters=parameters or {},
+            )
+        except (ValidationError, ValueError, TypeError):
+            raise_invalid_tool_arguments()
+
+        cfg = settings or get_settings()
+        owns_session = session is None
+        db = session or get_session_factory()()
+        try:
+            try:
+                eligibility = evaluate_execution_eligibility(
+                    db,
+                    source_name=request.source_name,
+                    environment=request.environment,
+                    template_id=request.template_id,
+                    version_id=request.version_id,
+                    parameters=request.parameters,
+                )
+            except ExecutionPreviewError as exc:
+                error = public_execution_error_payload(exc.code)
+                status: PrepareStatus = (
+                    "NEEDS_CLARIFICATION"
+                    if is_clarification_error(exc.code)
+                    else "BLOCKED"
+                )
+                return {
+                    "status": status,
+                    **_redacted_prepare_metadata(
+                        source_name=request.source_name,
+                        environment=request.environment,
+                        catalog_revision_id=None,
+                        catalog_fingerprint=None,
+                        template_id=request.template_id,
+                        version_id=request.version_id,
+                        version=None,
+                        connection_profile_id=None,
+                        parameter_names=sorted(request.parameters.keys()),
+                        sensitive_parameter_names=[],
+                        row_limit=None,
+                        timeout_seconds=None,
+                    ),
+                    "execution_token": None,
+                    "token_expires_at": None,
+                    "blockers": [] if status == "NEEDS_CLARIFICATION" else [exc.code],
+                    "error": error,
+                }
+
+            parameter_names = sorted(eligibility.resolved_parameters.keys())
+            meta = _redacted_prepare_metadata(
+                source_name=eligibility.source_name,
+                environment=eligibility.environment,
+                catalog_revision_id=eligibility.catalog_revision_id,
+                catalog_fingerprint=eligibility.catalog_fingerprint,
+                template_id=eligibility.template.id,
+                version_id=eligibility.version.id,
+                version=eligibility.version.version,
+                connection_profile_id=eligibility.connection_profile.id,
+                parameter_names=parameter_names,
+                sensitive_parameter_names=list(eligibility.sensitive_parameter_names),
+                row_limit=eligibility.row_limit,
+                timeout_seconds=eligibility.timeout_seconds,
+            )
+
+            if not eligibility.execution_available:
+                return {
+                    "status": "BLOCKED",
+                    **meta,
+                    "execution_token": None,
+                    "token_expires_at": None,
+                    "blockers": list(eligibility.execution_blockers),
+                    "error": public_execution_error_payload(
+                        ExecutionErrorCode.DEMIS_ADAPTER_UNAVAILABLE
+                    ),
+                }
+
+            try:
+                profile_fp = connection_profile_binding_fingerprint(
+                    eligibility.connection_profile
+                )
+                token, expires_at = issue_execution_token(
+                    actor=actor,
+                    source_name=eligibility.source_name,
+                    environment=eligibility.environment,
+                    template_id=eligibility.template.id,
+                    version_id=eligibility.version.id,
+                    catalog_revision_id=eligibility.catalog_revision_id,
+                    catalog_fingerprint=eligibility.catalog_fingerprint,
+                    connection_profile_id=eligibility.connection_profile.id,
+                    connection_profile_fingerprint=profile_fp,
+                    parameters=dict(eligibility.resolved_parameters),
+                    sensitive_parameter_names=list(eligibility.sensitive_parameter_names),
+                    settings=cfg,
+                )
+            except McpExecutionTokenError as exc:
+                return {
+                    "status": "BLOCKED",
+                    **meta,
+                    "execution_token": None,
+                    "token_expires_at": None,
+                    "blockers": [exc.code],
+                    "error": public_execution_error_payload(exc.code),
+                }
+
+            return {
+                "status": "READY",
+                **meta,
+                "execution_token": token,
+                "token_expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+                "blockers": [],
+                "error": None,
+            }
+        finally:
+            if owns_session:
+                db.close()
+
+    def execute_query(
+        self,
+        actor: AuthenticatedActor,
+        *,
+        execution_token: str,
+        settings: Settings | None = None,
+        session: Session | None = None,
+        **execute_kwargs: Any,
+    ) -> dict[str, Any]:
+        """Execute via opaque token only — reuses ``app.services.query_execution``."""
+        self.require_query_operate(actor)
+        cfg = settings or get_settings()
+        if not cfg.dqa_mcp_query_execution_enabled:
+            raise_query_execution_disabled()
+
+        token_value = (execution_token or "").strip()
+        if not token_value:
+            raise_invalid_tool_arguments()
+
+        try:
+            claims = verify_execution_token(token_value, actor=actor, settings=cfg)
+        except McpExecutionTokenError as exc:
+            raise_from_execution_error(exc)
+
+        owns_session = session is None
+        db = session or get_session_factory()()
+        try:
+            request = ExecutionPreviewRequest(
+                source_name=claims.source_name,
+                environment=claims.environment,
+                template_id=claims.template_id,
+                version_id=claims.version_id,
+                parameters=dict(claims.parameters),
+            )
+            # Revalidate eligibility + token binding before the shared execute path.
+            try:
+                eligibility = evaluate_execution_eligibility(
+                    db,
+                    source_name=request.source_name,
+                    environment=request.environment,
+                    template_id=request.template_id,
+                    version_id=request.version_id,
+                    parameters=request.parameters,
+                )
+            except ExecutionPreviewError as exc:
+                raise_from_execution_error(exc)
+
+            current_profile_fp = connection_profile_binding_fingerprint(
+                eligibility.connection_profile
+            )
+            if (
+                eligibility.source_name != claims.source_name
+                or eligibility.environment != claims.environment
+                or eligibility.template.id != claims.template_id
+                or eligibility.version.id != claims.version_id
+                or eligibility.catalog_revision_id != claims.catalog_revision_id
+                or eligibility.catalog_fingerprint != claims.catalog_fingerprint
+                or eligibility.connection_profile.id != claims.connection_profile_id
+                or current_profile_fp != claims.connection_profile_fingerprint
+            ):
+                raise_execution_binding_mismatch()
+
+            try:
+                response = execute_query(
+                    db,
+                    request,
+                    actor=actor,
+                    **execute_kwargs,
+                )
+            except (ExecutionPreviewError, ExecutionError, DemisAdapterError) as exc:
+                raise_from_execution_error(exc)
+
+            payload = response.model_dump(mode="json")
+            # Defense: never include SQL / credential fields (model has none).
+            assert "sql_text" not in payload
+            assert "host" not in payload
+            assert "credential_secret_ref" not in payload
+            return payload
         finally:
             if owns_session:
                 db.close()

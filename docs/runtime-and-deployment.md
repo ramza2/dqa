@@ -387,15 +387,26 @@ Auth for MCP uses the same `DQA_AUTH_PROVIDER` as Web APIs:
 - production / `disabled` → fail-closed (MCP requests rejected)
 - `dev_headers` → development/test only (never a production fallback)
 
-Phase 28-B exposes:
+Phase 28-C exposes:
 
 - `dqa.mcp_ready` (authenticated readiness)
 - `demis.search_schema` (`CATALOG_READ`; active Catalog discovery search)
 - `demis.describe_resource` (`CATALOG_READ`; Catalog table metadata)
+- `demis.prepare_query` (`QUERY_OPERATE`; READY/NEEDS_CLARIFICATION/BLOCKED;
+  opaque AES-GCM token when READY; no DEMIS execute). AES-GCM protects issued
+  token contents only — not the caller's original prepare JSON arguments.
+- `demis.execute_query` (`QUERY_OPERATE` + `DQA_MCP_QUERY_EXECUTION_ENABLED`;
+  token-only; rechecks Connection Profile config fingerprint; shared read-only
+  DEMIS + durable audit path)
 
-Template Query MCP tools (`demis.prepare_query`, `demis.execute_query`) are
-Phase 28-C. MCP must remain internal-only until a trusted gateway and approved
-production IdentityProvider exist. Do not invent production IdP claim formats.
+| Variable | Default | Notes |
+|----------|---------|--------|
+| `DQA_MCP_QUERY_EXECUTION_ENABLED` | `false` | Opt-in execute path; keep false until approved IdP + gateway |
+| `DQA_MCP_EXECUTION_TOKEN_KEY` | *(unset)* | 32-byte key (base64/hex). Required to issue/verify tokens; no production default |
+| `DQA_MCP_EXECUTION_TOKEN_TTL_SECONDS` | `300` | Token lifetime (30–300s). Tokens are not single-use within TTL |
+
+MCP must remain internal-only until a trusted gateway and approved production
+IdentityProvider exist. Do not invent production IdP claim formats.
 
 ## 14. Outstanding external blockers
 

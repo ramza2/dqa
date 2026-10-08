@@ -15,7 +15,13 @@ from app.core.config import Settings
 from app.mcp.auth import McpAuthMiddleware
 from app.mcp.ingress import should_mount_mcp, wrap_mcp_ingress
 from app.mcp.registry import McpToolRegistry, build_foundation_registry
-from app.mcp.tools import describe_resource, mcp_ready, search_schema
+from app.mcp.tools import (
+    describe_resource,
+    execute_query_tool,
+    mcp_ready,
+    prepare_query,
+    search_schema,
+)
 
 
 def normalize_mcp_mount_path(path: str) -> str:
@@ -56,17 +62,19 @@ def build_mcp_server(
     *,
     registry: McpToolRegistry | None = None,
 ) -> tuple[FastMCP, McpToolRegistry]:
-    """Construct FastMCP with foundation + Discovery tools (no Query tools)."""
+    """Construct FastMCP with foundation + Discovery + Template Query tools."""
     tool_registry = registry or build_foundation_registry()
 
     mcp = FastMCP(
         name="dqa-mcp",
         instructions=(
-            "DEMIS Query Assistant MCP (Phase 28-B). "
-            "Discovery tools: demis.search_schema, demis.describe_resource. "
-            "Query preparation/execution tools are not available yet. "
+            "DEMIS Query Assistant MCP (Phase 28-C). "
+            "Discovery: demis.search_schema, demis.describe_resource (CATALOG_READ). "
+            "Template Query: demis.prepare_query, demis.execute_query "
+            "(QUERY_OPERATE; execute additionally requires "
+            "DQA_MCP_QUERY_EXECUTION_ENABLED). "
             "Authenticate via the DQA IdentityProvider; never pass user_id/role "
-            "in tool arguments. CATALOG_READ is required for Discovery tools."
+            "in tool arguments. Never pass raw SQL to execute_query."
         ),
         # Advisory only for standalone FastMCP.run(); mounted ASGI uses Uvicorn.
         host=settings.dqa_mcp_bind_host or "127.0.0.1",
@@ -133,6 +141,40 @@ def build_mcp_server(
             schema_name=schema_name,
             table_name=table_name,
         )
+
+    @mcp.tool(
+        name="demis.prepare_query",
+        description=_tool_description(
+            tool_registry,
+            "demis.prepare_query",
+            "Prepare an Approved Query Template (READY/NEEDS_CLARIFICATION/BLOCKED).",
+        ),
+    )
+    def _prepare_query(
+        source_name: str,
+        environment: str,
+        template_id: int,
+        version_id: int,
+        parameters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return prepare_query(
+            source_name=source_name,
+            environment=environment,
+            template_id=template_id,
+            version_id=version_id,
+            parameters=parameters,
+        )
+
+    @mcp.tool(
+        name="demis.execute_query",
+        description=_tool_description(
+            tool_registry,
+            "demis.execute_query",
+            "Execute via opaque server-issued execution token only.",
+        ),
+    )
+    def _execute_query(execution_token: str) -> dict[str, Any]:
+        return execute_query_tool(execution_token=execution_token)
 
     return mcp, tool_registry
 

@@ -1,4 +1,4 @@
-"""MCP tool registry (Phase 28-A foundation + 28-B Discovery tools)."""
+"""MCP tool registry (Phase 28-A/B/C)."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ class McpToolRegistry:
 
 
 def build_foundation_registry() -> McpToolRegistry:
-    """Registry for Phase 28-A/B — foundation + Discovery tools (no Query tools)."""
+    """Registry for Phase 28 — foundation + Discovery + Template Query tools."""
     registry = McpToolRegistry()
     registry.register(
         McpToolRegistration(
@@ -79,6 +79,35 @@ def build_foundation_registry() -> McpToolRegistry:
             ),
             permission=Permission.CATALOG_READ,
             handler_name="describe_resource",
+        )
+    )
+    registry.register(
+        McpToolRegistration(
+            name="demis.prepare_query",
+            description=(
+                "Prepare an Approved + Enabled Query Template for execution. "
+                "Requires QUERY_OPERATE. Returns READY / NEEDS_CLARIFICATION / "
+                "BLOCKED. Issues an opaque short-lived execution token only when "
+                "READY. Does not connect to DEMIS, resolve credentials, execute "
+                "SQL, or write audit events. Never returns SQL or sensitive values."
+            ),
+            permission=Permission.QUERY_OPERATE,
+            handler_name="prepare_query",
+        )
+    )
+    registry.register(
+        McpToolRegistration(
+            name="demis.execute_query",
+            description=(
+                "Execute a previously prepared query via an opaque server-issued "
+                "token only. Requires QUERY_OPERATE and "
+                "DQA_MCP_QUERY_EXECUTION_ENABLED. Revalidates actor, token TTL, "
+                "template/catalog/profile eligibility, then reuses the shared "
+                "read-only DEMIS execution + durable audit path. No caller SQL "
+                "or execution overrides. Tokens are not single-use within TTL."
+            ),
+            permission=Permission.QUERY_OPERATE,
+            handler_name="execute_query_tool",
         )
     )
     return registry
