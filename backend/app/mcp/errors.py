@@ -68,8 +68,15 @@ _MCP_PUBLIC_ERRORS: dict[str, PublicErrorSpec] = {
 }
 
 _INVALID_INPUT = PublicErrorSpec(422, "invalid mcp tool arguments")
+_REVISION_CHANGED = PublicErrorSpec(
+    409,
+    "active catalog revision changed during describe_resource",
+)
 _FALLBACK_DISCOVERY = PublicErrorSpec(500, "data discovery request failed")
 _FALLBACK_CATALOG = PublicErrorSpec(500, "catalog metadata query failed")
+
+# Stable public code for mid-request active-revision mismatch (fail closed).
+MCP_CATALOG_REVISION_CHANGED = "MCP_CATALOG_REVISION_CHANGED"
 
 
 def public_error_payload(
@@ -95,6 +102,16 @@ def raise_invalid_tool_arguments() -> NoReturn:
         {
             "code": "MCP_INVALID_TOOL_ARGUMENTS",
             "message": _INVALID_INPUT.message,
+        }
+    )
+
+
+def raise_catalog_revision_changed() -> NoReturn:
+    """Fail closed when metadata pages disagree on active revision identity."""
+    raise_mcp_tool_error(
+        {
+            "code": MCP_CATALOG_REVISION_CHANGED,
+            "message": _REVISION_CHANGED.message,
         }
     )
 

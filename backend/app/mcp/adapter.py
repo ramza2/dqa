@@ -23,17 +23,49 @@ from app.auth.rbac import actor_has_permission
 from app.core.config import Settings, get_settings
 from app.domain.data_discovery import DataDiscoverySearchMode
 from app.mcp.errors import (
+    raise_catalog_revision_changed,
     raise_from_discovery_or_catalog_error,
     raise_invalid_tool_arguments,
 )
 from app.schemas.data_discovery import DataDiscoverySearchRequest
 from app.services.catalog_query import (
+    PageResult,
+    ResolvedActiveRevision,
     get_table,
     list_columns,
     list_indexes,
     list_relations,
 )
 from app.services.data_discovery_search import search_schema
+
+# Bound for describe_resource metadata collections (columns / relations / indexes).
+_DESCRIBE_COLLECTION_LIMIT = 500
+
+
+def _assert_same_active_revision(
+    expected: ResolvedActiveRevision,
+    actual: ResolvedActiveRevision,
+) -> None:
+    """Fail closed when active revision identity drifts across metadata reads."""
+    if (
+        actual.revision_id != expected.revision_id
+        or actual.schema_fingerprint != expected.schema_fingerprint
+        or actual.source_name != expected.source_name
+    ):
+        raise_catalog_revision_changed()
+
+
+def _bounded_collection(page: PageResult, *, limit: int) -> dict[str, Any]:
+    """Serialize a page with explicit truncation metadata (never silent)."""
+    items = [item.model_dump(mode="json") for item in page.items]
+    returned = len(items)
+    return {
+        "items": items,
+        "total": page.total,
+        "returned": returned,
+        "limit": limit,
+        "truncated": page.total > returned,
+    }
 
 
 class McpApplicationAdapter:
@@ -143,51 +175,64 @@ class McpApplicationAdapter:
 
         owns_session = session is None
         db = session or get_session_factory()()
+        limit = _DESCRIBE_COLLECTION_LIMIT
         try:
+            # Each catalog_query helper re-resolves the active pointer. Anchor on
+            # the table snapshot, then fail closed if later pages disagree.
             resolved, table_detail = get_table(db, source, schema, table)
-            _, columns_page = list_columns(
+
+            columns_resolved, columns_page = list_columns(
                 db,
                 source,
                 schema_name=schema,
                 table_name=table,
-                limit=500,
+                limit=limit,
                 offset=0,
             )
-            _, relations_page = list_relations(
+            _assert_same_active_revision(resolved, columns_resolved)
+
+            relations_resolved, relations_page = list_relations(
                 db,
                 source,
                 schema_name=schema,
                 table_name=table,
-                limit=500,
+                limit=limit,
                 offset=0,
             )
-            _, indexes_page = list_indexes(
+            _assert_same_active_revision(resolved, relations_resolved)
+
+            indexes_resolved, indexes_page = list_indexes(
                 db,
                 source,
                 schema_name=schema,
                 table_name=table,
-                limit=500,
+                limit=limit,
                 offset=0,
             )
-            columns = [item.model_dump(mode="json") for item in columns_page.items]
-            primary_key_columns = [
-                item.model_dump(mode="json")
-                for item in columns_page.items
-                if item.is_primary_key
-            ]
+            _assert_same_active_revision(resolved, indexes_resolved)
+
+            # Separate PK page so primary keys remain complete even when the
+            # general columns page is truncated (unless there are >limit PKs).
+            pk_resolved, pk_page = list_columns(
+                db,
+                source,
+                schema_name=schema,
+                table_name=table,
+                is_primary_key=True,
+                limit=limit,
+                offset=0,
+            )
+            _assert_same_active_revision(resolved, pk_resolved)
+
             return {
                 "source_name": resolved.source_name,
                 "revision_id": resolved.revision_id,
                 "schema_fingerprint": resolved.schema_fingerprint,
                 "table": table_detail.model_dump(mode="json"),
-                "columns": columns,
-                "primary_key_columns": primary_key_columns,
-                "relations": [
-                    item.model_dump(mode="json") for item in relations_page.items
-                ],
-                "indexes": [
-                    item.model_dump(mode="json") for item in indexes_page.items
-                ],
+                "columns": _bounded_collection(columns_page, limit=limit),
+                "primary_key_columns": _bounded_collection(pk_page, limit=limit),
+                "relations": _bounded_collection(relations_page, limit=limit),
+                "indexes": _bounded_collection(indexes_page, limit=limit),
             }
         except CatalogQueryError as exc:
             raise_from_discovery_or_catalog_error(exc)

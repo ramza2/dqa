@@ -370,9 +370,21 @@ def test_initialize_list_and_discovery_calls(
     assert desc["revision_id"] == rev.id
     assert desc["schema_fingerprint"] == rev.schema_fingerprint
     assert desc["table"]["name"] == "TB_ADM_HIST"
-    assert any(c["name"] == "ADM_ID" and c.get("is_primary_key") for c in desc["columns"])
-    assert any(c["name"] == "ADM_ID" for c in desc["primary_key_columns"])
-    assert any(r.get("referenced_table_name") == "TB_LAB_RESULT" for r in desc["relations"])
+    columns = desc["columns"]
+    assert columns["truncated"] is False
+    assert columns["returned"] == columns["total"]
+    assert columns["limit"] == 500
+    assert any(
+        c["name"] == "ADM_ID" and c.get("is_primary_key") for c in columns["items"]
+    )
+    assert any(c["name"] == "ADM_ID" for c in desc["primary_key_columns"]["items"])
+    assert desc["primary_key_columns"]["truncated"] is False
+    assert any(
+        r.get("referenced_table_name") == "TB_LAB_RESULT"
+        for r in desc["relations"]["items"]
+    )
+    assert desc["relations"]["truncated"] is False
+    assert desc["indexes"]["truncated"] is False
     assert "selectable_fields" not in desc
     assert "filterable_fields" not in desc
     assert "capabilities" not in desc
@@ -659,3 +671,157 @@ def test_mcp_auth_ingress_regression_still_holds(mcp_db_client: TestClient) -> N
 
     health = mcp_db_client.get("/health")
     assert health.status_code == 200
+
+
+def test_describe_resource_fails_closed_on_revision_change(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mid-describe active revision drift must not return mixed metadata."""
+    from mcp.server.fastmcp.exceptions import ToolError
+
+    from app.mcp.errors import MCP_CATALOG_REVISION_CHANGED
+    from app.services.catalog_query import ResolvedActiveRevision
+
+    rev = _prepare_active(db_session)
+    actor = AuthenticatedActor(
+        actor_id="viewer",
+        roles=frozenset({Role.VIEWER}),
+        provider="dev_headers",
+    )
+    adapter = McpApplicationAdapter()
+    call_state = {"n": 0}
+
+    def _list_columns_drift(*args: object, **kwargs: object):
+        from app.services.catalog_query import list_columns as real_list_columns
+
+        resolved, page = real_list_columns(*args, **kwargs)  # type: ignore[arg-type]
+        call_state["n"] += 1
+        # First columns page (general) drifts; fail before any mixed payload.
+        if call_state["n"] == 1:
+            drifted = ResolvedActiveRevision(
+                source_name=resolved.source_name,
+                revision_id=resolved.revision_id + 999,
+                schema_fingerprint="fp-drifted-other",
+                revision=resolved.revision,
+            )
+            return drifted, page
+        return resolved, page
+
+    monkeypatch.setattr("app.mcp.adapter.list_columns", _list_columns_drift)
+
+    with pytest.raises(ToolError) as exc_info:
+        adapter.describe_resource(
+            actor,
+            source_name=rev.source_name,
+            schema_name="DEMIS_OWNER",
+            table_name="TB_LAB_RESULT",
+            session=db_session,
+        )
+    err_text = str(exc_info.value)
+    assert MCP_CATALOG_REVISION_CHANGED in err_text
+    assert "active catalog revision changed" in err_text
+    _assert_no_sensitive_leak(err_text)
+    assert "fp-drifted-other" not in err_text
+    assert str(rev.id + 999) not in err_text
+
+
+def test_describe_resource_reports_truncated_columns_over_limit(
+    db_session: Session,
+) -> None:
+    """>500 column entries must report truncated metadata, not silent incompleteness."""
+    columns = [
+        {
+            "table_key": "DEMIS_OWNER.TB_WIDE",
+            "column_name": f"COL_{i:04d}",
+            "data_type": "VARCHAR2",
+            "column_comment": f"column {i}",
+            "primary_key": i == 0,
+        }
+        for i in range(520)
+    ]
+    docs = {
+        "tables": [
+            {
+                "table_key": "DEMIS_OWNER.TB_WIDE",
+                "schema_name": "DEMIS_OWNER",
+                "table_name": "TB_WIDE",
+                "table_comment": "wide table for truncation",
+            }
+        ],
+        "columns": columns,
+        "relations": [],
+        "indexes": [],
+        "categories": [],
+        "assignments": [],
+    }
+    revision = CatalogImportRevision(
+        source_name="oracle_demis_wide",
+        db_type="oracle",
+        database_name="FREEPDB1",
+        default_schema="DEMIS_OWNER",
+        package_format="demis-catalog-package",
+        package_version="2.0",
+        package_readiness="READY",
+        schema_fingerprint="fp-mcp-wide",
+        archive_sha256="d" * 64,
+        manifest_sha256="e" * 64,
+        generated_at=datetime(2026, 10, 8, tzinfo=UTC),
+        validation_status="VALID",
+        table_count=1,
+        column_count=len(columns),
+        relation_count=0,
+        index_count=0,
+        category_count=0,
+        category_assignment_count=0,
+        managed_file_count=1,
+        manifest_json={},
+        database_json={},
+        tables_json={"tables": docs["tables"]},
+        columns_json={"columns": docs["columns"]},
+        relations_json={"relations": docs["relations"]},
+        indexes_json={"indexes": docs["indexes"]},
+        categories_json={
+            "categories": docs["categories"],
+            "table_assignments": docs["assignments"],
+        },
+        erd_json={},
+        latest_run_json={},
+        schema_snapshot_json={},
+        preflight_json={},
+        latest_diff_json={},
+        managed_file_digests_json={},
+    )
+    db_session.add(revision)
+    db_session.flush()
+    activate_catalog_revision(db_session, revision.id)
+    db_session.commit()
+
+    actor = AuthenticatedActor(
+        actor_id="viewer",
+        roles=frozenset({Role.VIEWER}),
+        provider="dev_headers",
+    )
+    result = McpApplicationAdapter().describe_resource(
+        actor,
+        source_name="oracle_demis_wide",
+        schema_name="DEMIS_OWNER",
+        table_name="TB_WIDE",
+        session=db_session,
+    )
+    cols = result["columns"]
+    assert cols["total"] == 520
+    assert cols["returned"] == 500
+    assert cols["limit"] == 500
+    assert cols["truncated"] is True
+    assert len(cols["items"]) == 500
+    # PK page is separate and complete (single PK).
+    pks = result["primary_key_columns"]
+    assert pks["total"] == 1
+    assert pks["returned"] == 1
+    assert pks["truncated"] is False
+    assert pks["items"][0]["name"] == "COL_0000"
+    assert result["relations"]["truncated"] is False
+    assert result["indexes"]["truncated"] is False
+    assert result["revision_id"] == revision.id
+    assert result["schema_fingerprint"] == "fp-mcp-wide"
+    _assert_no_sensitive_leak(result)
