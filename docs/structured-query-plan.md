@@ -72,10 +72,20 @@ Forbidden in the contract:
 `IS_NULL`, `IS_NOT_NULL` — allowed set depends on normalized logical data type
 (`integer`, `number`, `string`, `boolean`, `date`, `datetime`).
 
+Value rules:
+
+- `date`: ISO-8601 calendar date (`YYYY-MM-DD`); impossible dates rejected;
+  normalized to `YYYY-MM-DD`
+- `datetime`: ISO-8601 datetime with an explicit time component; normalized via
+  `datetime.isoformat()`
+- `number`: finite values only (`NaN` / `±Infinity` rejected)
+- `IN` / `BETWEEN` lists are stored as immutable tuples (JSON arrays on dump)
+
 ### Aggregations
 
 `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`. `SUM`/`AVG` require numeric logical types.
-When aggregations are present, every `select` field must appear in `group_by`.
+When aggregations are present, every `select` field must appear in `group_by`,
+and every `sort` field must also appear in `group_by`.
 `group_by` without aggregations is rejected.
 
 ### Complexity bounds

@@ -7,6 +7,8 @@ logical plan. Does not compile SQL, issue execution tokens, or approve mappings.
 
 from __future__ import annotations
 
+import math
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -143,14 +145,14 @@ def validate_structured_query_plan(
         schema_fingerprint=semantic.schema_fingerprint,
         mapping_version=semantic.mapping_version,
         resource_key=resource.resource_key,
-        select=select_refs,
-        filters=filter_refs,
-        sort=sort_refs,
-        group_by=group_refs,
-        aggregations=agg_refs,
-        relationships=rel_keys,
+        select=tuple(select_refs),
+        filters=tuple(filter_refs),
+        sort=tuple(sort_refs),
+        group_by=tuple(group_refs),
+        aggregations=tuple(agg_refs),
+        relationships=tuple(rel_keys),
         limit=plan.limit,
-        issues=[],
+        issues=(),
     )
 
 
@@ -387,7 +389,8 @@ def _validate_filter_value(
             if item_norm is _VALUE_INVALID:
                 return _VALUE_INVALID
             normalized_items.append(item_norm)
-        return normalized_items
+        # Immutable sequence; JSON serialization remains a JSON array.
+        return tuple(normalized_items)
 
     if operator is FilterOperator.BETWEEN:
         if not isinstance(value, list) or len(value) != 2:
@@ -403,7 +406,7 @@ def _validate_filter_value(
         hi = _coerce_scalar(value[1], logical_type, predicate.field_key, issues)
         if lo is _VALUE_INVALID or hi is _VALUE_INVALID:
             return _VALUE_INVALID
-        return [lo, hi]
+        return (lo, hi)
 
     # Scalar operators (EQ/NE/LT/.../LIKE).
     if isinstance(value, list):
@@ -456,6 +459,16 @@ def _coerce_scalar(
                 )
             )
             return _VALUE_INVALID
+        numeric = float(value)
+        if math.isnan(numeric) or math.isinf(numeric):
+            issues.append(
+                PlanValidationIssue(
+                    code=PlanIssueCode.INVALID_FILTER_VALUE,
+                    message="number filter value must be finite (reject NaN/Infinity)",
+                    field_key=field_key,
+                )
+            )
+            return _VALUE_INVALID
         return float(value) if isinstance(value, float) else value
 
     if logical_type is LogicalDataType.BOOLEAN:
@@ -470,16 +483,18 @@ def _coerce_scalar(
             return _VALUE_INVALID
         return value
 
-    if logical_type in {
-        LogicalDataType.STRING,
-        LogicalDataType.DATE,
-        LogicalDataType.DATETIME,
-    }:
+    if logical_type is LogicalDataType.DATE:
+        return _normalize_iso_date(value, field_key, issues)
+
+    if logical_type is LogicalDataType.DATETIME:
+        return _normalize_iso_datetime(value, field_key, issues)
+
+    if logical_type is LogicalDataType.STRING:
         if not isinstance(value, str):
             issues.append(
                 PlanValidationIssue(
                     code=PlanIssueCode.INVALID_FILTER_VALUE,
-                    message=f"expected string filter value for {logical_type.value}",
+                    message="expected string filter value for string",
                     field_key=field_key,
                 )
             )
@@ -519,6 +534,103 @@ def _coerce_scalar(
     return _VALUE_INVALID
 
 
+def _normalize_iso_date(
+    value: Any,
+    field_key: str,
+    issues: list[PlanValidationIssue],
+) -> Any:
+    if not isinstance(value, str):
+        issues.append(
+            PlanValidationIssue(
+                code=PlanIssueCode.INVALID_FILTER_VALUE,
+                message="expected ISO-8601 date string (YYYY-MM-DD)",
+                field_key=field_key,
+            )
+        )
+        return _VALUE_INVALID
+    if len(value) > MAX_STRING_VALUE_LENGTH:
+        issues.append(
+            PlanValidationIssue(
+                code=PlanIssueCode.COMPLEXITY_EXCEEDED,
+                message=f"date filter value length exceeds {MAX_STRING_VALUE_LENGTH}",
+                field_key=field_key,
+            )
+        )
+        return _VALUE_INVALID
+    # Strict calendar date only — reject datetimes and malformed/impossible dates.
+    if "T" in value or " " in value or "t" in value:
+        issues.append(
+            PlanValidationIssue(
+                code=PlanIssueCode.INVALID_FILTER_VALUE,
+                message="date filter value must be ISO-8601 calendar date (YYYY-MM-DD)",
+                field_key=field_key,
+            )
+        )
+        return _VALUE_INVALID
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        issues.append(
+            PlanValidationIssue(
+                code=PlanIssueCode.INVALID_FILTER_VALUE,
+                message="date filter value is not a valid ISO-8601 calendar date",
+                field_key=field_key,
+            )
+        )
+        return _VALUE_INVALID
+    return parsed.isoformat()
+
+
+def _normalize_iso_datetime(
+    value: Any,
+    field_key: str,
+    issues: list[PlanValidationIssue],
+) -> Any:
+    if not isinstance(value, str):
+        issues.append(
+            PlanValidationIssue(
+                code=PlanIssueCode.INVALID_FILTER_VALUE,
+                message="expected ISO-8601 datetime string",
+                field_key=field_key,
+            )
+        )
+        return _VALUE_INVALID
+    if len(value) > MAX_STRING_VALUE_LENGTH:
+        issues.append(
+            PlanValidationIssue(
+                code=PlanIssueCode.COMPLEXITY_EXCEEDED,
+                message=(
+                    f"datetime filter value length exceeds {MAX_STRING_VALUE_LENGTH}"
+                ),
+                field_key=field_key,
+            )
+        )
+        return _VALUE_INVALID
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        issues.append(
+            PlanValidationIssue(
+                code=PlanIssueCode.INVALID_FILTER_VALUE,
+                message="datetime filter value is not a valid ISO-8601 datetime",
+                field_key=field_key,
+            )
+        )
+        return _VALUE_INVALID
+    # Reject bare dates that Python accepts as midnight datetimes when callers
+    # declared datetime — require an explicit time component.
+    if "T" not in value and "t" not in value and " " not in value:
+        issues.append(
+            PlanValidationIssue(
+                code=PlanIssueCode.INVALID_FILTER_VALUE,
+                message="datetime filter value must include a time component",
+                field_key=field_key,
+            )
+        )
+        return _VALUE_INVALID
+    return parsed.isoformat()
+
+
 def _validate_sort(
     plan: StructuredQueryPlan,
     resource: ResolvedLogicalResource,
@@ -526,6 +638,7 @@ def _validate_sort(
     issues: list[PlanValidationIssue],
 ) -> list[ValidatedSortSpec]:
     refs: list[ValidatedSortSpec] = []
+    group_set = set(plan.group_by)
     for spec in plan.sort:
         field = _require_field(spec.field_key, fields_by_key, issues)
         if field is None:
@@ -535,6 +648,18 @@ def _validate_sort(
                 PlanValidationIssue(
                     code=PlanIssueCode.MISSING_CAPABILITY,
                     message=f"field {spec.field_key!r} lacks SORT capability",
+                    field_key=spec.field_key,
+                )
+            )
+            continue
+        if plan.aggregations and spec.field_key not in group_set:
+            issues.append(
+                PlanValidationIssue(
+                    code=PlanIssueCode.INVALID_GROUPING,
+                    message=(
+                        f"sort field {spec.field_key!r} must appear in group_by "
+                        "when aggregations are present"
+                    ),
                     field_key=spec.field_key,
                 )
             )
@@ -762,14 +887,14 @@ def _failure_plan(
         schema_fingerprint=semantic.schema_fingerprint if semantic else None,
         mapping_version=semantic.mapping_version if semantic else None,
         resource_key=resource_key or plan.resource_key,
-        select=[],
-        filters=[],
-        sort=[],
-        group_by=[],
-        aggregations=[],
-        relationships=[],
+        select=(),
+        filters=(),
+        sort=(),
+        group_by=(),
+        aggregations=(),
+        relationships=(),
         limit=None,
-        issues=issues,
+        issues=tuple(issues),
     )
 
 

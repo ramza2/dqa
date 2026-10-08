@@ -195,6 +195,9 @@ class ValidatedLogicalPlan(BaseModel):
 
     Never treated as approved or executable production authority. No SQL and
     no execution tokens are produced in Phase 29-B.
+
+    Collections are tuples (JSON-serialized as arrays). Nested IN/BETWEEN
+    filter values are also tuples so mutation attempts fail closed.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -209,14 +212,14 @@ class ValidatedLogicalPlan(BaseModel):
     schema_fingerprint: str | None = None
     mapping_version: str | None = None
     resource_key: str | None = None
-    select: list[ValidatedFieldRef] = Field(default_factory=list)
-    filters: list[ValidatedFilterPredicate] = Field(default_factory=list)
-    sort: list[ValidatedSortSpec] = Field(default_factory=list)
-    group_by: list[ValidatedFieldRef] = Field(default_factory=list)
-    aggregations: list[ValidatedAggregationSpec] = Field(default_factory=list)
-    relationships: list[str] = Field(default_factory=list)
+    select: tuple[ValidatedFieldRef, ...] = ()
+    filters: tuple[ValidatedFilterPredicate, ...] = ()
+    sort: tuple[ValidatedSortSpec, ...] = ()
+    group_by: tuple[ValidatedFieldRef, ...] = ()
+    aggregations: tuple[ValidatedAggregationSpec, ...] = ()
+    relationships: tuple[str, ...] = ()
     limit: int | None = None
-    issues: list[PlanValidationIssue] = Field(default_factory=list)
+    issues: tuple[PlanValidationIssue, ...] = ()
 
 
 __all__ = [

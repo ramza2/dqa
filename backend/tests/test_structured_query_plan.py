@@ -72,6 +72,21 @@ def _catalog_docs() -> dict[str, Any]:
                 "data_type": "VARCHAR2",
             },
             {
+                "table_key": "DEMIS_OWNER.TB_ADM_HIST",
+                "column_name": "SCORE",
+                "data_type": "NUMBER",
+            },
+            {
+                "table_key": "DEMIS_OWNER.TB_ADM_HIST",
+                "column_name": "ADM_DT",
+                "data_type": "DATE",
+            },
+            {
+                "table_key": "DEMIS_OWNER.TB_ADM_HIST",
+                "column_name": "ADM_TS",
+                "data_type": "TIMESTAMP",
+            },
+            {
                 "table_key": "DEMIS_OWNER.TB_WARD",
                 "column_name": "WARD_CD",
                 "data_type": "VARCHAR2",
@@ -191,6 +206,40 @@ def _mapping(revision_id: int, *, fingerprint: str = FINGERPRINT) -> SemanticMap
                             FieldCapability.AGGREGATE,
                         ],
                     ),
+                    LogicalFieldDefinition(
+                        field_key="score",
+                        data_type="number",
+                        physical_column=PhysicalColumnRef(
+                            schema_name="DEMIS_OWNER",
+                            table_name="TB_ADM_HIST",
+                            column_name="SCORE",
+                        ),
+                        capabilities=[
+                            FieldCapability.SELECT,
+                            FieldCapability.FILTER,
+                            FieldCapability.AGGREGATE,
+                        ],
+                    ),
+                    LogicalFieldDefinition(
+                        field_key="adm_date",
+                        data_type="date",
+                        physical_column=PhysicalColumnRef(
+                            schema_name="DEMIS_OWNER",
+                            table_name="TB_ADM_HIST",
+                            column_name="ADM_DT",
+                        ),
+                        capabilities=[FieldCapability.SELECT, FieldCapability.FILTER],
+                    ),
+                    LogicalFieldDefinition(
+                        field_key="adm_ts",
+                        data_type="datetime",
+                        physical_column=PhysicalColumnRef(
+                            schema_name="DEMIS_OWNER",
+                            table_name="TB_ADM_HIST",
+                            column_name="ADM_TS",
+                        ),
+                        capabilities=[FieldCapability.SELECT, FieldCapability.FILTER],
+                    ),
                 ],
                 relationships=[
                     LogicalRelationshipDefinition(
@@ -270,7 +319,7 @@ def test_valid_select_filter_sort_plan(db_session: Session) -> None:
     assert result.filters[0].value == 42
     assert result.sort[0].direction == "DESC"
     assert result.limit == 50
-    assert result.issues == []
+    assert result.issues == ()
 
 
 def test_allowed_grouping_aggregation_and_relationship(db_session: Session) -> None:
@@ -289,7 +338,7 @@ def test_allowed_grouping_aggregation_and_relationship(db_session: Session) -> N
     )
     result = validate_structured_query_plan(db_session, plan, registry=registry)
     assert result.status == PlanValidationStatus.VALID
-    assert result.relationships == ["admission_ward"]
+    assert result.relationships == ("admission_ward",)
     assert {a.function for a in result.aggregations} == {"COUNT", "SUM"}
 
 
@@ -472,6 +521,14 @@ def test_validated_plan_is_immutable(db_session: Session) -> None:
         source_name=SOURCE,
         resource_key="synthetic.admission",
         select=["admission_id"],
+        filters=[
+            PlanFilterPredicate(
+                field_key="admission_id", operator="IN", value=[1, 2, 3]
+            ),
+            PlanFilterPredicate(
+                field_key="admission_id", operator="BETWEEN", value=[10, 20]
+            ),
+        ],
         limit=10,
     )
     result = validate_structured_query_plan(db_session, plan, registry=registry)
@@ -480,6 +537,23 @@ def test_validated_plan_is_immutable(db_session: Session) -> None:
         result.executable = True  # type: ignore[misc]
     with pytest.raises(ValidationError):
         result.status = PlanValidationStatus.INVALID  # type: ignore[misc]
+    # Top-level collections are immutable tuples.
+    assert isinstance(result.select, tuple)
+    assert isinstance(result.filters, tuple)
+    with pytest.raises((TypeError, AttributeError)):
+        result.select.append(result.select[0])  # type: ignore[attr-defined]
+    with pytest.raises(TypeError):
+        result.filters[0] = result.filters[0]  # type: ignore[index]
+    # Nested IN/BETWEEN values are immutable tuples (JSON arrays on dump).
+    assert result.filters[0].value == (1, 2, 3)
+    assert result.filters[1].value == (10, 20)
+    with pytest.raises((TypeError, AttributeError)):
+        result.filters[0].value.append(4)  # type: ignore[union-attr]
+    with pytest.raises(TypeError):
+        result.filters[0].value[0] = 99  # type: ignore[index]
+    dumped = result.model_dump(mode="json")
+    assert dumped["filters"][0]["value"] == [1, 2, 3]
+    assert dumped["filters"][1]["value"] == [10, 20]
 
 
 def test_unsupported_aggregation_on_string_field(db_session: Session) -> None:
@@ -513,6 +587,7 @@ def test_null_and_in_list_handling(db_session: Session) -> None:
     )
     result = validate_structured_query_plan(db_session, plan, registry=registry)
     assert result.status == PlanValidationStatus.VALID
+    assert result.filters[1].value == (1, 2, 3)
 
     bad = StructuredQueryPlan(
         source_name=SOURCE,
@@ -527,3 +602,132 @@ def test_null_and_in_list_handling(db_session: Session) -> None:
     result_bad = validate_structured_query_plan(db_session, bad, registry=registry)
     assert result_bad.status == PlanValidationStatus.INVALID
     assert PlanIssueCode.INVALID_FILTER_VALUE in _issue_codes(result_bad)
+
+
+def test_iso_date_and_datetime_boundaries(db_session: Session) -> None:
+    _, registry = _registry(db_session)
+    valid = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["adm_date", "adm_ts"],
+        filters=[
+            PlanFilterPredicate(field_key="adm_date", operator="EQ", value="2024-02-29"),
+            PlanFilterPredicate(
+                field_key="adm_date",
+                operator="BETWEEN",
+                value=["2024-01-01", "2024-12-31"],
+            ),
+            PlanFilterPredicate(
+                field_key="adm_ts",
+                operator="EQ",
+                value="2024-03-15T10:30:00+09:00",
+            ),
+            PlanFilterPredicate(
+                field_key="adm_ts",
+                operator="EQ",
+                value="2024-03-15 10:30:00",
+            ),
+        ],
+        limit=10,
+    )
+    result = validate_structured_query_plan(db_session, valid, registry=registry)
+    assert result.status == PlanValidationStatus.VALID
+    assert result.filters[0].value == "2024-02-29"
+    assert result.filters[1].value == ("2024-01-01", "2024-12-31")
+    assert result.filters[2].value == "2024-03-15T10:30:00+09:00"
+    assert result.filters[3].value == "2024-03-15T10:30:00"
+
+    bad = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["adm_date", "adm_ts"],
+        filters=[
+            PlanFilterPredicate(field_key="adm_date", operator="EQ", value="2024-02-30"),
+            PlanFilterPredicate(field_key="adm_date", operator="EQ", value="2024-13-01"),
+            PlanFilterPredicate(
+                field_key="adm_date", operator="EQ", value="2024-01-01T00:00:00"
+            ),
+            PlanFilterPredicate(field_key="adm_ts", operator="EQ", value="2024-01-01"),
+            PlanFilterPredicate(
+                field_key="adm_ts", operator="EQ", value="2024-01-01T25:00:00"
+            ),
+            PlanFilterPredicate(field_key="adm_date", operator="EQ", value="not-a-date"),
+        ],
+        limit=10,
+    )
+    result_bad = validate_structured_query_plan(db_session, bad, registry=registry)
+    assert result_bad.status == PlanValidationStatus.INVALID
+    assert PlanIssueCode.INVALID_FILTER_VALUE in _issue_codes(result_bad)
+    assert len(result_bad.issues) >= 6
+
+
+def test_number_rejects_nan_and_infinity(db_session: Session) -> None:
+    _, registry = _registry(db_session)
+    valid = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["score"],
+        filters=[
+            PlanFilterPredicate(field_key="score", operator="EQ", value=1.5),
+            PlanFilterPredicate(field_key="score", operator="EQ", value=2),
+        ],
+        limit=10,
+    )
+    result = validate_structured_query_plan(db_session, valid, registry=registry)
+    assert result.status == PlanValidationStatus.VALID
+    assert result.filters[0].value == 1.5
+    assert result.filters[1].value == 2
+
+    bad = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["score"],
+        filters=[
+            PlanFilterPredicate(field_key="score", operator="EQ", value=float("nan")),
+            PlanFilterPredicate(field_key="score", operator="EQ", value=float("inf")),
+            PlanFilterPredicate(field_key="score", operator="EQ", value=float("-inf")),
+        ],
+        limit=10,
+    )
+    result_bad = validate_structured_query_plan(db_session, bad, registry=registry)
+    assert result_bad.status == PlanValidationStatus.INVALID
+    assert PlanIssueCode.INVALID_FILTER_VALUE in _issue_codes(result_bad)
+    assert sum(1 for i in result_bad.issues if str(i.code) == "INVALID_FILTER_VALUE") == 3
+
+
+def test_grouped_sort_must_be_in_group_by(db_session: Session) -> None:
+    _, registry = _registry(db_session)
+    valid = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["ward_code"],
+        group_by=["ward_code"],
+        aggregations=[
+            PlanAggregationSpec(function="COUNT", field_key="admission_id"),
+        ],
+        sort=[PlanSortSpec(field_key="ward_code", direction="ASC")],
+        limit=10,
+    )
+    result = validate_structured_query_plan(db_session, valid, registry=registry)
+    assert result.status == PlanValidationStatus.VALID
+    assert result.sort[0].field_key == "ward_code"
+
+    # ward_code has SORT but is absent from GROUP BY → reject.
+    invalid = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["admission_id"],
+        group_by=["admission_id"],
+        aggregations=[
+            PlanAggregationSpec(function="COUNT", field_key="admission_id"),
+        ],
+        sort=[PlanSortSpec(field_key="ward_code", direction="DESC")],
+        limit=10,
+    )
+    result_bad = validate_structured_query_plan(db_session, invalid, registry=registry)
+    assert result_bad.status == PlanValidationStatus.INVALID
+    assert PlanIssueCode.INVALID_GROUPING in _issue_codes(result_bad)
+    assert any(
+        i.field_key == "ward_code" and "must appear in group_by" in i.message
+        for i in result_bad.issues
+    )
