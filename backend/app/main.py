@@ -26,9 +26,10 @@ def create_app(*, check_migrations_on_startup: bool = True) -> FastAPI:
     """
     settings = get_settings()
     mcp: FastMCP | None = None
-    mcp_bundle = None
-    if settings.dqa_mcp_enabled:
-        mcp_bundle = build_protected_mcp_asgi(settings)
+    # May be None when disabled, or when private-boundary declaration is not
+    # loopback (fail closed — DQA_MCP_BIND_HOST does not control Uvicorn listen).
+    mcp_bundle = build_protected_mcp_asgi(settings)
+    if mcp_bundle is not None:
         mcp = mcp_bundle[0]
 
     lifespan = _build_lifespan(

@@ -106,14 +106,23 @@ class Settings(BaseSettings):
         default=None, alias="DATA_DISCOVERY_MEDICAL_TERMS_PATH"
     )
 
-    # MCP server foundation (Phase 28-A). Disabled by default; bind is internal-only.
-    # Enabling exposes Streamable HTTP under ``dqa_mcp_mount_path`` on the backend
-    # process. Production IdP / trusted gateway requirements are not satisfied by
+    # MCP server foundation (Phase 28-A). Disabled by default.
+    # Enabling mounts Streamable HTTP under ``dqa_mcp_mount_path`` on the shared
+    # backend ASGI app. This does **not** create a separate listen socket.
+    # ``dqa_mcp_bind_host`` is a required private-boundary *declaration* (must be
+    # loopback) — it does not configure Uvicorn bind. Non-loopback values refuse
+    # the MCP mount (fail closed). Request peers are also restricted to loopback.
+    # Production IdP / trusted gateway requirements are not satisfied by
     # ``dev_headers`` — keep disabled until an approved IdentityProvider exists.
     dqa_mcp_enabled: bool = Field(default=False, alias="DQA_MCP_ENABLED")
     dqa_mcp_mount_path: str = Field(default="/mcp", alias="DQA_MCP_MOUNT_PATH")
-    # Documented intended bind interface for operators (uvicorn still owns listen).
     dqa_mcp_bind_host: str = Field(default="127.0.0.1", alias="DQA_MCP_BIND_HOST")
+    dqa_mcp_max_body_bytes: int = Field(
+        default=1_048_576,
+        alias="DQA_MCP_MAX_BODY_BYTES",
+        ge=1024,
+        le=8_388_608,
+    )
 
     @property
     def sqlalchemy_database_url(self) -> URL:

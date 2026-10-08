@@ -5,6 +5,9 @@ access. ``dev_headers`` is never a production fallback (factory-enforced).
 
 Caller-supplied ``user_id`` / ``role`` / ``permissions`` (headers or tool args)
 are never trusted as identity.
+
+Request bodies are read with a hard byte bound (413 when exceeded). Disconnects
+and malformed request streams fail closed without unbounded buffering.
 """
 
 from __future__ import annotations
@@ -24,6 +27,9 @@ from app.auth.rbac import actor_has_permission
 from app.core.config import Settings, get_settings
 from app.mcp.context import clear_mcp_actor, set_mcp_actor
 from app.mcp.registry import McpToolRegistry
+
+# Default matches a conservative MCP JSON-RPC envelope size (overridable).
+DEFAULT_MCP_MAX_BODY_BYTES = 1_048_576
 
 # Non-authoritative identity headers that must never grant access.
 _FORGED_IDENTITY_HEADERS = frozenset(
@@ -59,6 +65,14 @@ _IDENTITY_ARG_KEYS = frozenset(
 )
 
 
+class McpBodyTooLargeError(Exception):
+    """Request body exceeds the configured MCP maximum."""
+
+
+class McpBodyStreamError(Exception):
+    """Client disconnect or malformed/incomplete HTTP request stream."""
+
+
 def _auth_http_status(code: str) -> int:
     if code in {
         AuthErrorCode.PROVIDER_NOT_CONFIGURED,
@@ -74,6 +88,30 @@ def auth_error_response(exc: AuthError) -> JSONResponse:
     return JSONResponse(
         status_code=_auth_http_status(exc.code),
         content={"detail": {"code": exc.code, "message": exc.issue.message}},
+    )
+
+
+def body_too_large_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=413,
+        content={
+            "detail": {
+                "code": "MCP_BODY_TOO_LARGE",
+                "message": "mcp request body exceeds the allowed size",
+            }
+        },
+    )
+
+
+def body_stream_error_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": {
+                "code": "MCP_BODY_INCOMPLETE",
+                "message": "mcp request body is incomplete or malformed",
+            }
+        },
     )
 
 
@@ -152,16 +190,51 @@ def enforce_tool_permission(
         )
 
 
-async def _read_body(receive: Receive) -> bytes:
-    body = b""
+def content_length_exceeds(scope: Scope, max_bytes: int) -> bool:
+    headers = {
+        k.decode("latin-1").lower(): v.decode("latin-1")
+        for k, v in scope.get("headers", [])
+    }
+    raw = headers.get("content-length")
+    if raw is None:
+        return False
+    try:
+        length = int(raw)
+    except ValueError:
+        return False
+    return length > max_bytes
+
+
+async def read_body_bounded(receive: Receive, *, max_bytes: int) -> bytes:
+    """Read an HTTP request body with a hard size bound.
+
+    Raises:
+        McpBodyTooLargeError: accumulated bytes would exceed ``max_bytes``
+        McpBodyStreamError: disconnect or non-request stream message
+    """
+    if max_bytes < 0:
+        raise McpBodyTooLargeError()
+    body = bytearray()
+    # Bound receive iterations so empty more_body frames cannot spin forever.
+    max_frames = max_bytes + 8
+    frames = 0
     while True:
+        frames += 1
+        if frames > max_frames:
+            raise McpBodyStreamError("malformed request stream")
         message = await receive()
-        if message["type"] != "http.request":
-            continue
-        body += message.get("body", b"")
+        msg_type = message.get("type")
+        if msg_type == "http.disconnect":
+            raise McpBodyStreamError("client disconnected")
+        if msg_type != "http.request":
+            # Unknown/unexpected stream frames must not spin forever.
+            raise McpBodyStreamError("malformed request stream")
+        chunk = message.get("body", b"") or b""
+        if len(body) + len(chunk) > max_bytes:
+            raise McpBodyTooLargeError()
+        body.extend(chunk)
         if not message.get("more_body"):
-            break
-    return body
+            return bytes(body)
 
 
 class McpAuthMiddleware:
@@ -173,10 +246,12 @@ class McpAuthMiddleware:
         *,
         settings: Settings | None = None,
         registry: McpToolRegistry | None = None,
+        max_body_bytes: int | None = None,
     ) -> None:
         self.app = app
         self._settings = settings
         self._registry = registry
+        self._max_body_bytes = max_body_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -184,8 +259,28 @@ class McpAuthMiddleware:
             return
 
         settings = self._settings or get_settings()
+        max_bytes = (
+            self._max_body_bytes
+            if self._max_body_bytes is not None
+            else int(settings.dqa_mcp_max_body_bytes)
+        )
         clear_mcp_actor()
-        body = await _read_body(receive)
+
+        if content_length_exceeds(scope, max_bytes):
+            response = body_too_large_response()
+            await response(scope, receive, send)
+            return
+
+        try:
+            body = await read_body_bounded(receive, max_bytes=max_bytes)
+        except McpBodyTooLargeError:
+            response = body_too_large_response()
+            await response(scope, receive, send)
+            return
+        except McpBodyStreamError:
+            response = body_stream_error_response()
+            await response(scope, receive, send)
+            return
 
         async def replay_receive() -> dict[str, Any]:
             return {"type": "http.request", "body": body, "more_body": False}

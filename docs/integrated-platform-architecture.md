@@ -237,12 +237,17 @@ not re-implement a parallel safety/execution core.
 Phase 28-A foundation (implemented):
 
 - Official Python MCP SDK Streamable HTTP transport, mounted under a configurable
-  path (default `/mcp`), intended for loopback/internal bind only
-  (`DQA_MCP_ENABLED`, `DQA_MCP_MOUNT_PATH`, `DQA_MCP_BIND_HOST`)
+  path (default `/mcp`) on the **shared** backend ASGI process
+  (`DQA_MCP_ENABLED`, `DQA_MCP_MOUNT_PATH`, `DQA_MCP_BIND_HOST`,
+  `DQA_MCP_MAX_BODY_BYTES`)
+- `DQA_MCP_BIND_HOST` is a loopback private-boundary **declaration**, not a
+  Uvicorn listen control. Non-loopback declarations refuse the MCP mount;
+  mounted peers must also be loopback (fail closed). Web APIs remain unaffected.
 - Auth uses the existing DQA `IdentityProvider` / actor / RBAC path; fail-closed
   when auth is disabled or unavailable
 - Caller-supplied `user_id` / `role` / `permissions` headers or tool arguments
   are rejected (not trusted identity)
+- Request bodies are hard-bounded (HTTP 413); disconnect/malformed streams fail closed
 - `dev_headers` remains development/test only and is never a production fallback
 - Foundation tool `dqa.mcp_ready` only; no `demis.*` Discovery/Query tools yet
 

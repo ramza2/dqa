@@ -13,6 +13,7 @@ from starlette.types import ASGIApp
 
 from app.core.config import Settings
 from app.mcp.auth import McpAuthMiddleware
+from app.mcp.ingress import should_mount_mcp, wrap_mcp_ingress
 from app.mcp.registry import McpToolRegistry, build_foundation_registry
 from app.mcp.tools import mcp_ready
 
@@ -67,11 +68,12 @@ def build_mcp_server(
             "Authenticate via the DQA IdentityProvider; never pass user_id/role "
             "in tool arguments."
         ),
+        # Advisory only for standalone FastMCP.run(); mounted ASGI uses Uvicorn.
         host=settings.dqa_mcp_bind_host or "127.0.0.1",
-        # Mounted under FastAPI at mount_path; ASGI path inside mount is "/".
         streamable_http_path="/",
         stateless_http=True,
         json_response=True,
+        max_request_body_size=int(settings.dqa_mcp_max_body_bytes),
         transport_security=_transport_security(settings),
     )
 
@@ -86,16 +88,21 @@ def build_protected_mcp_asgi(
     settings: Settings,
     *,
     registry: McpToolRegistry | None = None,
-) -> tuple[FastMCP, McpToolRegistry, ASGIApp, str]:
-    """Build FastMCP + auth-wrapped Streamable HTTP ASGI app + mount path."""
+) -> tuple[FastMCP, McpToolRegistry, ASGIApp, str] | None:
+    """Build auth+ingress-wrapped MCP ASGI app, or None when mount is refused."""
+    if not should_mount_mcp(settings):
+        return None
+
     mcp, tool_registry = build_mcp_server(settings, registry=registry)
     mount_path = normalize_mcp_mount_path(settings.dqa_mcp_mount_path)
     streamable = mcp.streamable_http_app()
-    protected: ASGIApp = McpAuthMiddleware(
+    authed: ASGIApp = McpAuthMiddleware(
         streamable,
         settings=settings,
         registry=tool_registry,
+        max_body_bytes=int(settings.dqa_mcp_max_body_bytes),
     )
+    protected = wrap_mcp_ingress(authed, settings)
     return mcp, tool_registry, protected, mount_path
 
 

@@ -365,13 +365,22 @@ Volume: Compose named volume `dqa_pgdata`.
 
 ## 13. MCP endpoint (Phase 28-A foundation)
 
-Optional internal MCP Streamable HTTP endpoint mounted on the backend process.
+Optional internal MCP Streamable HTTP endpoint **mounted on the shared backend
+ASGI process**. Enabling MCP does **not** create a separate listen socket;
+Uvicorn/Compose bind addresses are unchanged. Existing Web APIs are unaffected.
 
 | Variable | Default | Notes |
 |----------|---------|--------|
 | `DQA_MCP_ENABLED` | `false` | Opt-in; keep false in production Compose until approved IdP + gateway |
 | `DQA_MCP_MOUNT_PATH` | `/mcp` | ASGI mount path (trailing slash normalized) |
-| `DQA_MCP_BIND_HOST` | `127.0.0.1` | Documented intended bind; do not advertise a public DNS target |
+| `DQA_MCP_BIND_HOST` | `127.0.0.1` | Private-boundary **declaration** only (must be loopback). Does **not** configure Uvicorn listen. Non-loopback values refuse the MCP mount (fail closed). |
+| `DQA_MCP_MAX_BODY_BYTES` | `1048576` | Hard MCP HTTP request-body limit (413 when exceeded; 1 KiB–8 MiB) |
+
+Ingress defense in depth when mounted:
+
+- declare loopback via `DQA_MCP_BIND_HOST` or MCP is not mounted
+- reject non-loopback request peers (`MCP_INGRESS_DENIED`)
+- bounded body read (no unbounded buffering); disconnect/malformed streams → 400
 
 Auth for MCP uses the same `DQA_AUTH_PROVIDER` as Web APIs:
 
@@ -380,7 +389,8 @@ Auth for MCP uses the same `DQA_AUTH_PROVIDER` as Web APIs:
 
 Phase 28-A exposes only the foundation tool `dqa.mcp_ready`. Discovery/Query
 MCP tools (`demis.*`) are later PRs. MCP must remain internal-only until a
-trusted gateway and approved production IdentityProvider exist.
+trusted gateway and approved production IdentityProvider exist. Do not invent
+production IdP claim formats here.
 
 ## 14. Outstanding external blockers
 
