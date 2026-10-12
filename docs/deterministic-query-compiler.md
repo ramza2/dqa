@@ -78,6 +78,10 @@ Identical validated inputs produce identical SQL text and bind names/order.
   must not collide with the outer wrapper alias `q`
 - Post-validation semantic re-resolve must remain `VALID` with identical
   source/revision/fingerprint/mapping version (`SNAPSHOT_DRIFT` otherwise)
+- Final Active Catalog lookup (spelling-index snapshot) must match the
+  validated plan and semantic resolve on source/revision/fingerprint;
+  missing or drifted Active Catalog fails closed as `SNAPSHOT_DRIFT`
+  (`sql_text=null`, empty binds)
 
 ### Limitations
 

@@ -42,6 +42,7 @@ from app.schemas.structured_query_plan import (
     ValidatedLogicalPlan,
     ValidatedSortSpec,
 )
+from app.adapters.catalog.query_errors import CatalogQueryError
 from app.schemas.sql_safety import SqlSafetyReport
 from app.services.catalog_query import (
     ResolvedActiveRevision,
@@ -162,6 +163,32 @@ def compile_structured_query_plan(
 
     try:
         active = resolve_active_revision(session, validated.source_name)
+    except CatalogQueryError:
+        return _failure(
+            plan=plan,
+            validated=validated,
+            status=CompilerStatus.INVALID,
+            issues=[
+                CompilerIssue(
+                    code=CompilerIssueCode.SNAPSHOT_DRIFT,
+                    message=(
+                        "active Catalog revision missing during final lookup; "
+                        "no SQL emitted"
+                    ),
+                )
+            ],
+        )
+
+    catalog_drift = _check_active_catalog_consistency(validated, semantic, active)
+    if catalog_drift is not None:
+        return _failure(
+            plan=plan,
+            validated=validated,
+            status=CompilerStatus.INVALID,
+            issues=[catalog_drift],
+        )
+
+    try:
         spelling = _CatalogSpellingIndex.from_active(active)
         sql_text, binds, param_schema = _compile_oracle_select(
             validated, resource, semantic.resources, spelling
@@ -249,6 +276,30 @@ def _check_snapshot_consistency(
                 "semantic re-resolution drifted from validated plan "
                 "(source/revision/fingerprint/mapping_version mismatch); "
                 "no SQL emitted"
+            ),
+        )
+    return None
+
+
+def _check_active_catalog_consistency(
+    validated: ValidatedLogicalPlan,
+    semantic: SemanticResolutionResult,
+    active: ResolvedActiveRevision,
+) -> CompilerIssue | None:
+    """Require final Active Catalog lookup matches validated plan + semantic resolve."""
+    if (
+        active.source_name != validated.source_name
+        or active.source_name != semantic.source_name
+        or active.revision_id != validated.catalog_revision_id
+        or active.revision_id != semantic.catalog_revision_id
+        or active.schema_fingerprint != validated.schema_fingerprint
+        or active.schema_fingerprint != semantic.schema_fingerprint
+    ):
+        return CompilerIssue(
+            code=CompilerIssueCode.SNAPSHOT_DRIFT,
+            message=(
+                "active Catalog revision drifted before spelling-index creation "
+                "(source/revision/fingerprint mismatch); no SQL emitted"
             ),
         )
     return None

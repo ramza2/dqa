@@ -744,3 +744,94 @@ def test_snapshot_drift_after_reresolve_rejected(
     assert CompilerIssueCode.SNAPSHOT_DRIFT in _issue_codes(result)
     assert result.sql_text is None
     assert result.bind_parameters == {}
+
+
+def test_catalog_drift_before_spelling_index_rejected(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Active Catalog changes after semantic re-resolve, before spelling index."""
+    from app.services.catalog_query import ResolvedActiveRevision
+
+    rev, registry = _registry(db_session)
+    plan = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["admission_id"],
+        limit=10,
+    )
+    import app.services.query_compiler as compiler_mod
+
+    original = compiler_mod.resolve_active_revision
+
+    def _drifted_active(session: Session, source_name: str) -> ResolvedActiveRevision:
+        # Only the compiler's final spelling-index lookup uses this import.
+        active = original(session, source_name)
+        return ResolvedActiveRevision(
+            source_name=active.source_name,
+            revision_id=active.revision_id + 1,
+            schema_fingerprint="fp-catalog-drifted-before-spelling",
+            revision=active.revision,
+        )
+
+    monkeypatch.setattr(compiler_mod, "resolve_active_revision", _drifted_active)
+
+    result = compile_structured_query_plan(db_session, plan, registry=registry)
+    assert result.status == CompilerStatus.INVALID
+    assert CompilerIssueCode.SNAPSHOT_DRIFT in _issue_codes(result)
+    assert result.sql_text is None
+    assert result.bind_parameters == {}
+    assert result.catalog_revision_id == rev.id
+    assert result.schema_fingerprint == FINGERPRINT
+
+
+def test_active_catalog_missing_during_final_lookup_fail_closed(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Active Catalog disappears during final spelling-index resolve."""
+    from app.adapters.catalog.query_errors import (
+        CatalogQueryError,
+        CatalogQueryErrorCode,
+    )
+
+    rev, registry = _registry(db_session)
+    plan = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["admission_id"],
+        limit=10,
+    )
+    import app.services.query_compiler as compiler_mod
+
+    def _missing(_session: Session, _source_name: str) -> None:
+        raise CatalogQueryError(
+            CatalogQueryErrorCode.ACTIVE_REVISION_NOT_FOUND,
+            "active catalog revision not found for source",
+        )
+
+    monkeypatch.setattr(compiler_mod, "resolve_active_revision", _missing)
+
+    result = compile_structured_query_plan(db_session, plan, registry=registry)
+    assert result.status == CompilerStatus.INVALID
+    assert CompilerIssueCode.SNAPSHOT_DRIFT in _issue_codes(result)
+    assert result.sql_text is None
+    assert result.bind_parameters == {}
+    assert result.catalog_revision_id == rev.id
+
+
+def test_unchanged_active_catalog_compiles_normally(db_session: Session) -> None:
+    """Unchanged Active Catalog through final lookup still emits valid SQL."""
+    rev, registry = _registry(db_session)
+    plan = StructuredQueryPlan(
+        source_name=SOURCE,
+        resource_key="synthetic.admission",
+        select=["admission_id"],
+        limit=10,
+    )
+    result = compile_structured_query_plan(db_session, plan, registry=registry)
+    assert result.status == CompilerStatus.VALID
+    assert result.sql_text is not None
+    assert "SELECT" in result.sql_text
+    assert result.bind_parameters.get("p_limit") == 10
+    assert result.catalog_revision_id == rev.id
+    assert result.schema_fingerprint == FINGERPRINT
+    assert result.issues == ()
