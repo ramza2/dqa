@@ -246,3 +246,43 @@ def test_factory_requires_config_and_dimension() -> None:
             )
         )
     assert exc.value.code == DataDiscoveryErrorCode.EMBEDDING_DIMENSION_MISMATCH
+
+
+def test_gateway_embedding_alias_1024_dimensions_and_model_identity() -> None:
+    """Alias uses the shared Gateway; old model keys must not be reused silently."""
+    import json
+
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["payload"] = json.loads(request.content)
+        return httpx.Response(
+            200, json={"data": [{"index": 0, "embedding": _vector(dim=1024)}]}
+        )
+
+    with OpenAICompatibleEmbeddingProvider(
+        base_url="https://gateway.example.test/v1",
+        model="embedding-alias",
+        dimension=1024,
+        normalized=True,
+        transport=_transport(handler),
+    ) as provider:
+        vectors = provider.embed_queries(["catalog text"])
+        alias_key = provider.model_key
+
+    assert seen["url"] == "https://gateway.example.test/v1/embeddings"
+    assert seen["payload"] == {"model": "embedding-alias", "input": ["catalog text"]}
+    assert len(vectors) == 1
+    assert len(vectors[0]) == EMBEDDING_VECTOR_DIMENSION == 1024
+
+    old_key = build_embedding_model_key(
+        provider="openai_compatible",
+        model_name="legacy-served-name",
+        model_revision=None,
+        dimension=1024,
+        normalized=True,
+        query_prefix=None,
+        document_prefix=None,
+    )
+    assert alias_key != old_key  # Alias migration needs controlled re-indexing.

@@ -119,6 +119,53 @@ Production Compose hardcodes them; the development overlay is the only supported
 
 Do not commit real DB passwords, API keys, LLM endpoints when sensitive, DEMIS passwords, or credential secret values.
 
+### Optional ModelOps Gateway provider routing (operator-managed)
+
+DQA's **existing** OpenAI-compatible adapters support the unified Gateway
+without a new provider, endpoint hardcoding, or changes to Web/MCP APIs.
+Only LLM structured calls and Data Discovery embeddings currently use an AI
+runtime. There is **no VLM client or streaming LLM call path** in these
+adapters; do not add one solely for this routing change.
+
+Supply actual HTTPS endpoint, credentials, and model **aliases** only in an
+operator-controlled, gitignored environment file (or approved secret store).
+For example, using placeholders **only**:
+
+```dotenv
+LLM_BASE_URL=https://<GATEWAY_HOST>
+LLM_MODEL=<CHAT_ALIAS>
+LLM_API_KEY=<GATEWAY_CREDENTIAL_IF_REQUIRED>
+LLM_ENABLE_THINKING=false
+EMBEDDING_BASE_URL=https://<GATEWAY_HOST>
+EMBEDDING_MODEL=<EMBEDDING_ALIAS>
+EMBEDDING_API_KEY=<GATEWAY_CREDENTIAL_IF_REQUIRED>
+EMBEDDING_DIMENSION=1024
+```
+
+The clients append `/v1/chat/completions` and `/v1/embeddings`,
+respectively; `/v1` on the base URL is supported. Request `model` uses
+the configured alias, **not** the Gateway's underlying served-model name.
+Existing timeout, error, normalization, and optional Qwen thinking controls
+remain unchanged. Structured LLM outputs containing `<think>` tags are
+rejected with a sanitized error instead of risking hidden reasoning exposure.
+Raw-request data-egress approval and Query Template authorization rules
+remain mandatory, independently of the provider URL.
+
+**Embedding migration caveat:** 1024 dimensions alone do not prove compatibility.
+The stored Data Discovery `model_key` includes model name (now the alias),
+revision, dimensions, normalization and query/document prefixes; only the
+endpoint URL is excluded. A changed alias can therefore produce a **new**
+`model_key` even when both endpoints serve the same weights. Do not override
+or relabel existing keys just to make indexes appear populated. Confirm the
+underlying embedding model/revision and preprocessing are equivalent, inspect
+index coverage, and perform an explicitly planned re-embedding/index-sync if
+the key changed; the old vectors remain untouched until reviewed migration.
+No automatic vector migration or deployment is part of this change.
+
+Do not commit real Gateway hostnames, IPs, tokens, or site-specific env files.
+Routing and model identity must be verified in the target environment before
+operational enablement.
+
 ## 6. Schema migrations
 
 Production migration mechanism:

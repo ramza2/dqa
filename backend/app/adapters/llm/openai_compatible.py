@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from typing import Any, TypeVar
 
@@ -20,6 +21,7 @@ from app.schemas.llm import (
 T = TypeVar("T", bound=BaseModel)
 
 _PROVIDER_NAME = "openai_compatible"
+_THINK_TAG_RE = re.compile(r"</?\s*think(?:\s|>)", re.IGNORECASE)
 
 
 def normalize_chat_completions_url(base_url: str) -> str:
@@ -246,6 +248,13 @@ class OpenAICompatibleLLMProvider:
         return content
 
     def _validate_structured(self, content: str, response_model: type[T]) -> T:
+        # A thinking tag inside otherwise-valid JSON could reach UI-facing fields.
+        # Reject it rather than stripping or exposing provider reasoning content.
+        if _THINK_TAG_RE.search(content):
+            raise LLMProviderError(
+                LLMProviderErrorCode.STRUCTURED_OUTPUT_INVALID,
+                "LLM provider structured output failed schema validation",
+            )
         # Fail closed: no markdown-fence stripping, no prose repair, no regex extract.
         # strict=True rejects JSON type coercion (e.g. "10" -> int).
         # from None: ValidationError may embed rejected input_value in its repr.
