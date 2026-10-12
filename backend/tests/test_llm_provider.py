@@ -882,3 +882,69 @@ def test_result_summarization_purpose_not_defined() -> None:
         "PARAMETER_EXTRACTION",
         "CATALOG_EXPLANATION",
     }
+
+
+
+def test_gateway_alias_routing_uses_configured_model_without_reasoning_leak() -> None:
+    """Gateway model is a request alias; provider reasoning metadata is not returned."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["payload"] = json.loads(request.content)
+        body = _success_body(
+            content='{"selected_template_id": 7, "confidence": 0.7}',
+            model="opaque-served-model",
+        )
+        body["choices"][0]["message"]["reasoning_content"] = "INTERNAL_REASONING_MARKER"
+        return httpx.Response(200, json=body)
+
+    provider = _provider_with_handler(
+        handler,
+        base_url="https://gateway.example.test",
+        model="chat-alias",
+        enable_thinking=False,
+    )
+    try:
+        result = provider.generate_structured(
+            messages=[LLMMessage(role="user", content="choose")],
+            response_model=ExampleRecommendation,
+            purpose=LLMRequestPurpose.TEMPLATE_RECOMMENDATION,
+        )
+    finally:
+        provider.close()
+
+    assert captured["url"] == "https://gateway.example.test/v1/chat/completions"
+    assert captured["payload"]["model"] == "chat-alias"
+    assert captured["payload"]["chat_template_kwargs"] == {"enable_thinking": False}
+    assert result.data.selected_template_id == 7
+    assert "INTERNAL_REASONING_MARKER" not in result.model_dump_json()
+
+
+def test_think_tag_inside_valid_structured_json_is_rejected_without_leak() -> None:
+    """A provider must not return hidden reasoning even inside an otherwise-valid JSON."""
+    marker = "PRIVATE_REASONING_MARKER"
+    content = json.dumps({
+        "selected_template_id": 7,
+        "confidence": 0.7,
+        "note": f"<ThInK class='trace'>{marker}</ThInK>",
+    })
+
+    provider = _provider_with_handler(
+        lambda _request: httpx.Response(200, json=_success_body(content=content)),
+        base_url="https://gateway.example.test",
+        model="chat-alias",
+    )
+    try:
+        with pytest.raises(LLMProviderError) as exc:
+            provider.generate_structured(
+                messages=[LLMMessage(role="user", content="choose")],
+                response_model=ExampleRecommendation,
+                purpose=LLMRequestPurpose.TEMPLATE_RECOMMENDATION,
+            )
+    finally:
+        provider.close()
+
+    assert exc.value.code == LLMProviderErrorCode.STRUCTURED_OUTPUT_INVALID
+    assert marker not in str(exc.value)
+    assert marker not in repr(exc.value)
