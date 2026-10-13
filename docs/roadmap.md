@@ -20,9 +20,11 @@
 - **최종 배포 단위:** DQA Web + Backend(Inspector/Catalog/Read/Controlled Write/MCP)
   + PostgreSQL/pgvector. 기존 `demis-schema-search-poc` 웹/Backend/Catalog DB
   운영 의존성은 Parity 및 데이터 이행을 거쳐 제거한다. PoC 저장소는 평가 근거로 보존.
-- **연계 책임:** DQA는 DEMIS 접근 및 업무별 Tool/내부 API. 메디칼스탠다드는
-  DEMIS/PACS 등 다원천 데이터를 FHIR R4로 표준화. 인프메딕스/SNUH.AI는
-  Agent·Workflow 및 임상 검토 연계를 담당.
+- **연계 책임:** DQA는 DEMIS 접근 및 업무별 Tool/내부 API·쓰기 승인증빙
+  자동 검증·실행 감사. 메디칼스탠다드는 DEMIS/PACS 등 다원천 데이터를
+  FHIR R4로 표준화. **인프메딕스/SNUH.AI 단일 의료진 UI**에서 AI 초안
+  검토·수정·임상 승인/반려 **1회** 및 승인 원본 이력 관리. DQA에 임상의
+  승인 화면/중복 HITL을 구축하지 않는다.
 - **쓰기 범위:** 승인된 의무기록 초안과 진료/진단보조 결과의 대상별
   DEMIS Insert(공식 API 우선 검토). **기존 조회용 Oracle Adapter를 Write에 재사용 금지.**
   임의 SQL, 무승인 자동 확정, 포괄 UPDATE/DELETE/MERGE는 제외.
@@ -42,7 +44,7 @@
 | U-01 | DQA 단일 플랫폼 아키텍처 및 책임분담 재정의 | 2026-10 | PL·SA / FHIR·SNUH.AI | 없음 / G0 | 논리·배포 구성, 조회/쓰기 경계 및 운영 책임 합의 | 진행 |
 | U-02 | 기존 Analyzer→DQA 기능/코드/데이터 Gap 분석 | 2026-10~11 | PL·백엔드·DBA | U-01 | 이관/재사용/제외 목록 및 스키마 동등성 기준 | 계획 |
 | U-03 | `AGENTS.md`·README·운영 Runbook 및 보안 규칙 정합화 | 2026-10~11 | PL·SA·보안 | U-01 / G0 | 기존 read-only 금지 규칙 변경은 승인 범위로만 분리·현행화 | 계획 |
-| U-04 | DQA ↔ FHIR ↔ SNUH.AI ICD·호출 경로 확정 | 2026-11~12 | SA·PL / FHIR·SNUH.AI | U-01 / G0 | MCP vs REST, 공통 JSON, 환자/Encounter·trace·오류·소유권 계약 | 외부결정 대기 |
+| U-04 | DQA ↔ FHIR ↔ SNUH.AI ICD·호출 경로 및 단일 UI 책임 확정 | 2026-11~12 | SA·PL / FHIR·SNUH.AI | U-01 / G0 | 호출자 MCP/REST, 공통 JSON, 환자/Encounter·trace·오류, SNUH.AI만 의료진 UI 제공 합의 | 외부결정 대기 |
 | S-01 | Schema Inspector Target 및 metadata credential 정책 | 2026-11 | SA·DBA·보안 | U-02, U-03 | 검사 계정과 조회/쓰기 계정 격리; 허용 스키마 범위 | 계획 |
 | S-02 | Oracle Schema Inspector·connection diagnostics 이관 | 2026-11~12 | 백엔드·DBA | S-01 | Table/Column/PK/UK/FK/Index/Comment 수집 테스트 | 계획 |
 | S-03 | Snapshot·fingerprint·Catalog Package v2 생성·검증 연결 | 2026-12 | 백엔드·DBA | S-02 | 기존 immutable import/READY 활성화 경로 재사용 | 계획 |
@@ -56,13 +58,13 @@
 | R-04 | Oracle Mock 조회 E2E와 FHIR 조회 계약 연동 | 2027-02~03 | 백엔드·QA / FHIR | R-03 | 승인된 query preview/execute, 반환 JSON, 감사 연계 | 계획 |
 | R-05 | Phase 29 Structured Dynamic Query 후속 범위 판단 | 2026-10~2027-03 | PL·SA·백엔드 | R-02 / 별도 승인 | 29-C preview-only 유지, 29-D 실제 실행은 별도 보안 Gate | 진행 |
 | W-01 | DEMIS Insert 지원 방식·DBA grant·문서 유형 확인 | 2026-10~12 | PM·PL·SA·DBA / 군·병원 | U-01 | 공식 저장 API/직접 INSERT 허용 범위, 저장 위치/상태·지원불가 항목 서면 확인 | 외부결정 대기 |
-| W-02 | 임상의 승인증빙·책임·취소/만료 정책 및 필드 계약 | 2026-12~2027-01 | SA·보안·의료 QA / 군·SNUH.AI·FHIR | W-01, U-04 / G0 | 검증 가능한 approval reference, source/payload digest, clinician identity, patient/Encounter | 외부결정 대기 |
-| W-03 | Write Operation Registry·payload schema·RBAC·별도 계정 설계 | 2027-01~02 | SA·백엔드·DBA·보안 | W-01, W-02 | Allowlist, record draft 상태, `WRITE_PREPARE/COMMIT`, 기본 disabled | 계획(승인 후) |
-| W-04 | `prepare_write` Tool/API: 임상컨텍스트·문서 정합성 검증 | 2027-02~03 | 백엔드·QA | W-03 | PREPARED/NEEDS_APPROVAL/BLOCKED, DB 쓰기 없음 | 계획(승인 후) |
+| W-02 | **SNUH.AI 단일 승인 UI 및 승인 원본 감사** 책임·증빙 계약 | 2026-12~2027-01 | SA·보안·의료 QA / 군·SNUH.AI·FHIR | W-01, U-04 / G0 | 임상의 1회 승인/반려, 신뢰된 승인 조회 API 또는 서명 증빙, 취소·만료·문서 해시·환자/Encounter 일치, 임상 승인 감사 소유권 | 외부결정 대기 |
+| W-03 | Write Operation Registry·payload schema·RBAC·별도 계정 설계 | 2027-01~02 | SA·백엔드·DBA·보안 | W-01, W-02 | Allowlist, document version/hash, `WRITE_PREPARE/COMMIT`, 기본 disabled, DQA 승인 UI 없음 | 계획(승인 후) |
+| W-04 | `prepare_write` Tool/API: 스키마·임상컨텍스트 사전 검증 | 2027-02~03 | 백엔드·QA | W-03 | PREPARED/NEEDS_APPROVAL/BLOCKED 및 문서 digest; DB 쓰기·의료진 승인 처리 없음 | 계획(승인 후) |
 | W-05 | 별도 ControlledWriteAdapter 및 최소권한 실행 | 2027-03~04 | 백엔드·DBA | W-03 / G3 준비 | 실제 지원 인터페이스에서만 bound insert; 트랜잭션·제한 테스트 | 계획(승인 후) |
-| W-06 | `commit_write`·`get_write_status`·승인 재검증/멱등성 | 2027-03~05 | 백엔드·보안·QA | W-04, W-05 | 위조/만료 승인 차단, 중복·모호한 commit 처리, audit fail-closed | 계획(승인 후) |
-| W-07 | Synthetic Oracle Mock 쓰기 E2E·장애/재시도·의료 QA | 2027-05~06 | QA·DBA·보안·의료 QA | W-06 / G3 | 승인 없는 쓰기 0, 멱등/재시도/권한/감사/대사 테스트 PASS | 계획(승인 후) |
-| X-01 | FHIR/SNUH.AI 조회·승인 결과 처리 통합 시험 | 2027-04~06 | PL·백엔드·QA / FHIR·SNUH.AI | U-04, R-04 | 데이터 소유권/표준화 경계 유지, end-to-end trace·error mapping | 계획 |
+| W-06 | `commit_write`·`get_write_status`·**승인 자동 검증/멱등성·실행 감사** | 2027-03~05 | 백엔드·보안·QA / SNUH.AI | W-02, W-04, W-05 | 신뢰된 승인 원본 조회·서명 검증, 위조/취소/만료/수정 차단, DQA 재승인 없음, 중복·미확정 commit 대사 및 등록 감사 | 계획(승인 후) |
+| W-07 | Synthetic Oracle Mock 쓰기 E2E·승인증빙 변조/장애/의료 QA | 2027-05~06 | QA·DBA·보안·의료 QA / SNUH.AI | W-06 / G3 | 의료진 승인 1회·DQA 자동 검증, 승인 없는 쓰기 0, 변조·권한·취소·중복·불확실 결과/감사/대사 테스트 PASS | 계획(승인 후) |
+| X-01 | **SNUH.AI 단일 UI** ↔ FHIR/DQA 조회·등록 결과 통합 시험 | 2027-04~06 | PL·백엔드·QA / FHIR·SNUH.AI | U-04, R-04, W-02 | 의료진 승인 1회/반려, 승인 원본은 SNUH.AI, 등록 실행은 DQA, 화면에 상태·오류·trace 출력, FHIR/PACS 경계 유지 | 계획 |
 | X-02 | 운영 인증·네트워크·비밀·감사·복구 하드닝 | 2027-04~07 | 보안·인프라·DBA·QA | R-01, W-06 / G2 | approved IdP, TLS, least privilege, 백업·복원, observability | 계획 |
 | X-03 | 제한적 실 DEMIS 조회 실증 | 2027-06~07 | PL·QA·DBA / 군·DEMIS 운영 | R-04, X-02 / G2 | 비식별/최소 범위 SELECT, 감사 및 DBA evidence | 외부승인 필요 |
 | X-04 | 제한적 실 DEMIS 임상문서 Insert 실증 | 2027-07~08 | PM·PL·QA·DBA·의료 QA / 군·병원·SNUH.AI | W-07, X-02 / **G4** | 서명 승인 범위 내 특정 문서, 중복/취소/대사 및 안전성 판정 | 외부승인 필요 |
@@ -79,7 +81,7 @@
 | G0 — architecture | 컨소시엄과 군의 인터페이스/데이터 책임, 승인 주체·업무 범위 확정 | 운영 임상 쓰기 설계 확정·인터페이스 임의 고정 |
 | G1 — Inspector parity | PoC와 동일 스키마 Snapshot/관계/Fingerprint 비교, 인덱스/검색 테스트 | 기존 Analyzer 사이트 운영 종료 |
 | G2 — real read | 운영 IdP·권한·최소 SELECT DBA 검증, 감사, 암호화, 실 DEMIS 조회 수용 | 실 환자 조회 및 외부 MCP 노출 |
-| G3 — write mock | 기관이 승인한 write 계약에 맞춘 synthetic fixture의 승인/멱등/오류 복구 | 실 DEMIS Write 활성화 |
+| G3 — write mock | SNUH.AI 의료진 **1회 승인** 시나리오 + DQA 서버 간 승인 자동 검증·수정/취소/만료 차단·멱등/감사·오류 복구 | 실 DEMIS Write 활성화 |
 | G4 — real write | 군/병원·DEMIS 운영자의 공식 저장방식·필드·권한·임상 승인·실증 시나리오 **서면 승인** | 실제 의무기록/진료 결과 Insert |
 | G5 — cutover | DQA 기능 동등성, FHIR/SNUH.AI, 백업·복원, 감사를 포함한 인수 승인 | 독립 Analyzer 운영 중단/볼륨 삭제 |
 
@@ -119,9 +121,11 @@ Phase 29-D의 실행 연계는 읽기 전용 안전 Gate부터 분리 검토한�
 - **Read/MCP:** Template compatibility, payload validation, principal RBAC,
   token expiry/actor/catalog/profile revalidation, row-limit/timeouts,
   audit fail-closed, FHIR 계약과 Web/MCP 결과 일관성.
-- **Clinical Write:** 서버 승인 증빙 검증(원본 문서 해시·환자·Encounter·
-  version·승인자·유효기간/취소), 권한 분리, operation whitelist,
-  중복/타임아웃/부분실패/미확정 commit 대사, 응급 중단·복구, 의료 QA 안전성 판정.
+- **Clinical Write:** SNUH.AI 의료진 단일 UI 승인/반려 1회, DQA 관리자 외
+  승인 UI 없음, 신뢰된 승인 시스템의 원본 참조·서명 및 문서 해시·
+  환자·Encounter·version·승인자·유효기간/취소 자동 검증, 권한 분리,
+  operation whitelist, 중복/타임아웃/부분실패/미확정 commit 대사,
+  SNUH.AI 임상 승인 감사 vs DQA 등록 감사의 상관관계, 의료 QA 안전성 판정.
 - **Security:** production/dev_header 혼용 방지, 운영 IdP, 사설 ingress,
   TLS, DB 최소 권한, PHI/초안·SQL·비밀값 로그·Git·AI 반출 차단,
   감사 retention/backup/restore.
@@ -134,7 +138,7 @@ Phase 29-D의 실행 연계는 읽기 전용 안전 Gate부터 분리 검토한�
 | 우선도 | 외부 협조/위험 | 필요 결정 / 대응 |
 |---|---|---|
 | P0 | DEMIS 공식 Insert 가능 여부 | 쓰기 API/프로시저/DB 직접 Insert 허용 여부, 업무별 테이블·상태·DBA 권한 및 책임 주체를 군/DEMIS 운영자와 합의. **미승인이면 실행 금지** |
-| P0 | 임상의 승인 증빙 | SNUH.AI 임상 Workflow 승인 주체, 검증 가능한 토큰/참조/해시, 취소/만료/사후 변경 정책 확정 |
+| P0 | 임상의 승인 및 원본 감사 소유권 | SNUH.AI 단일 UI 1회 승인·검토/반려/수정 원본 이력, DQA의 서버 간 승인 참조/서명 자동 검증·등록 감사만 유지하는 계약 확정 |
 | P0 | 운영 Identity & patient scope | 서비스 인증, 의료진 권한, 환자/Encounter 조회·기록 권한과 최소 데이터 반환 정책 |
 | P0 | FHIR/SNUH.AI 호출 계약 | FHIR는 DEMIS/PACS/기타 표준화; 누가 DQA MCP/REST 호출하는지, Canonical JSON, 오류·idempotency·trace 표준 합의 |
 | P1 | 실제 DEMIS 스키마 접근 | Dictionary view/검사 계정 및 SELECT 범위 승인, 최종 Schema·의무기록 쓰기 대상 분석 |
@@ -148,6 +152,36 @@ Backend↔ModelOps Gateway PASS; frontend/backend/pgvector runtime PASS.
 **이번 세션 Oracle Mock의 DEMIS_RO 비밀번호 인증 및 실제 SQL은 SKIP**,
 실 DEMIS 접근·계정 권한, 운영 IdP, FHIR/SNUH.AI E2E, 의료용 Insert는
 미검증/승인 전이다. 별도 과거 mock 기록이 있어도 실 DEMIS 수용 근거가 아니다.
+
+### G. 임상의 단일 UI와 DQA 자동 승인 검증 세부 WBS 기준 (2026-10-13 확정 방향)
+
+- **업무 소유권:** SNUH.AI 또는 군이 승인한 상위 Workflow가 의료진에게
+  임상 초안을 검토·수정·승인/반려하는 **유일한 사용자 UI**를 제공한다.
+  승인 원본 이력(검토·수정·반려·승인/취소)은 상위 시스템이 저장한다.
+  DQA에는 임상의 승인/반려 화면 및 자체 HITL 승인 엔진을 구현하지 않는다.
+- **DQA 역할:** `prepare_write`로 허용 Operation·문서/컨텍스트를
+  사전 검증하고, `commit_write` 요청을 받으면 공식 승인 서비스
+  서버 간 조회 또는 검증 가능한 서명 토큰으로 **유효성만 자동 검증**
+  한다. 의료진에게 다시 승인받지 않는다. 검사 대상은 임상의 권한,
+  최종 문서 ID·버전·해시, 환자/Encounter, operation, 만료·취소·
+  재승인 필요 여부다.
+- **감사 책임:** 상위 시스템은 *Clinical Approval Audit*,
+  DQA는 *DEMIS Write Execution Audit*를 담당. 두 로그는 `approval_id`,
+  `workflow_id`, `client_request_id`, `audit_id`로 상호 참조.
+  진료기록 원문과 비밀값은 DQA 감사로그에 복제하지 않는다.
+- **사용자 경험:** SNUH.AI에서 의료진 승인 1회만 수행. DQA 자동
+  검증 성공 시 Insert, 실패 시 명시 오류/재확인 안내. 미확정 커밋은
+  자동 재삽입 없이 상태 조회 및 운영자 대사로 처리한다.
+- **운영 UI:** DQA는 Schema/Connection/Query Template/Write Operation
+  Registry/MCP·클라이언트 상태/감사/미확정 대사를 위한 관리자용 화면을
+  제공한다. 업무별 Write Operation 정의 변경에 대한 관리자 정책 승인은
+  의료진 임상문서 승인과 구분한다.
+- **외부 결정:** SNUH.AI 승인 시스템의 증빙 조회/서명 방식, 승인자
+  본인·권한 보장, 대리승인, 취소·문서 변경·만료 전파, 의료기관 정책,
+  DEMIS 공식 저장 API/DBA 권한은 군·FHIR·SNUH.AI 협의 전 잠정이다.
+- **원문 인터페이스 대비 Gap:** 기존 v1.0은 4종 DEMIS 조회 Tool 및
+  직접 SNUH.AI→DQA 조회를 설명한다. 개정 v1.1은 *현행 DQA MCP
+  계약*과 *목표 Write 인터페이스*를 분리해 배포한다.
 
 ---
 
