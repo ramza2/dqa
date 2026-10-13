@@ -5,7 +5,7 @@
 #   1. ./scripts/dqa-migrate.sh   # starts DB only, then alembic upgrade head
 #   2. ./scripts/dqa-up.sh        # refuses to start backend until DB is at head
 #
-# Alembic owns the full DQA application schema (head: 20261007_hist01).
+# Alembic owns the DQA schema (current head: 20261008_dd02).
 # Backend startup never creates/alters tables; it only verifies Alembic head.
 # This script does not start backend/frontend and never auto-runs on dqa-up.
 # Never runs destructive downgrade.

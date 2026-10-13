@@ -121,7 +121,7 @@ echo "Terminating sessions and recreating DQA database..."
 # Connect to the maintenance DB. Identifiers come only from configured env values.
 # psql -c/--command does NOT interpolate :'var' / :"var"; feed SQL via stdin heredoc
 # so psql performs variable quoting. Never pass DQA_DB_PASSWORD.
-if ! dqa_db_exec \
+if ! dqa_db_exec_auth \
   psql \
   --username="${db_user}" \
   --dbname=postgres \
@@ -147,7 +147,7 @@ echo "Restoring archive with atomic pg_restore..."
 # Fresh empty database from DROP/CREATE; restore objects from custom-format archive.
 # --single-transaction + --exit-on-error: succeed fully or roll back restored objects.
 # Do not pipe untrusted SQL text through psql.
-if ! dqa_db_exec \
+if ! dqa_db_exec_auth \
   pg_restore \
   --username="${db_user}" \
   --dbname="${db_name}" \

@@ -207,3 +207,16 @@ dqa_require_app_stopped_for_restore() {
 dqa_db_exec() {
   dqa_compose exec -T dqa-db "$@"
 }
+
+# Execute PostgreSQL client with password authentication.
+# The password stays inside the DB container and is never an argv value.
+dqa_db_exec_auth() {
+  dqa_compose exec -T dqa-db sh -c '
+    if [ -z "${POSTGRES_PASSWORD:-}" ]; then
+      echo "error: DB container password is not configured" >&2
+      exit 1
+    fi
+    export PGPASSWORD="$POSTGRES_PASSWORD"
+    exec "$@"
+  ' sh "$@"
+}

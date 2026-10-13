@@ -46,9 +46,9 @@ db_user="$(dqa_db_user)"
 db_name="$(dqa_db_name)"
 
 echo "Creating DQA PostgreSQL backup (custom format)..."
-# pg_dump runs inside the container; local socket auth does not require exposing
-# DQA_DB_PASSWORD on the host command line.
-dqa_db_exec \
+# pg_dump uses the DB container password via dqa_db_exec_auth.
+# The password is not passed as a host command-line argument.
+dqa_db_exec_auth \
   pg_dump \
   --username="${db_user}" \
   --dbname="${db_name}" \
