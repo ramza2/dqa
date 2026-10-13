@@ -31,8 +31,18 @@ class MigrationHeadStatus:
 
 
 def _backend_root() -> Path:
-    # app/adapters/db/migration_head.py -> backend/
-    return Path(__file__).resolve().parents[3]
+    # Support both source checkouts and pip-installed Docker images.
+    module_root = Path(__file__).resolve().parents[3]
+    cwd = Path.cwd()
+
+    for root in (module_root, cwd, *cwd.parents):
+        if (
+            (root / "alembic.ini").is_file()
+            and (root / "alembic" / "versions").is_dir()
+        ):
+            return root
+
+    raise FileNotFoundError("DQA Alembic assets not found")
 
 
 def _alembic_config(alembic_ini: Path | None = None):

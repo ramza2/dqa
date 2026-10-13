@@ -45,6 +45,8 @@ networks:
 
 volumes:
   dqa_pgdata:
+    name: ${DQA_DB_VOLUME_NAME:-dqa-onprem_dqa_pgdata}
+    external: ${DQA_DB_VOLUME_EXTERNAL:-false}
 
 services:
   dqa-db:

@@ -193,10 +193,10 @@ Recommended operational sequence:
 ```
 
 Schema lifecycle is **Alembic-only** (Phase 24-B):
-- Alembic head `20261007_hist01` owns the full DQA application schema
-  (`connection_profiles`, `query_audit_events`, `catalog_import_revisions`,
-  `catalog_active_revisions`, `catalog_activation_events`, `query_templates`,
-  `query_template_versions`, `query_template_review_events`)
+- Current Alembic head: `20261008_dd02`.
+- `20261007_hist01` adopts historical Catalog/Template schema.
+- `20261008_dd01` adds `data_discovery_documents`.
+- `20261008_dd02` adds `data_discovery_embeddings` and pgvector.
 - runtime `Base.metadata.create_all` / `init_db_schema` are removed
 - backend startup performs a read-only Alembic head check
   (`app.adapters.db.migration_head`, also used by `alembic/check_at_head.py`)
