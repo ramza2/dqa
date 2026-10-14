@@ -60,9 +60,14 @@ Depends on S-04-A (`compare_schema_snapshots`) merged in PR #72.
    `pytest -q tests/test_schema_snapshot_history.py
    tests/test_schema_snapshot_diff.py tests/test_schema_catalog_candidate.py
    tests/test_schema_inspector_admin.py`.
-2. Isolated PostgreSQL migration + capture transaction tests, including
-   concurrent source capture, idempotent retry, stale predecessor,
-   rollback, listing/404 and actual DB unique constraint.
+2. Isolated PostgreSQL migration + capture transaction tests in
+   `tests/test_schema_snapshot_history_pg.py`, explicitly gated by
+   `DQA_PR73_ISOLATED_PG=1` and a loopback-only database named with prefix
+   `dqa_snapshot_pr73_`. The test validates actual Alembic DDL, concurrent
+   source captures, idempotent retry, stale predecessor, rollback, read-only
+   history HTTP, source-scoped 404 and database unique constraint. This test
+   **must run only against a temporary isolated PostgreSQL instance**, not
+   a DQA on-premise database.
 3. Confirm no `catalog_active_revisions` or existing READY Revision #1
    modified; do not deploy/apply migration to the operational DQA DB
    until the changes and rollback/backup plan are reviewed.
