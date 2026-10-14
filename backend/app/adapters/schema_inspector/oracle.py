@@ -71,6 +71,7 @@ class OracleSchemaInspector(SchemaInspector):
         # Consume within the connection scope: SQLAlchemy may close cursor
         # results when the connection context exits.
         with self._engine.connect() as conn:
+            self._begin_readonly(conn)
             rows = conn.execute(
                 text(
                     f"""
@@ -100,6 +101,7 @@ class OracleSchemaInspector(SchemaInspector):
             raise ValueError("System schema is not analyzable")
 
         with self._engine.connect() as conn:
+            self._begin_readonly(conn)
             tables = self._fetch_tables(conn, schema_name)
             columns = self._fetch_columns(conn, schema_name)
             primary_keys = self._fetch_primary_keys(conn, schema_name)
@@ -118,6 +120,15 @@ class OracleSchemaInspector(SchemaInspector):
             foreign_keys=foreign_keys,
             indexes=indexes,
         )
+
+    @staticmethod
+    def _begin_readonly(conn) -> None:
+        """Enforce Oracle read-only transaction before *any* dictionary SELECT.
+
+        The dedicated inspector account still requires a DBA-verified SELECT-only
+        privilege set. A read-only transaction is additional defense in depth.
+        """
+        conn.exec_driver_sql("SET TRANSACTION READ ONLY")
 
     def _fetch_tables(self, conn, schema_name: str) -> list[InspectedTable]:
         rows = conn.execute(

@@ -30,16 +30,26 @@ class FakeConnection:
     def __init__(self):
         self.connected = False
         self.calls = []
+        self.readonly_starts = 0
+        self._readonly = False
 
     @contextmanager
     def connect(self):
         self.connected = True
+        self._readonly = False
         try:
             yield self
         finally:
             self.connected = False
 
+    def exec_driver_sql(self, sql):
+        assert sql == "SET TRANSACTION READ ONLY"
+        assert self.connected
+        self._readonly = True
+        self.readonly_starts += 1
+
     def execute(self, statement, parameters):
+        assert self._readonly, "Oracle metadata query must run in READ ONLY transaction"
         sql = str(statement)
         normalized = " ".join(sql.split()).upper()
         self.calls.append((normalized, dict(parameters)))
@@ -151,6 +161,7 @@ def test_oracle_inspector_collects_metadata_only_and_binds_schema():
         "PATIENT_ID", "SITE_ID",
     ]
     assert len(engine.calls) == 6
+    assert engine.readonly_starts == 1
     assert not engine.connected
     for sql, params in engine.calls:
         assert params == {"schema": "DEMIS_OWNER"}
@@ -163,6 +174,7 @@ def test_schema_list_consumes_result_inside_connection_and_binds_system_names():
     assert schemas == ["DEMIS_OWNER", "APP_OWNER"]
     assert not engine.connected
     assert len(engine.calls) == 1
+    assert engine.readonly_starts == 1
     sql, params = engine.calls[0]
     assert "OWNER NOT IN" in sql
     assert set(params.values()) == set(SYSTEM_SCHEMAS)
