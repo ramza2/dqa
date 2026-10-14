@@ -69,6 +69,34 @@ class Settings(BaseSettings):
         alias="DQA_DEMIS_CREDENTIAL_ENV_PREFIX",
     )
 
+    # S-01/S-02 metadata-only Inspector. Off by default; development/test only
+    # until site-approved production inspection credentials + IdP are available.
+    # Never reuse DQA's read-query Connection Profile or DEMIS_SECRET_ prefix.
+    schema_inspector_enabled: bool = Field(
+        default=False, alias="DQA_SCHEMA_INSPECTOR_ENABLED"
+    )
+    schema_inspector_source_name: str | None = Field(
+        default=None, alias="DQA_SCHEMA_INSPECTOR_SOURCE_NAME"
+    )
+    schema_inspector_schema_name: str | None = Field(
+        default=None, alias="DQA_SCHEMA_INSPECTOR_SCHEMA_NAME"
+    )
+    schema_inspector_host: str | None = Field(
+        default=None, alias="DQA_SCHEMA_INSPECTOR_HOST"
+    )
+    schema_inspector_port: int | None = Field(
+        default=None, alias="DQA_SCHEMA_INSPECTOR_PORT", ge=1, le=65535
+    )
+    schema_inspector_service_name: str | None = Field(
+        default=None, alias="DQA_SCHEMA_INSPECTOR_SERVICE_NAME"
+    )
+    schema_inspector_username: str | None = Field(
+        default=None, alias="DQA_SCHEMA_INSPECTOR_USERNAME"
+    )
+    schema_inspector_credential_ref: str | None = Field(
+        default=None, alias="DQA_SCHEMA_INSPECTOR_CREDENTIAL_REF"
+    )
+
     # Optional OpenAI-compatible Embedding provider (Data Discovery).
     # Startup succeeds without these; completeness is checked at provider create.
     embedding_base_url: str | None = Field(default=None, alias="EMBEDDING_BASE_URL")
