@@ -1,4 +1,4 @@
-"""Read-only Schema Snapshot revision history; capture is not an HTTP API."""
+"""Snapshot history, read-only preview, and explicitly gated review journal."""
 
 from __future__ import annotations
 
@@ -148,6 +148,14 @@ def get_change_review_events(
         raise HTTPException(
             status_code=404,
             detail={"code": "SNAPSHOT_REVISION_NOT_FOUND", "message": "snapshot revision not found"},
+        ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "SNAPSHOT_REVIEW_HISTORY_FAILED",
+                "message": "schema change review history could not be read",
+            },
         ) from None
     return [_review_event_response(row) for row in events]
 
