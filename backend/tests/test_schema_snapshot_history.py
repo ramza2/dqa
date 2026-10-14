@@ -34,7 +34,8 @@ class FakeSession:
 
     def scalar(self, stmt):
         rendered = str(stmt.compile(compile_kwargs={"literal_binds": True}))
-        if "capture_request_id" in rendered and "WHERE" in rendered:
+        if "WHERE schema_snapshot_revisions.source_name =" in rendered and\
+            "AND schema_snapshot_revisions.capture_request_id =" in rendered:
             for row in self.rows:
                 if row.capture_request_id in rendered:
                     return row
