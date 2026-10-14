@@ -124,25 +124,6 @@ def _ordered_columns(members: list[dict[str, Any]] | tuple[dict[str, Any], ...],
     return tuple(sorted(ordered))
 
 
-def _canonical_payload(snapshot: SchemaSnapshot) -> dict[str, Any]:
-    payload = _physical_payload(snapshot)
-    # Normalize nested arrays before deriving the comparison fingerprint.
-    # Oracle Inspector already sorts these, but callers may construct DTOs
-    # with permuted row order; physical meaning must remain the same.
-    for fk in payload["foreign_keys"]:
-        fk["columns"] = list(_ordered_columns(fk["columns"], "source_column", "target_column"))
-        fk["columns"] = [
-            {"ordinal_position": position, "source_column": src, "target_column": dst}
-            for position, src, dst in fk["columns"]
-        ]
-    for index in payload["indexes"]:
-        index["columns"] = [
-            {"ordinal_position": pos, "column_name": name}
-            for pos, name in _ordered_columns(index["columns"], "column_name")
-        ]
-    return payload
-
-
 def compare_schema_snapshots(base: SchemaSnapshot, target: SchemaSnapshot) -> SnapshotDiff:
     """Compare two explicit same-target baselines. No baseline -> no comparison.
 
@@ -157,8 +138,8 @@ def compare_schema_snapshots(base: SchemaSnapshot, target: SchemaSnapshot) -> Sn
     if base.db_type.casefold() != "oracle":
         raise ValueError("only Oracle SchemaSnapshots are supported")
 
-    before = _canonical_payload(base)
-    after = _canonical_payload(target)
+    before = _physical_payload(base)
+    after = _physical_payload(target)
     counts: dict[str, ChangeCount] = {}
     changes: list[SnapshotChange] = []
 
