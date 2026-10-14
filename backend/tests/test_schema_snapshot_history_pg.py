@@ -475,3 +475,179 @@ def test_pg_change_review_event_http_cas_idempotency_and_catalog_isolation(
         get_settings.cache_clear()
         get_engine.cache_clear()
         get_session_factory.cache_clear()
+
+
+def test_pg_stored_preflight_bridge_non_authoritative_readonly(factory):
+    """S-04-C-2B-2C: actual PostgreSQL binding, no new approval or writes."""
+    from datetime import timedelta
+
+    from app.services.schema_preflight_snapshot import (
+        check_stored_snapshot_preflight_contract,
+    )
+    from app.services.schema_snapshot_review import SnapshotReviewError
+    from tests.mock_schema_preflight_provider import SyntheticEvidenceProvider
+
+    source = "preflight_pg_" + uuid4().hex[:10]
+    with factory() as db:
+        snap = _append(db, source).revision
+        revision_id = snap.id
+        db.commit()
+        captured_at = snap.captured_at
+
+    assert captured_at is not None
+    observed_at = captured_at + timedelta(seconds=2)
+    issued_at = observed_at + timedelta(seconds=1)
+    expires_at = observed_at + timedelta(hours=1)
+    now = observed_at + timedelta(seconds=10)
+
+    with factory() as db:
+        count_snapshots = db.scalar(text(
+            "select count(*) from schema_snapshot_revisions where source_name = :source"
+        ), {"source": source})
+        count_events = db.scalar(text(
+            "select count(*) from schema_snapshot_review_events"
+        ))
+        count_imports = db.scalar(text(
+            "select count(*) from catalog_import_revisions"
+        ))
+        count_active = db.scalar(text(
+            "select count(*) from catalog_active_revisions"
+        ))
+
+        no_provider = check_stored_snapshot_preflight_contract(
+            db, source_name=source, revision_id=revision_id, now=now,
+        )
+        assert no_provider.reason_code == "NO_TRUSTED_PROVIDER"
+        assert no_provider.preflight_status == "NOT_VERIFIED"
+        assert not no_provider.activation_eligible
+
+        provider = SyntheticEvidenceProvider(
+            independently_constructed_mock_snapshot=_snapshot(),
+            observed_at=observed_at,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
+        matched = check_stored_snapshot_preflight_contract(
+            db, source_name=source, revision_id=revision_id,
+            provider=provider, now=now,
+        )
+        assert provider.calls == 1
+        assert matched.reason_code == "STRUCTURAL_MATCH_ONLY"
+        assert matched.structural_match is True
+        assert matched.preflight_status == "NOT_VERIFIED"
+        assert matched.independently_authenticated is False
+        assert matched.replay_protected is False
+        assert matched.revocation_checked is False
+        assert matched.catalog_ready is False
+        assert matched.activation_eligible is False
+
+        changed = deepcopy(_snapshot())
+        changed.tables[0] = replace(
+            changed.tables[0], table_comment="synthetic different metadata"
+        )
+        wrong_provider = SyntheticEvidenceProvider(
+            independently_constructed_mock_snapshot=changed,
+            observed_at=observed_at,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
+        mismatched = check_stored_snapshot_preflight_contract(
+            db, source_name=source, revision_id=revision_id,
+            provider=wrong_provider, now=now,
+        )
+        assert mismatched.reason_code == "FINGERPRINT_MISMATCH"
+        assert not mismatched.structural_match
+
+        with pytest.raises(
+            SnapshotReviewError, match="SNAPSHOT_REVISION_NOT_FOUND"
+        ):
+            check_stored_snapshot_preflight_contract(
+                db, source_name=source + "_other",
+                revision_id=revision_id, provider=provider, now=now,
+            )
+
+        # No Catalog or review journal mutations even on a mock match.
+        assert db.scalar(text(
+            "select count(*) from schema_snapshot_revisions where source_name = :source"
+        ), {"source": source}) == count_snapshots == 1
+        # Earlier tests in this disposable PG intentionally create review
+        # journal rows. This bridge must preserve that baseline, not require
+        # an empty journal across the entire test module.
+        assert db.scalar(text(
+            "select count(*) from schema_snapshot_review_events"
+        )) == count_events
+        assert db.scalar(text(
+            "select count(*) from catalog_import_revisions"
+        )) == count_imports == 0
+        assert db.scalar(text(
+            "select count(*) from catalog_active_revisions"
+        )) == count_active == 0
+        db.rollback()
+
+
+def test_pg_stored_preflight_bridge_late_capture_race(factory):
+    """A separately committed capture during provider evaluation kills match."""
+    from datetime import timedelta
+
+    from app.services.schema_preflight_snapshot import (
+        check_stored_snapshot_preflight_contract,
+    )
+    from tests.mock_schema_preflight_provider import SyntheticEvidenceProvider
+
+    source = "preflight_race_" + uuid4().hex[:10]
+    with factory() as db:
+        first = _append(db, source).revision
+        revision_id = first.id
+        db.commit()
+        captured_at = first.captured_at
+
+    assert captured_at is not None
+    observed_at = captured_at + timedelta(seconds=2)
+    issued_at = observed_at + timedelta(seconds=1)
+    expires_at = observed_at + timedelta(hours=1)
+    now = observed_at + timedelta(seconds=10)
+    synthetic = SyntheticEvidenceProvider(
+        independently_constructed_mock_snapshot=_snapshot(),
+        observed_at=observed_at,
+        issued_at=issued_at,
+        expires_at=expires_at,
+    )
+
+    class CaptureDuringFetch:
+        calls = 0
+
+        def fetch(self, context):
+            self.calls += 1
+            # Capture in ANOTHER real PostgreSQL transaction and commit
+            # before the bridge performs its second latest-revision query.
+            with factory() as writer:
+                newer = _append(
+                    writer, source, expected=context.revision_id,
+                ).revision
+                assert newer.id != context.revision_id
+                writer.commit()
+            return synthetic.fetch(context)
+
+    provider = CaptureDuringFetch()
+    with factory() as reader:
+        result = check_stored_snapshot_preflight_contract(
+            reader, source_name=source, revision_id=revision_id,
+            provider=provider, now=now,
+        )
+        assert provider.calls == 1
+        assert synthetic.calls == 1
+        assert result.reason_code == "SUPERSEDED_SNAPSHOT"
+        assert not result.structural_match
+        assert result.preflight_status == "NOT_VERIFIED"
+        assert not result.catalog_ready
+        assert not result.activation_eligible
+        reader.rollback()
+
+    with factory() as db:
+        assert len(list_snapshot_revisions(db, source_name=source)) == 2
+        assert db.scalar(text(
+            "select count(*) from catalog_active_revisions"
+        )) == 0
+        assert db.scalar(text(
+            "select count(*) from catalog_import_revisions"
+        )) == 0
