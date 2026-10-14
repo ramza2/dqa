@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Literal
-
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import URL
 from sqlalchemy.pool import NullPool
