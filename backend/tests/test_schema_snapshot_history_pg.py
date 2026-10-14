@@ -218,3 +218,117 @@ def test_pg_history_http_source_scope_auth_and_no_raw_metadata(factory, monkeypa
         get_settings.cache_clear()
         get_engine.cache_clear()
         get_session_factory.cache_clear()
+
+
+def test_pg_capture_http_commits_idempotent_replay_and_diff(factory, monkeypatch):
+    """S-04-C-1 API→configured synthetic collector→real PostgreSQL→GET."""
+    from app.adapters.db.session import get_engine, get_session_factory
+    from app.main import create_app
+    from app.services import schema_snapshot_capture as capture_service
+    from app.services.schema_inspection import CollectedSchemaSnapshot
+
+    source = "mock_pg_" + uuid4().hex[:10]
+    state = {"snapshot": _snapshot(), "calls": 0}
+
+    def synthetic_inspection(_settings):
+        state["calls"] += 1
+        return CollectedSchemaSnapshot(source_name=source, snapshot=state["snapshot"])
+
+    monkeypatch.setattr(
+        capture_service, "collect_configured_schema_snapshot", synthetic_inspection
+    )
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DQA_AUTH_PROVIDER", "dev_headers")
+    get_settings.cache_clear()
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
+
+    auth = {
+        "X-DQA-Dev-Actor": "pg-capture-test-admin",
+        "X-DQA-Dev-Roles": "administrator",
+    }
+    read_auth = {
+        "X-DQA-Dev-Actor": "pg-capture-test-viewer",
+        "X-DQA-Dev-Roles": "viewer",
+    }
+    first_idempotency_key = str(uuid4())
+    try:
+        app = create_app(check_migrations_on_startup=True)
+        with TestClient(app) as http:
+            url = "/api/v1/schema-inspector/snapshots/capture"
+            base = {
+                "capture_request_id": first_idempotency_key,
+                "expected_previous_revision_id": None,
+            }
+
+            unauthorized = http.post(url, json=base, headers=read_auth)
+            assert unauthorized.status_code == 403
+            assert state["calls"] == 0
+
+            first = http.post(url, json=base, headers=auth)
+            assert first.status_code == 200, first.status_code
+            first_data = first.json()
+            assert first_data["created"] is True
+            assert first_data["diff_status"] == "NO_BASELINE"
+            assert first_data["imported"] is False
+            assert first_data["activated"] is False
+            first_id = first_data["id"]
+
+            # Real commit: a separate session can see the row immediately.
+            with factory() as db:
+                assert get_snapshot_revision(
+                    db, first_id, source_name=source
+                ) is not None
+
+            replay = http.post(url, json=base, headers=auth)
+            assert replay.status_code == 200
+            assert replay.json()["created"] is False
+            assert replay.json()["id"] == first_id
+
+            stale = http.post(
+                url, json={
+                    "capture_request_id": str(uuid4()),
+                    "expected_previous_revision_id": None,
+                }, headers=auth,
+            )
+            assert stale.status_code == 409
+            assert stale.json()["detail"]["code"] == "STALE_SNAPSHOT_REVISION"
+
+            updated = deepcopy(state["snapshot"])
+            updated.columns[0] = replace(
+                updated.columns[0], column_comment="synthetic update",
+            )
+            state["snapshot"] = updated
+            second = http.post(
+                url, json={
+                    "capture_request_id": str(uuid4()),
+                    "expected_previous_revision_id": first_id,
+                }, headers=auth,
+            )
+            assert second.status_code == 200
+            second_data = second.json()
+            assert second_data["created"] is True
+            assert second_data["previous_revision_id"] == first_id
+            assert second_data["total_changes"] == 1
+
+            listing = http.get(
+                "/api/v1/schema-inspector/snapshots",
+                params={"source_name": source}, headers=read_auth,
+            )
+            assert listing.status_code == 200
+            assert [x["id"] for x in listing.json()] == [
+                second_data["id"], first_id,
+            ]
+            detail = http.get(
+                f"/api/v1/schema-inspector/snapshots/{second_data['id']}",
+                params={"source_name": source}, headers=read_auth,
+            )
+            assert detail.status_code == 200
+            assert detail.json()["changes"][0]["changed_fields"] == ["column_comment"]
+            assert "synthetic update" not in detail.text
+            assert "snapshot_json" not in detail.text
+            assert "capture_request_id" not in detail.text
+    finally:
+        get_settings.cache_clear()
+        get_engine.cache_clear()
+        get_session_factory.cache_clear()
