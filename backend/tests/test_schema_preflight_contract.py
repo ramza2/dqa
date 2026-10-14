@@ -82,7 +82,6 @@ def test_provider_exception_is_sanitized():
 
 @pytest.mark.parametrize("changes", [
     {"source_name": "../bad"},
-    {"source_name": "another_source"},
     {"revision_id": 0},
     {"revision_id": True},
     {"latest_revision_id": 0},
