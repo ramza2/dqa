@@ -116,6 +116,7 @@ def test_candidate_preserves_physical_metadata_and_catalog_query_shapes():
     items = [_map_column(c) for c in columns]
     by_name = {item.name: item for item in items if item.table_name == "TB_CHILD"}
     assert by_name["ID"].is_primary_key is True
+    assert by_name["ID"].is_unique is True  # single-column PK
     assert by_name["PARENT_ID"].is_primary_key is False
     assert by_name["AREA_ID"].is_unique is False
     assert by_name["CODE"].is_unique is True
@@ -132,6 +133,56 @@ def test_candidate_preserves_physical_metadata_and_catalog_query_shapes():
     assert mapped_idx.name == "IX_CHILD_PARENT"
     assert mapped_idx.columns == ["PARENT_ID", "AREA_ID"]
     assert mapped_idx.unique is False
+
+
+def test_composite_pk_and_unique_constraints_do_not_make_each_column_unique():
+    snapshot = _snapshot()
+    snapshot.primary_keys = [
+        pk for pk in snapshot.primary_keys if pk.table_name != "TB_CHILD"
+    ] + [
+        InspectedPrimaryKey("DEMIS_OWNER", "TB_CHILD", "PK_CHILD_COMPOSITE", "ID", 1),
+        InspectedPrimaryKey("DEMIS_OWNER", "TB_CHILD", "PK_CHILD_COMPOSITE", "AREA_ID", 2),
+    ]
+    parsed = validate_catalog_package_bytes(
+        build_catalog_v2_candidate(snapshot, source_name="mock", generated_at=TIMESTAMP)
+    ).parsed_documents
+    mapped = {
+        (c.table_name, c.name): c
+        for c in map(_map_column, parsed["columns.json"]["columns"])
+    }
+    assert mapped["TB_PARENT", "ID"].is_unique is True  # single-column PK
+    assert mapped["TB_CHILD", "ID"].is_primary_key is True
+    assert mapped["TB_CHILD", "ID"].is_unique is False  # composite PK
+    assert mapped["TB_CHILD", "AREA_ID"].is_primary_key is True
+    assert mapped["TB_CHILD", "AREA_ID"].is_unique is False  # composite PK + UK
+    assert mapped["TB_CHILD", "CODE"].is_unique is True  # separate single-column UK
+
+
+def test_single_column_unique_index_counts_but_composite_unique_index_does_not():
+    snapshot = _snapshot()
+    snapshot.indexes.extend([
+        InspectedIndex(
+            schema_name="DEMIS_OWNER", table_name="TB_CHILD",
+            index_name="IX_UQ_PARENT_ID", is_unique=True, index_method="NORMAL",
+            index_definition=None, columns=(InspectedIndexColumn(1, "PARENT_ID"),),
+        ),
+        InspectedIndex(
+            schema_name="DEMIS_OWNER", table_name="TB_CHILD",
+            index_name="IX_UQ_COMPOSITE", is_unique=True, index_method="NORMAL",
+            index_definition=None,
+            columns=(InspectedIndexColumn(1, "ID"), InspectedIndexColumn(2, "AREA_ID")),
+        ),
+    ])
+    parsed = validate_catalog_package_bytes(
+        build_catalog_v2_candidate(snapshot, source_name="mock", generated_at=TIMESTAMP)
+    ).parsed_documents
+    mapped = {
+        (c.table_name, c.name): c
+        for c in map(_map_column, parsed["columns.json"]["columns"])
+    }
+    assert mapped["TB_CHILD", "PARENT_ID"].is_unique is True
+    assert mapped["TB_CHILD", "AREA_ID"].is_unique is False
+    assert mapped["TB_CHILD", "ID"].is_unique is True  # single-column PK, not composite index
 
 
 def test_candidate_fingerprint_matches_all_required_documents():
