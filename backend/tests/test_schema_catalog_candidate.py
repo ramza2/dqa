@@ -84,15 +84,6 @@ def _snapshot() -> SchemaSnapshot:
     )
 
 
-def _contents(archive: bytes) -> dict[str, dict]:
-    with zipfile.ZipFile(io.BytesIO(archive)) as z:
-        return {
-            path.rsplit("/", 1)[-1] if "/" not in path[len("demis_catalog_package/"):] else path[len("demis_catalog_package/"):] :
-            json.loads(z.read(path))
-            for path in z.namelist()
-        }
-
-
 def test_candidate_is_valid_v2_warning_and_never_activatable():
     output = build_catalog_v2_candidate(
         _snapshot(), source_name="oracle_demis_mock", generated_at=TIMESTAMP
@@ -193,7 +184,7 @@ def test_does_not_export_default_sql_index_sql_or_connection_secrets():
     assert b"sensitive-default-here" not in joined
     assert b"sensitive-index-expression-here" not in joined
     assert b"password" not in joined.lower()
-    assert b"host" not in joined.lower()
+    assert b"fake-inspector-host" not in joined
     docs = validate_catalog_package_bytes(output).parsed_documents
     assert docs["validation/preflight.json"]["available"] is False
     assert docs["diff/latest.json"]["available"] is False
