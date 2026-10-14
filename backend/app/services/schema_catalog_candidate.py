@@ -79,6 +79,28 @@ def _fingerprint(payload: dict[str, Any]) -> str:
     return hashlib.sha256(_json_bytes(payload)).hexdigest()
 
 
+def _single_column_unique_keys(snapshot: SchemaSnapshot) -> set[tuple[str, str, str]]:
+    """Match the legacy Analyzer: column-level unique means unique *alone*.
+
+    Include single-column UNIQUE constraints, PRIMARY KEYs and unique indexes.
+    Composite members are not individually unique merely by participation.
+    """
+    result: set[tuple[str, str, str]] = set()
+    for rows in (snapshot.unique_constraints, snapshot.primary_keys):
+        grouped: dict[tuple[str, str, str], list[str]] = {}
+        for item in rows:
+            key = (item.schema_name, item.table_name, item.constraint_name)
+            grouped.setdefault(key, []).append(item.column_name)
+        for (schema, table, _constraint), cols in grouped.items():
+            if len(cols) == 1:
+                result.add((schema, table, cols[0]))
+
+    for idx in snapshot.indexes:
+        if idx.is_unique and len(idx.columns) == 1:
+            result.add((idx.schema_name, idx.table_name, idx.columns[0].column_name))
+    return result
+
+
 def _catalog_documents(
     snapshot: SchemaSnapshot, source_name: str, generated_at: datetime
 ) -> tuple[dict[str, Any], dict[str, bytes]]:
@@ -91,17 +113,7 @@ def _catalog_documents(
         "default_schema": snapshot.schema_name,
     }
     pk_cols = {(p.schema_name, p.table_name, p.column_name) for p in snapshot.primary_keys}
-    unique_by_constraint: dict[tuple[str, str, str], list[str]] = {}
-    for uk in snapshot.unique_constraints:
-        unique_by_constraint.setdefault(
-            (uk.schema_name, uk.table_name, uk.constraint_name), []
-        ).append(uk.column_name)
-    # A column participating in a composite unique constraint is not itself unique.
-    unique_single = {
-        (schema, table, cols[0])
-        for (schema, table, _), cols in unique_by_constraint.items()
-        if len(cols) == 1
-    }
+    unique_single = _single_column_unique_keys(snapshot)
 
     tables = [
         {
