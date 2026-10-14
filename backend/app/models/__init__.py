@@ -8,6 +8,7 @@ from app.models.data_discovery import DataDiscoveryDocument
 from app.models.data_discovery_embedding import DataDiscoveryEmbedding
 from app.models.query_audit import QueryAuditEvent
 from app.models.schema_snapshot_revision import SchemaSnapshotRevision
+from app.models.schema_snapshot_review_event import SchemaSnapshotReviewEvent
 from app.models.query_template import (
     QueryTemplate,
     QueryTemplateReviewEvent,
@@ -24,6 +25,7 @@ __all__ = [
     "DataDiscoveryEmbedding",
     "QueryAuditEvent",
     "SchemaSnapshotRevision",
+    "SchemaSnapshotReviewEvent",
     "QueryTemplate",
     "QueryTemplateReviewEvent",
     "QueryTemplateVersion",

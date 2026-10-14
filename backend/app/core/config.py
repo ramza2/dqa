@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     schema_inspector_enabled: bool = Field(
         default=False, alias="DQA_SCHEMA_INSPECTOR_ENABLED"
     )
+    # Manual *change-review* journal only; not independent preflight approval.
+    # No production write surface until institution-approved IdP and policy.
+    schema_snapshot_review_enabled: bool = Field(
+        default=False, alias="DQA_SCHEMA_SNAPSHOT_REVIEW_ENABLED"
+    )
     schema_inspector_source_name: str | None = Field(
         default=None, alias="DQA_SCHEMA_INSPECTOR_SOURCE_NAME"
     )
