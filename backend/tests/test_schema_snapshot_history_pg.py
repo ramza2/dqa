@@ -570,9 +570,12 @@ def test_pg_stored_preflight_bridge_non_authoritative_readonly(factory):
         assert db.scalar(text(
             "select count(*) from schema_snapshot_revisions where source_name = :source"
         ), {"source": source}) == count_snapshots == 1
+        # Earlier tests in this disposable PG intentionally create review
+        # journal rows. This bridge must preserve that baseline, not require
+        # an empty journal across the entire test module.
         assert db.scalar(text(
             "select count(*) from schema_snapshot_review_events"
-        )) == count_events == 0
+        )) == count_events
         assert db.scalar(text(
             "select count(*) from catalog_import_revisions"
         )) == count_imports == 0
