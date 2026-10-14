@@ -43,3 +43,28 @@ class SchemaSnapshotCaptureResponse(SchemaSnapshotRevisionSummary):
     created: bool
     imported: Literal[False] = False
     activated: Literal[False] = False
+
+
+class SchemaSnapshotReviewPreview(BaseModel):
+    """Read-only verification of stored Snapshot and offline WARNING candidate.
+
+    A successful preview is *not* independent DBA/Oracle preflight or review
+    approval. It never authorizes an import or activation.
+    """
+
+    source_name: str
+    revision_id: int
+    latest_revision_id: int
+    is_latest: bool
+    schema_fingerprint: str
+    captured_at: datetime
+    review_status: Literal["REVIEW_REQUIRED", "SUPERSEDED"]
+    diff_status: Literal["NO_BASELINE", "COMPARED"]
+    identical: bool | None
+    total_changes: int | None
+    snapshot_verified: bool
+    candidate_package_valid: bool
+    candidate_package_readiness: Literal["WARNING"]
+    preflight_status: Literal["NOT_VERIFIED"]
+    activation_eligible: Literal[False]
+    required_gates: tuple[str, ...]
