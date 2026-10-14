@@ -11,46 +11,57 @@ controlled acceptance. This document does **not** change runtime behavior.
 - 운영/실증 전 acceptance 기록
 - 개발용 Oracle mock 검증과 production readiness를 혼동하지 않기
 
-적용 범위 (이 runbook의 acceptance 대상):
+적용 범위 (**현재 Read-only acceptance만**):
 
-- finalized Catalog Package v2를 소비하는 DQA consumer path
-- **현재 구현된** production execution path: Approved + Enabled Query Template
-  기반 read-only 실행
-- Connection Profile + explicit live probe + Production Readiness Report
+- **READY** 상태의 검증된 Catalog Package v2를 소비하는 DQA path
+- 현재 구현된 Approved + Enabled Query Template **SELECT-only** 실행
+- Read-only Connection Profile + explicit live probe + Production Readiness Report
+- 실제 DEMIS Read 계정의 DBA 최소권한/인증/감사 등 외부 증빙
 
-현재 구현 vs 장기 목표 (혼동 금지):
+현재 구현과 목표 (혼동 금지):
 
-| | Current implemented | Target integrated platform |
-|--|---------------------|----------------------------|
-| Human | DQA Web Portal (partial) | DQA Web Portal |
-| External AI | (not yet) | SNUH.AI Agent Workflow → MCP → DQA |
-| Execution | Approved Query Template | Approved Query Template **and** policy-controlled Structured Dynamic Query Plan |
-| Discovery | Catalog Explorer (as implemented) | Schema Search / Explorer / Semantic-Hybrid / Relation Expansion integrated into DQA Data Discovery |
-| Core | Catalog / Safety / Execution / Audit | Shared by Web Portal and MCP clients |
+| 영역 | 현재 구현 (개발 검증 범위) | 목표 통합 플랫폼 |
+|--|--|--|
+| 의료진 UI | DQA Query/Data Discovery 개발·운영 UI | **SNUH.AI 단일 의료진 UI** / DQA는 관리자 UI |
+| Schema 수집 | 별도 DEMIS Schema Analyzer → Package v2 Import | DQA 내부 **metadata-only Schema Inspector** |
+| Discovery | Catalog Explorer + Keyword/Semantic/Hybrid 및 Index Status | 통합 Inspector→Snapshot→Revision→Discovery 파이프라인 |
+| MCP | 내부 Streamable HTTP, Discovery/Query Tool 4종 + readiness; 기본 제한 | 승인된 FHIR/SNUH.AI 클라이언트 연계 MCP/REST |
+| Read 실행 | Approved + Enabled Query Template / read-only Oracle Adapter | 동일 안전 경계, 승인된 업무별 Read Capability 추가 |
+| Write 실행 | **없음**; 모든 기존 경로에서 금지 | 기관이 승인한 **별도 Controlled Insert** (기본 disabled) |
+| 승인 감사 | DQA 조회 실행 감사 | SNUH.AI/공식 임상 승인 원본 + DQA 등록 실행 감사 분리 |
 
-Structured Dynamic Query Plan, MCP tool surface, 및 Schema Search PoC 통합은
-**현재 acceptance 대상이 아니다.** 별도 architecture / implementation PR에서만
-진행한다. 제품·문서에서 `demis-schema-search-poc`를 최종 시스템명으로 쓰지 않는다.
+별도 `demis-schema-search-poc` 사이트는 DQA 내부 Inspector 검증 전까지
+유지하는 참조 시스템이며, 최종 배포 의존성이 아니다. PoC 서비스/Volume을
+이 runbook에 따라 중지·삭제하지 않는다.
 
-적용하지 않는 범위 (이 PR / 이 runbook):
+적용하지 않는 범위 (**이 문서로 인증하지 않음**):
 
-- Dynamic Query Plan / MCP / Schema Search 코드 구현 또는 이관
-- DEMIS Schema Analyzer crawling을 DQA에 흡수하는 구현
-  (metadata 수집 책임은 논리적으로 분리 가능)
+- Schema Inspector의 실제 DEMIS 수집 승인 및 별도 수집 Runbook
+- Dynamic Query 실행/MCP 외부 연계의 운영 인증·접근 수용
+- **임상문서·진료 결과 INSERT와 쓰기 계정/승인 증빙/쓰기 결과 대사**
 - arbitrary LLM Text-to-SQL 직접 실행
-- production IdentityProvider 구현 (별도 승인 PR)
-- DBA privilege의 자동 PASS 판정
+- production IdentityProvider 구현 및 DBA 권한의 자동 PASS 판정
 
 **중요:** Oracle mock E2E 성공은 development evidence일 뿐이다. real DEMIS
 production readiness, production IdP readiness, 또는 DBA privilege acceptance를
 의미하지 않는다.
 
-DQA는 schema crawler가 아니며, LLM이 생성한 임의 SQL을 즉시 실행하는
-시스템이 아니다. **현재 구현된** production execution path에서는 executable SQL이
-APPROVED + ENABLED Query Template에서만 온다. 향후 도입될 Structured Dynamic
-Query Plan도 동일한 authorization / Catalog / deterministic safety / read-only /
-audit gate를 통과해야 하며, arbitrary LLM-generated SQL의 직접 실행은 계속
-금지한다. 이 문서는 Dynamic Query Plan이나 MCP를 구현하지 않는다.
+현재 DQA는 **실 DEMIS에 대한 스키마 직접 수집 경로를 아직 구현하지
+않았다**. 향후 통합 Schema Inspector는 승인된 dictionary/catalog
+metadata 조회만 수행하며 일반 조회/쓰기 권한을 얻지 않는다.
+LLM이 생성한 임의 SQL을 즉시 실행하는 기능은 금지된다.
+**현재 Read 실행 경로**의 SQL은 APPROVED + ENABLED Query Template에서만
+나오며, Structured Dynamic Query Plan의 실제 실행은 별도 승인·검증 전까지
+preview-only로 제한한다. Read-only SQL 안전성, 인증, 감사 경계는
+Schema Inspector/추후 Controlled Write 도입에도 완화되지 않는다.
+
+**임상 Insert는 이 runbook의 Read-only acceptance와 별도이다.**
+실제 저장 경로(공식 API/프로시저/허가된 제한적 INSERT), 대상 의무기록
+유형/필드, 임상 승인 시스템의 검증 가능한 승인 증빙, 쓰기 계정/최소권한,
+멱등성/불명확한 커밋 대사, 의료 QA·보안·병원/군의 서면 인수와
+별도 Write Runbook/Gate가 확정되기 전에는 어떤 실제 DEMIS Insert도
+허용하지 않는다. **이 문서의 SELECT-only 검증 통과로 Write 권한이
+생기는 것은 아니다.**
 
 ## 2. 사전 선결조건
 
