@@ -68,3 +68,36 @@ class SchemaSnapshotReviewPreview(BaseModel):
     preflight_status: Literal["NOT_VERIFIED"]
     activation_eligible: Literal[False]
     required_gates: tuple[str, ...]
+
+
+class SnapshotChangeReviewRequest(BaseModel):
+    """Administrator's manual change-review event, NOT Catalog approval.
+
+    No arbitrary comments/evidence/role/actor permitted in client payload.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    review_request_id: UUID
+    expected_schema_fingerprint: str = Field(
+        min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$",
+    )
+    expected_previous_review_event_id: int | None = Field(..., ge=1)
+    decision: Literal["ACKNOWLEDGED", "CHANGES_REQUESTED"]
+    reason_code: Literal["REVIEWED_CHANGES", "RECHECK_REQUIRED", "SCOPE_UNCLEAR"]
+
+
+class SnapshotChangeReviewEventResponse(BaseModel):
+    id: int
+    source_name: str
+    snapshot_revision_id: int
+    schema_fingerprint: str
+    previous_review_event_id: int | None
+    decision: Literal["ACKNOWLEDGED", "CHANGES_REQUESTED"]
+    reason_code: Literal["REVIEWED_CHANGES", "RECHECK_REQUIRED", "SCOPE_UNCLEAR"]
+    reviewed_by: str
+    reviewed_at: datetime
+    created: bool | None = None
+    independent_preflight_verified: Literal[False] = False
+    catalog_ready: Literal[False] = False
+    catalog_activated: Literal[False] = False
