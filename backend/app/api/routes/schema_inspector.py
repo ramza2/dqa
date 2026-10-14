@@ -56,10 +56,10 @@ _CAPTURE_ERRORS = {
         status.HTTP_409_CONFLICT, "previous Snapshot revision is not verifiable",
     ),
     "INVALID_SNAPSHOT": PublicErrorSpec(
-        status.HTTP_422_UNPROCESSABLE_ENTITY, "collected schema Snapshot is invalid",
+        status.HTTP_422_UNPROCESSABLE_CONTENT, "collected schema Snapshot is invalid",
     ),
     "DIFF_TOO_LARGE": PublicErrorSpec(
-        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "schema change summary exceeds the limit",
+        status.HTTP_413_CONTENT_TOO_LARGE, "schema change summary exceeds the limit",
     ),
 }
 
