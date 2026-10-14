@@ -211,3 +211,42 @@ def test_orchestration_rolls_back_on_stale_guard(monkeypatch):
             capture_request_id=uuid4(), expected_previous_revision_id=None,
         )
     assert db.commits == 0 and db.rollbacks == 1
+
+
+def test_capture_full_fk_index_pk_uk_roundtrip_and_second_comparison():
+    """Regression: real Oracle Mock uses nested constraints and ordered mappings."""
+    from copy import deepcopy
+    from dataclasses import replace
+
+    from app.services.schema_catalog_candidate import _physical_payload
+    from app.services.schema_snapshot_history import _snapshot_from_payload
+    from tests.test_schema_snapshot_diff import _base as full_snapshot
+
+    db = FakeSession()
+    first_snapshot = full_snapshot()
+    first_snapshot.columns[0] = replace(
+        first_snapshot.columns[0], default_value="sensitive-default"
+    )
+    first_snapshot.indexes[0] = replace(
+        first_snapshot.indexes[0], index_definition="sensitive-index-sql"
+    )
+    first = _capture(db, snapshot=first_snapshot).revision
+    assert first.counts_json["foreign_keys"] == 1
+    assert len(first.snapshot_json["unique_constraints"]) == 2
+    assert _physical_payload(
+        _snapshot_from_payload(first.snapshot_json)
+    ) == first.snapshot_json
+    assert "sensitive-default" not in str(first.snapshot_json)
+    assert "sensitive-index-sql" not in str(first.snapshot_json)
+
+    second_snapshot = deepcopy(first_snapshot)
+    second_snapshot.foreign_keys[0] = replace(
+        second_snapshot.foreign_keys[0],
+        target_table="TB_ALTERNATE_PARENT",
+    )
+    second = _capture(
+        db, snapshot=second_snapshot, expected=first.id,
+    ).revision
+    assert second.diff_summary_json["total_changes"] == 1
+    assert second.diff_summary_json["changes"][0]["object_type"] == "FOREIGN_KEY"
+    assert second.diff_summary_json["changes"][0]["changed_fields"] == ["target_table"]
