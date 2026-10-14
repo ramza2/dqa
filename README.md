@@ -1,33 +1,45 @@
 # DEMIS Query Assistant (DQA)
 
-DEMIS Query Assistant is a separate consumer application for the Catalog Package produced by DEMIS Schema Analyzer.
+DQA is the **target single deployable DEMIS Schema Intelligence, Data Access
+and MCP Tool Platform**. The separate `demis-schema-search-poc` site remains a
+development/parity reference until DQA's Inspector and Catalog pipeline are
+validated; it will not be a final production dependency.
 
-The project goal is to provide safe catalog exploration and approved read-only query execution without allowing arbitrary LLM-generated SQL to execute directly.
+**Current implemented runtime:** validated Catalog Package v2 import, immutable
+Catalog revision/activation, Data Discovery, approved read-only Query Template
+execution and internal MCP Discovery/Template Query Tools. No DQA-native Oracle
+Schema Inspector, approved clinical Insert path or production-exposed MCP yet.
 
-## System boundary
+**Target integrated architecture** (future work, not deployed):
 
 ```text
-DEMIS Schema Analyzer
-        |
-        | Catalog Package v2
-        v
-DEMIS Query Assistant
-        |
-        | approved Query Template + bound parameters
-        v
-DEMIS DB (read-only)
+SNUH.AI clinician UI / Agent Workflow
+  ↕ (approved clinical review/approval; AI task orchestration)
+MedicalStandard FHIR Service ← PACS / other medical systems
+  ↕ (FHIR data exchange; authorized MCP or internal REST)
+DQA (single deployable platform)
+  ├─ Schema Inspector → Catalog Snapshot v2 → validate/import/activate
+  ├─ Catalog/Data Discovery / Query Template / MCP & REST
+  ├─ approved read-only DEMIS Adapter            [implemented]
+  └─ controlled clinical Insert Adapter           [planned; disabled]
+       ↓
+  DEMIS Oracle
 ```
 
-DQA does not crawl or analyze DEMIS schema directly.
-The imported and activated Catalog Package is the schema source of truth.
+SNUH.AI may call an approved DQA MCP boundary directly when negotiated, but
+a request for FHIR-standardized data normally flows through the FHIR service.
+DQA does **not** perform PACS integration or FHIR R4 conversion.
+The **single clinician approval/rejection UI and clinical approval source of
+truth** belong to SNUH.AI or a formally designated military approval system.
+DQA would only validate trusted approval evidence and write execution status,
+never prompt clinicians to re-approve within DQA.
 
-Target direction (architecture rebaseline; not all features implemented yet):
-
-- human users via DQA Web Portal
-- external AI agents (SNUH.AI) via MCP
-- both share one controlled DEMIS data-access core
-  (Catalog / Authorization / Safety / Execution / Audit)
-- Approved Query Template path retained; Structured Dynamic Query Plan is future
+Metadata collection does not itself authorize query execution: only an
+explicitly activated, validated **READY** Catalog revision is authoritative.
+Maintain the external Package Import path for offline/on-prem transfer.
+Existing read execution and read credentials remain strictly SELECT-only.
+Clinical Insert requires a new scoped, default-disabled write path plus
+separate clinical, security and DEMIS site approval.
 
 See [Integrated DQA Platform Architecture](docs/integrated-platform-architecture.md).
 
@@ -35,9 +47,10 @@ See [Integrated DQA Platform Architecture](docs/integrated-platform-architecture
 
 - Backend: FastAPI / Python 3.11+ / SQLAlchemy / Pydantic
 - Frontend: React / TypeScript / Vite
-- DQA DB: PostgreSQL
-- LLM: OpenAI-compatible provider abstraction
-- DEMIS connectivity: dedicated read-only DB adapter
+- DQA DB: PostgreSQL + pgvector
+- LLM/Embedding: OpenAI-compatible provider abstraction / ModelOps Gateway configuration
+- DEMIS connectivity: dedicated Oracle read-only DB adapter (implemented);
+  Inspector metadata-only and controlled write adapters are future components
 - Deployment target: Docker Compose internal/on-premise (LAN frontend; Traefik optional)
 
 ## Repository layout
@@ -71,16 +84,21 @@ dqa/
 The current implementation includes Catalog management, approved Query Template
 workflow, LLM-assisted recommendation/parameter extraction, deterministic
 preview, audited read-only execution, Data Discovery (Schema Search / Schema
-Explorer / Index Status), Query Assistant UI, and an optional internal MCP
-Streamable HTTP foundation (Phase 28-A; no Discovery/Query tools yet).
+Explorer / Index Status), Query Assistant UI and internal Streamable HTTP MCP
+Tools: `dqa.mcp_ready`, `demis.search_schema`, `demis.describe_resource`,
+`demis.prepare_query`, `demis.execute_query`. The execution Tool requires
+an explicit feature gate and production identity/ingress is **not** configured.
+The Schema Inspector, business Capability Registry, operational external MCP
+and clinical Insert tools are **planned, not implemented**.
 
 ## Key safety rule
 
 The LLM may interpret intent, recommend an approved Query Template, and extract parameters.
 
-It must not directly generate arbitrary SQL and execute it.
+It must not directly generate arbitrary SQL and execute it. The read
+connection must never gain write rights.
 
-Allowed path:
+**Current approved read path:**
 
 ```text
 Natural language
@@ -129,7 +147,9 @@ migration caveats, and outstanding production prerequisites. Oracle thin-mode
 read-only execution is implemented, but real DEMIS use still depends on an
 approved production IdentityProvider, operator network/credential wiring,
 read-only privilege validation, approved TLS termination, and retention/storage
-policy decisions.
+policy decisions. **The real-DEMIS onboarding runbook certifies only the
+current read path.** No real clinical Insert is permitted without a distinct
+institutionally approved write runbook and acceptance.
 
 Do not treat repository capability or Oracle mock E2E success as readiness for
 real DEMIS clinical use. See
