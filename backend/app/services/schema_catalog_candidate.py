@@ -61,12 +61,26 @@ def _physical_payload(snapshot: SchemaSnapshot) -> dict[str, Any]:
             snapshot.unique_constraints,
             key=lambda x: (x.schema_name, x.table_name, x.constraint_name, x.ordinal_position),
         ),
-        "foreign_keys": _sort_and_dump(
-            snapshot.foreign_keys,
-            key=lambda x: (x.schema_name, x.source_table, x.constraint_name),
-        ),
+        "foreign_keys": [
+            {
+                **row,
+                "columns": tuple(sorted(
+                    row["columns"], key=lambda c: c["ordinal_position"]
+                )),
+            }
+            for row in _sort_and_dump(
+                snapshot.foreign_keys,
+                key=lambda x: (x.schema_name, x.source_table, x.constraint_name),
+            )
+        ],
         "indexes": [
-            {**row, "index_definition": None}
+            {
+                **row,
+                "index_definition": None,
+                "columns": tuple(sorted(
+                    row["columns"], key=lambda c: c["ordinal_position"]
+                )),
+            }
             for row in _sort_and_dump(
                 snapshot.indexes,
                 key=lambda x: (x.schema_name, x.table_name, x.index_name),
