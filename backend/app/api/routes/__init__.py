@@ -16,6 +16,7 @@ from app.api.routes import (
     query_executions,
     query_templates,
     recommendations,
+    schema_inspector,
 )
 
 api_router = APIRouter()
@@ -33,4 +34,5 @@ api_router.include_router(recommendations.router)
 api_router.include_router(parameter_extraction.router)
 api_router.include_router(query_executions.router)
 api_router.include_router(connection_profiles.router)
+api_router.include_router(schema_inspector.router)
 api_router.include_router(audit_events.router)
