@@ -14,6 +14,7 @@ from sqlalchemy.engine import URL
 from sqlalchemy.pool import NullPool
 
 from app.adapters.demis.env_credentials import EnvironmentCredentialResolver
+from app.adapters.schema_inspector.base import SchemaSnapshot
 from app.adapters.schema_inspector.oracle import OracleSchemaInspector, SYSTEM_SCHEMAS
 from app.core.config import Settings
 from app.schemas.schema_inspector import SchemaInspectionSummary
@@ -85,7 +86,15 @@ def _target_from_settings(settings: Settings) -> _InspectorTarget:
     )
 
 
-def inspect_configured_schema(settings: Settings) -> SchemaInspectionSummary:
+@dataclass(frozen=True)
+class CollectedSchemaSnapshot:
+    """Configured source identity paired with inspected physical metadata."""
+
+    source_name: str
+    snapshot: SchemaSnapshot
+
+
+def collect_configured_schema_snapshot(settings: Settings) -> CollectedSchemaSnapshot:
     """Collect a non-persistent metadata Snapshot from one allowlisted schema.
 
     Only call from an authorized admin route. An active Catalog revision can
@@ -131,8 +140,18 @@ def inspect_configured_schema(settings: Settings) -> SchemaInspectionSummary:
         if engine is not None:
             engine.dispose()
 
-    return SchemaInspectionSummary(
+    return CollectedSchemaSnapshot(
         source_name=target.source_name,
+        snapshot=snapshot,
+    )
+
+
+def inspect_configured_schema(settings: Settings) -> SchemaInspectionSummary:
+    """Return aggregate-only metadata without persistence (legacy behavior)."""
+    collected = collect_configured_schema_snapshot(settings)
+    snapshot = collected.snapshot
+    return SchemaInspectionSummary(
+        source_name=collected.source_name,
         schema_name=snapshot.schema_name,
         table_count=len(snapshot.tables),
         column_count=len(snapshot.columns),
