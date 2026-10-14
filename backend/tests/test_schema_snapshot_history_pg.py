@@ -40,9 +40,9 @@ if os.environ.get("DQA_PR73_ISOLATED_PG") != "1":
 def factory():
     settings = get_settings()
     if (
-        not settings.db_name.startswith("dqa_snapshot_pr73_")
-        or settings.db_host != "127.0.0.1"
-        or settings.db_port <= 1024
+        not settings.dqa_db_name.startswith("dqa_snapshot_pr73_")
+        or settings.dqa_db_host != "127.0.0.1"
+        or settings.dqa_db_port <= 1024
     ):
         pytest.fail("refusing to run Snapshot history PG tests outside disposable loopback DB")
     engine = create_engine(
@@ -52,7 +52,7 @@ def factory():
     )
     try:
         with engine.connect() as conn:
-            assert conn.scalar(text("select current_database()")) == settings.db_name
+            assert conn.scalar(text("select current_database()")) == settings.dqa_db_name
             assert conn.scalar(text("select to_regclass('public.schema_snapshot_revisions')"))
         yield sessionmaker(bind=engine, expire_on_commit=False, future=True)
     finally:
