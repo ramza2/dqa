@@ -12,10 +12,14 @@ from app.models.schema_snapshot_revision import SchemaSnapshotRevision
 from app.schemas.schema_snapshot_history import (
     SchemaSnapshotRevisionDetail,
     SchemaSnapshotRevisionSummary,
+    SchemaSnapshotReviewPreview,
 )
 from app.services.schema_snapshot_history import (
     get_snapshot_revision,
     list_snapshot_revisions,
+)
+from app.services.schema_snapshot_review import (
+    SnapshotReviewError, preview_snapshot_review,
 )
 
 router = APIRouter(
@@ -55,6 +59,51 @@ def list_snapshots(
             session, source_name=source_name, limit=limit, offset=offset,
         )
     ]
+
+
+@router.get("/{revision_id}/review", response_model=SchemaSnapshotReviewPreview)
+def get_snapshot_review_preview(
+    revision_id: int,
+    source_name: str = Query(
+        min_length=1, max_length=255,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$",
+    ),
+    session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
+) -> SchemaSnapshotReviewPreview:
+    """Read-only Snapshot and offline v2 WARNING candidate checks.
+
+    This does not constitute independent preflight, review approval or READY.
+    """
+    try:
+        result = preview_snapshot_review(
+            session, source_name=source_name, revision_id=revision_id,
+        )
+    except SnapshotReviewError as exc:
+        if exc.code == "SNAPSHOT_REVISION_NOT_FOUND":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "code": "SNAPSHOT_REVISION_NOT_FOUND",
+                    "message": "snapshot revision not found",
+                },
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "SNAPSHOT_REVIEW_UNVERIFIABLE",
+                "message": "snapshot review preview cannot be verified",
+            },
+        ) from None
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "SNAPSHOT_REVIEW_FAILED",
+                "message": "snapshot review preview failed",
+            },
+        ) from None
+    return SchemaSnapshotReviewPreview(**result.__dict__)
 
 
 @router.get("/{revision_id}", response_model=SchemaSnapshotRevisionDetail)
