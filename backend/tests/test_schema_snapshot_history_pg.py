@@ -332,3 +332,146 @@ def test_pg_capture_http_commits_idempotent_replay_and_diff(factory, monkeypatch
         get_settings.cache_clear()
         get_engine.cache_clear()
         get_session_factory.cache_clear()
+
+
+def test_pg_change_review_event_http_cas_idempotency_and_catalog_isolation(
+    factory, monkeypatch,
+):
+    """S-04-C-2B-1: real PostgreSQL journal and protected HTTP endpoints."""
+    from app.adapters.db.session import get_engine, get_session_factory
+    from app.main import create_app
+    from app.models.schema_snapshot_review_event import SchemaSnapshotReviewEvent
+
+    source = "review_pg_" + uuid4().hex[:10]
+    with factory() as db:
+        snap = _append(db, source).revision
+        rid, fp = snap.id, snap.schema_fingerprint
+        db.commit()
+
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DQA_AUTH_PROVIDER", "dev_headers")
+    monkeypatch.setenv("DQA_SCHEMA_SNAPSHOT_REVIEW_ENABLED", "true")
+    get_settings.cache_clear()
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
+
+    admin = {
+        "X-DQA-Dev-Actor": "review-pg-admin",
+        "X-DQA-Dev-Roles": "administrator",
+    }
+    viewer = {
+        "X-DQA-Dev-Actor": "review-pg-viewer",
+        "X-DQA-Dev-Roles": "viewer",
+    }
+    params = {"source_name": source}
+    path = f"/api/v1/schema-inspector/snapshots/{rid}/reviews"
+    req_uuid = str(uuid4())
+    body = {
+        "review_request_id": req_uuid,
+        "expected_schema_fingerprint": fp,
+        "expected_previous_review_event_id": None,
+        "decision": "ACKNOWLEDGED",
+        "reason_code": "REVIEWED_CHANGES",
+    }
+    try:
+        with TestClient(create_app(check_migrations_on_startup=True)) as http:
+            assert http.post(path, params=params, json=body).status_code == 401
+            assert http.post(
+                path, params=params, json=body, headers=viewer,
+            ).status_code == 403
+
+            first = http.post(path, params=params, json=body, headers=admin)
+            assert first.status_code == 200, first.text
+            row = first.json()
+            assert row["created"] is True
+            assert row["reviewed_by"] == "review-pg-admin"
+            assert row["independent_preflight_verified"] is False
+            assert row["catalog_ready"] is False
+            assert row["catalog_activated"] is False
+            event_id = row["id"]
+            with factory() as db:
+                assert db.get(SchemaSnapshotReviewEvent, event_id) is not None
+
+            replay = http.post(path, params=params, json=body, headers=admin)
+            assert replay.status_code == 200, replay.text
+            assert replay.json()["created"] is False
+            assert replay.json()["id"] == event_id
+
+            conflict = http.post(
+                path, params=params,
+                json={**body, "decision": "CHANGES_REQUESTED",
+                      "reason_code": "RECHECK_REQUIRED"},
+                headers=admin,
+            )
+            assert conflict.status_code == 409
+            assert conflict.json()["detail"]["code"] == "REVIEW_REQUEST_REUSED"
+
+            stale = http.post(
+                path, params=params,
+                json={**body, "review_request_id": str(uuid4())},
+                headers=admin,
+            )
+            assert stale.status_code == 409
+            assert stale.json()["detail"]["code"] == "STALE_REVIEW_EVENT"
+
+            second = http.post(
+                path, params=params,
+                json={
+                    **body,
+                    "review_request_id": str(uuid4()),
+                    "expected_previous_review_event_id": event_id,
+                    "decision": "CHANGES_REQUESTED",
+                    "reason_code": "SCOPE_UNCLEAR",
+                },
+                headers=admin,
+            )
+            assert second.status_code == 200, second.text
+            assert second.json()["previous_review_event_id"] == event_id
+
+            history = http.get(path, params=params, headers=viewer)
+            assert history.status_code == 200, history.text
+            assert [x["id"] for x in history.json()] == [
+                second.json()["id"], event_id,
+            ]
+            assert "review_request_id" not in history.text
+
+            assert http.get(
+                path, params={"source_name": "another_source"},
+                headers=viewer,
+            ).status_code == 404
+
+            with factory() as db:
+                later = _append(db, source, expected=rid).revision
+                assert later.id != rid
+                db.commit()
+
+            old_review = http.post(
+                path, params=params,
+                json={
+                    **body,
+                    "review_request_id": str(uuid4()),
+                    "expected_previous_review_event_id": second.json()["id"],
+                },
+                headers=admin,
+            )
+            assert old_review.status_code == 409, old_review.text
+            assert old_review.json()["detail"]["code"] == "STALE_SNAPSHOT_REVISION"
+
+            # Exactly two immutable events; no Catalog import / pointer changes.
+            with factory() as db:
+                count = db.scalar(
+                    select(SchemaSnapshotReviewEvent)
+                    .where(SchemaSnapshotReviewEvent.source_name == source)
+                    .order_by(SchemaSnapshotReviewEvent.id.desc()).limit(1)
+                )
+                assert count.id == second.json()["id"]
+                assert db.scalar(text(
+                    "select count(*) from catalog_active_revisions"
+                )) == 0
+                assert db.scalar(text(
+                    "select count(*) from catalog_import_revisions"
+                )) == 0
+    finally:
+        get_settings.cache_clear()
+        get_engine.cache_clear()
+        get_session_factory.cache_clear()
