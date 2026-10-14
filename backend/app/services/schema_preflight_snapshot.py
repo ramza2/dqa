@@ -45,9 +45,14 @@ def check_stored_snapshot_preflight_contract(
     """
     # Preview enforces immutable target/fingerprint/counts/diff integrity and
     # validates the offline Catalog v2 WARNING candidate, without writing.
-    preview = preview_snapshot_review(
-        session, source_name=source_name, revision_id=revision_id,
-    )
+    try:
+        preview = preview_snapshot_review(
+            session, source_name=source_name, revision_id=revision_id,
+        )
+    except SnapshotReviewError:
+        raise
+    except Exception:
+        raise SnapshotReviewError("SNAPSHOT_PREFLIGHT_CONTEXT_UNAVAILABLE") from None
     if not preview.is_latest:
         return PreflightContractResult(
             reason_code="SUPERSEDED_SNAPSHOT", structural_match=False,
