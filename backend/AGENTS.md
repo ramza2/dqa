@@ -31,8 +31,11 @@ backend/
       catalog/
       connection_profile/
       db/
-      demis/          # read-only DEMIS boundary (Oracle thin adapter + contracts)
+      demis/          # existing read-only DEMIS boundary
       llm/
+    # Planned in later PRs (do not create prematurely):
+    # schema_inspector/   metadata-only Oracle inspection boundary
+    # controlled_write/   approved clinical Insert boundary
   tests/
 ```
 
@@ -49,15 +52,50 @@ fail-closed rules as Web APIs. Never trust caller-supplied `user_id` / `role` /
 
 ## Database access
 
-Live DEMIS access must only occur through a dedicated read-only DB adapter
-(`app/adapters/demis`).
+**Existing DEMIS query execution stays read-only** through
+`app/adapters/demis`. The current `OracleReadOnlyDemisAdapter`, read
+Connection Profile/credentials, validator, preview, query/MCP execute endpoints
+and tokens **must not** gain write capability.
+
+A **future metadata-only Schema Inspector** may query approved Oracle
+`ALL_*` catalog views only, using a separately constrained metadata
+credential/profile and read-only sessions. It must not read patient rows,
+perform DML/DDL, or infer capabilities beyond the active Catalog. Metadata
+inspection is triggered explicitly by authorized admin action, not inline
+with general query execution. Schema Snapshot → v2 Package validation →
+immutable revision import → explicit READY activation is the reuse path.
+No production inspection connection in this documentation-only PR.
+
+A **future Controlled Write subsystem** is architecturally separate from both
+the metadata inspector and read adapter. Only hospital/DEMIS-approved clinical
+record Insert operations are in prospective scope. No generic SQL/CRUD and no
+runtime write access until a separate reviewed implementation with institution
+signoff, documented operation/field mapping, dedicated least-privilege
+identity/secret, clinical approval-verification contract, complete testing
+and default-disabled feature flag.
+
+SNUH.AI/authorized clinical Workflow owns the **single clinician UI**, the
+review/edit/approve-or-reject decision and the original approval audit.
+DQA provides no duplicate clinician approval UI/HITL. A later write commit
+must verify approval via an authenticated authoritative service lookup or
+verifiable signed evidence for the *exact* document version/digest,
+patient/Encounter, approver rights, operation and expiration/revocation.
+Never accept caller-set `approved=true` or actor identity headers as proof.
+DQA stores minimal write-execution audit/correlation IDs (not record bodies),
+reuses neither read tokens nor read grants, and prevents duplicate inserts
+through a durable idempotency/status/reconciliation design. Unknown commit
+outcomes are reconciled, not blindly retried.
 
 Never execute raw user-provided SQL.
 
 Use bound parameters only.
 Do not create SQL with user-value string concatenation.
 
-All executable Query Templates must pass a centralized safety validator before reaching the adapter.
+All executable **read Query Templates** must pass the centralized SELECT-only
+safety validator before reaching the read adapter. A future approved write
+operation uses a separately defined typed operation registry and bound
+parameters/official storage API, **never a Query Template exemption or
+a bypass of the SELECT-only safety validator**.
 
 Do not reuse the DQA PostgreSQL/`psycopg` stack as the DEMIS adapter.
 Fake/test adapters are for tests only and must not be production-selectable.
@@ -100,13 +138,21 @@ Production FastAPI docs (`/docs`, `/redoc`, `/openapi.json`) are disabled when
 
 ## Catalog Package
 
-Treat imported Catalog Package data and live DEMIS connectivity as separate concerns.
+Treat validated Catalog Package data and live DEMIS connectivity as separate
+concerns. The **existing external package upload** and proposed internal
+metadata-generated package share the same v2 manifest/checksum/schema
+validation, import and activation lifecycle.
 
 Package validation/import code must not require a live DEMIS DB connection.
+The planned Inspector may connect only to retrieve metadata and produce a
+candidate Snapshot/Package. Collection never auto-activates a revision or
+makes unsafe data executable.
 
 Imported package revisions must be immutable after successful import.
-
-Activation should point to an imported revision rather than mutate it.
+Only READY revisions may be activated through the existing authorized
+activation path; preserve earlier active revision when collection/indexing
+fails. Never copy the PoC Catalog DB/secret storage or v1 package writer
+into DQA as an alternative source of truth.
 
 ## LLM
 

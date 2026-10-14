@@ -4,31 +4,62 @@
 
 ## 1. Purpose
 
-DEMIS Query Assistant is a separate application from DEMIS Schema Analyzer.
+DQA is the **target single deployable DEMIS Schema Intelligence, Data Access and
+MCP Tool Platform**. The independent `demis-schema-search-poc` is a reference
+implementation and temporary parity baseline, **not a final production dependency**.
 
-DEMIS Schema Analyzer produces a validated Catalog Package.
-DQA consumes that package and provides safe catalog exploration, approved Query Template discovery, parameter extraction, read-only execution, result review, and auditability.
+**Currently implemented:** DQA consumes validated Catalog Package v2, supports
+Catalog/Data Discovery and approved Query Template **read-only** DEMIS execution,
+and has an internally restricted MCP surface. The independent Schema Analyzer
+still performs schema inspection in the existing deployment.
 
-This repository must not duplicate Schema Analyzer crawling or metadata-inspection functions.
+**Planned in separately reviewed implementation PRs:** an internal Oracle
+**metadata-only Schema Inspector**; Catalog snapshot/package generation and
+diff/activation integration; approved client-facing DEMIS MCP/REST operations;
+a **separate, default-disabled controlled clinical Insert** path subject to
+institutional approvals. Do not represent planned features as implemented.
+
+See `docs/integrated-platform-architecture.md` and `docs/roadmap.md`.
+The single-clinician-UI/approval-verification clarification is in PR #66
+until that PR is merged; avoid depending on unmerged changes as runtime policy.
 
 ## 2. Core boundary
 
-Producer:
-- DEMIS Schema Analyzer
+Target responsibilities within DQA (separate service/adapter boundaries):
+- **Schema Inspector:** explicit, authorized read-only Oracle *metadata* queries;
+  no clinical/business-row retrieval, no changes to DEMIS, no arbitrary SQL.
+- **Catalog ingestion:** validates internally generated or externally supplied
+  Catalog Package v2 using the **same** established schema/manifest checks.
+  Import persists immutable revisions; activation is explicit and READY-only.
+- **Read Query Core:** approved + enabled Query Templates, read-only connection
+  and SQL-safety gates, bounded execution with durable audit. Current adapter
+  remains strictly SELECT-only.
+- **Future Controlled Write Core:** distinct operation registry, write credentials,
+  clinical approval evidence verification, idempotency and execution audit;
+  **not implemented and not permitted by these documentation edits**.
+- **External orchestration:** SNUH.AI clinician UI/workflow; the FHIR service
+  standardizes DEMIS/PACS/other sources. DQA does not replace the clinician UI
+  or implement its own clinical approval/rejection screen.
 
-Consumer:
-- DEMIS Query Assistant
+Supported Catalog Package:
+- `package_format: demis-catalog-package`
+- `package_version: 2.x`
 
-Primary input:
-- finalized DEMIS Catalog Package v2
-- package_format: `demis-catalog-package`
-- package_version: `2.x`
+Do not copy the PoC's database, secret persistence, Streamlit UI or its v1
+package writer into DQA wholesale. Reuse only reviewed metadata inspection
+logic and generate **v2-compatible** packages via the DQA validation path.
+Keep the existing external Package Import path available for offline transfer,
+backup/recovery and compatibility.
 
 Do not hard-code mock DEMIS schema knowledge into production logic.
 The current Oracle mock schema is development/test data only.
 
 ## 3. Source of truth
 
+The **active, validated, immutable Catalog revision** remains authoritative
+for runtime discovery and read execution even after DQA gains direct inspection.
+A newly collected Snapshot is **not** execution authority until it passes the
+same v2 validation, is persisted as a new revision and explicitly activated.
 The activated Catalog Package is authoritative for:
 - schema
 - tables
@@ -70,23 +101,39 @@ Never silently repair, rewrite, or partially accept a corrupt package.
 
 ## 5. Query execution safety
 
-The application is read-only.
+**Current runtime is strictly read-only.** Existing query APIs/MCP Tools,
+`OracleReadOnlyDemisAdapter`, approved Query Templates, SQL Safety Validator,
+and Oracle read account must **never** execute writes.
 
-Never implement executable:
-- INSERT
-- UPDATE
-- DELETE
-- MERGE
-- UPSERT
-- CREATE
-- ALTER
-- DROP
-- TRUNCATE
-- GRANT
-- REVOKE
-- procedural/anonymous blocks
-- arbitrary DDL/DML
+For the current execution path, reject executable:
+- INSERT / UPDATE / DELETE / MERGE / UPSERT
+- CREATE / ALTER / DROP / TRUNCATE / GRANT / REVOKE
+- procedural/anonymous blocks and arbitrary DDL/DML
 - multi-statement execution
+
+**Future exception is a new, separate Controlled Write subsystem only**
+(and not an exception to read-path checks): it may eventually support
+**specifically approved clinical-record Insert operations** only, using the
+site-authorized official storage API/procedure when available or a specifically
+authorized narrow DB Insert mechanism. It is **not allowed to execute now**.
+No user/LLM-authored SQL, generic Insert/CRUD, UPDATE/DELETE/MERGE, or clinical
+auto-approval is permitted. Do not implement the new subsystem until the
+operation/field scope, hospital approvals, integration method, DB privileges,
+approved design, security tests and explicit implementation PR are in place.
+
+The clinical reviewer approves **once** through SNUH.AI or the military's
+approved workflow. DQA must *independently verify* authenticated approval
+evidence bound to the exact document hash/version, patient/Encounter, approver
+authority, operation, expiration/revocation and trusted source immediately
+before commit. DQA has **no clinician approval UI**; automatic verification
+is not a second approval. Approval-original audit belongs to the approval
+system; DQA stores minimal write/execution audit and correlation IDs.
+
+Write preparation must never modify DEMIS. Write commit, if later authorized,
+requires a distinct write permission, secret/adapter, allowlisted operation,
+fail-closed audit, idempotency, durable result status and reconciliation of
+ambiguous commits **before** any replay. Disable all write capabilities by
+default; use synthetic/mock data for development until separate site signoff.
 
 The LLM must never directly generate SQL that is immediately executed.
 
@@ -103,7 +150,11 @@ Natural language request
 -> result handling
 -> audit log
 
-Executable SQL must originate from an APPROVED and ENABLED Query Template.
+**Existing read-path executable SQL** must originate from an APPROVED and
+ENABLED Query Template; the Structured Dynamic Query compiler remains
+preview-only until a separate reviewed read-execution safety gate.
+Future Controlled Write operations do **not** use read Query Templates,
+read execution tokens or caller-supplied SQL.
 
 Defense in depth:
 - read-only DEMIS account
@@ -206,7 +257,9 @@ API
 Rules:
 - keep FastAPI routes thin
 - keep SQL safety logic outside route handlers
-- keep DEMIS DB access behind a dedicated read-only adapter
+- keep existing DEMIS **read execution** behind its dedicated read-only adapter;
+  introduce any future authorized metadata-only Inspector and Controlled Write
+  adapter through separately gated services, accounts and audit policies
 - keep Catalog Package parsing independent of live DB connectivity
 - keep LLM provider access behind an interface
 - keep import/activation separate from query runtime
@@ -287,9 +340,15 @@ Package import tests must verify checksums and reject tampered files.
 
 Do not claim work complete based on static inspection only.
 
-## 14. Initial implementation order
+## 14. Implementation sequence
 
-Unless explicitly changed, implement in this order:
+The items below are **historical bootstrap order**, not the current
+post-Phase-29 task list. Current priority and gates are maintained in
+`docs/roadmap.md` (U-03 → U-02/S-01 Inspector → parity → read/MCP ICD →
+controlled-write planning/acceptance). Do not interpret this historical list
+as authorization to skip gates.
+
+Historical implementation order:
 
 1. bootstrap/project structure
 2. Catalog Package v2 import and validation
