@@ -32,7 +32,7 @@ class SchemaSnapshotRevisionDetail(SchemaSnapshotRevisionSummary):
 class SchemaSnapshotCaptureRequest(BaseModel):
     """Explicit CAS + idempotency only. No source/schema/SQL/credentials."""
 
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid")
 
     capture_request_id: UUID
     expected_previous_revision_id: int | None = Field(..., ge=1)
