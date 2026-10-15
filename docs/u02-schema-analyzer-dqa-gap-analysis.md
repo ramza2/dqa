@@ -4,11 +4,13 @@
 > 이 문서는 최종 DEMIS 통합 범위·기관 승인이나 실스키마 분석이 아니다.
 > **문서 전용 PR**이며 Backend/Frontend/DB/배포 동작을 변경하지 않는다.
 
+> **2026-10-15 U-02-C 진행 현황:** 최초 작성 후 U-02-A (#82), U-02-B-1 (#83), U-02-B-2-A (#84), U-02-B-2-B (#85)의 **합성/격리 테스트가 main에 병합되어 검증됨**. 이는 실제 DEMIS parity·의료 운영 승인/전체 레거시 데이터 이관 검증을 의미하지 않는다. **U-02-C-1(전체 Legacy ORM 17개 대상 정적 분류/이관 계획)은 [별도 Cutover 문서](u02-c-cutover-plan.md)와 [기계 검증 인벤토리](u02-c-legacy-cutover-inventory.json)에서 관리한다.** 원본 U-02 기능별 Gap 표의 'parity 미검증' 등 표기는 *2026-10-14 분석 시점 상태*이다.
+
 ## 1. 비교 기준과 목표
 
 | 대상 | 고정 기준선 | 분석 대상 |
 |---|---|---|
-| Legacy Analyzer | [`ramza2/demis-schema-search-poc@c9b88f6`](https://github.com/ramza2/demis-schema-search-poc/tree/c9b88f6d6d14dc2598765efbf6bb41b4771f9b25) (2026-09-21) | Streamlit·FastAPI, Target/Preflight, Schema Analyzer, Catalog Writer, v1/v2 Export, ERD/Report, Search/Embedding |
+| Legacy Analyzer | [`ramza2/demis-schema-search-poc@c9b88f6`](https://github.com/ramza2/demis-schema-search-poc/tree/c9b88f6f6d14dc2598765efbf6bb41b4771f9b25) (2026-09-21) | Streamlit·FastAPI, Target/Preflight, Schema Analyzer, Catalog Writer, v1/v2 Export, ERD/Report, Search/Embedding |
 | DQA | [`ramza2/dqa@0d72e05`](https://github.com/ramza2/dqa/tree/0d72e051f47e8fce9974aaba76abf1f761e1dbbf) (2026-10-14) | Oracle metadata-only Inspector, append-only Snapshot, offline v2 `WARNING` candidate, 활성 Catalog, Data Discovery, Web |
 | 목표 규격 | [DQA Unified Platform WBS](roadmap.md) / [통합 아키텍처](integrated-platform-architecture.md) | **최종 단일 DQA**, 기존 독립 Analyzer 런타임 의존성 제거, 권한·감사·READY 활성화 경계 유지 |
 
@@ -109,12 +111,12 @@ Legacy DOCX 보고서는 기존 데이터 모델과 밀접하게 연결되어 �
 ## 5. 근거 코드 / 참조 (고정 커밋)
 
 Legacy 기준선:
-- [Oracle metadata collector](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6d6d14dc2598765efbf6bb41b4771f9b25/backend/app/analyzers/oracle.py)
-- [Target management](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6d6d14dc2598765efbf6bb41b4771f9b25/backend/app/services/target_service.py)
-- [Preflight](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6d6d14dc2598765efbf6bb41b4771f9b25/backend/app/services/preflight_service.py)
-- [Snapshot Diff](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6d6d14dc2598765efbf6bb41b4771f9b25/backend/app/services/schema_diff_service.py)
-- [Catalog v2 finalizer](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6d6d14dc2598765efbf6bb41b4771f9b25/backend/app/services/catalog_package_finalizer.py)
-- [ERD API](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6d6d14dc2598765efbf6bb41b4771f9b25/backend/app/api/erd.py) / [DOCX report](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6d6d14dc2598765efbf6bb41b4771f9b25/backend/app/services/catalog_report.py)
+- [Oracle metadata collector](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6f6d14dc2598765efbf6bb41b4771f9b25/backend/app/analyzers/oracle.py)
+- [Target management](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6f6d14dc2598765efbf6bb41b4771f9b25/backend/app/services/target_service.py)
+- [Preflight](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6f6d14dc2598765efbf6bb41b4771f9b25/backend/app/services/preflight_service.py)
+- [Snapshot Diff](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6f6d14dc2598765efbf6bb41b4771f9b25/backend/app/services/schema_diff_service.py)
+- [Catalog v2 finalizer](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6f6d14dc2598765efbf6bb41b4771f9b25/backend/app/services/catalog_package_finalizer.py)
+- [ERD API](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6f6d14dc2598765efbf6bb41b4771f9b25/backend/app/api/erd.py) / [DOCX report](https://github.com/ramza2/demis-schema-search-poc/blob/c9b88f6f6d14dc2598765efbf6bb41b4771f9b25/backend/app/services/catalog_report.py)
 
 DQA 기준선:
 - [Inspector](https://github.com/ramza2/dqa/blob/0d72e051f47e8fce9974aaba76abf1f761e1dbbf/backend/app/adapters/schema_inspector/oracle.py) / [read-only target binding](https://github.com/ramza2/dqa/blob/0d72e051f47e8fce9974aaba76abf1f761e1dbbf/backend/app/services/schema_inspection.py)
