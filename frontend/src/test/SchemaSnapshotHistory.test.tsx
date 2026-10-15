@@ -179,6 +179,21 @@ describe("S-05-A Snapshot read-only UI", () => {
     restore();
   });
 
+  it("shows a CATALOG_READ authorization error without Snapshot rows", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(responses({
+      onList: () => jsonResponse({
+        detail: { code: "FORBIDDEN", message: "CATALOG_READ required" },
+      }, 403),
+    }));
+    render(<SchemaSnapshotHistory />);
+    await enterSource(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 403");
+    expect(screen.getByRole("alert")).toHaveTextContent("FORBIDDEN");
+    expect(screen.queryByRole("button", { name: "Snapshot 10 상세 보기" })).not.toBeInTheDocument();
+    restore();
+  });
+
   it("rejects invalid Source input before issuing a Snapshot request", () => {
     const restore = installFetchMock(responses());
     render(<SchemaSnapshotHistory />);
