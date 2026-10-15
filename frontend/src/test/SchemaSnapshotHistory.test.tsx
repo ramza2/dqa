@@ -72,6 +72,7 @@ function responses(options: {
       if (suffix === "/10/reviews") return jsonResponse([event]);
       return jsonResponse({ detail: { code: "NOT_FOUND", message: "not found" } }, 404);
     },
+    (url) => url.pathname === "/api/v1/catalog/activations" ? jsonResponse([]) : null,
     ...defaultCatalogHandlers(),
   ];
 }

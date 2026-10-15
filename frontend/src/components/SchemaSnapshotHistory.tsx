@@ -4,6 +4,7 @@ import {
   listSnapshotHistory, listSnapshotReviewEvents,
 } from "../api/schemaSnapshot";
 import { CatalogApiError } from "../types/catalog";
+import { SnapshotCatalogContext } from "./SnapshotCatalogContext";
 import type {
   SnapshotDetail, SnapshotReviewEvent, SnapshotReviewPreview, SnapshotSummary,
 } from "../types/schemaSnapshot";
@@ -190,6 +191,13 @@ export function SchemaSnapshotHistory() {
       </form>
 
       {status(history, "Snapshot 이력")}
+      {history.status === "ready" && history.data && source ? (
+        <SnapshotCatalogContext
+          key={source + ":" + offset}
+          sourceName={source}
+          snapshot={selection ?? (offset === 0 ? history.data[0] ?? null : null)}
+        />
+      ) : null}
       {history.status === "ready" && history.data?.length === 0 ? (
         <p className="dd-guidance">이 Source에 저장된 Snapshot이 없습니다.</p>
       ) : null}

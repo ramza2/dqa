@@ -11,6 +11,14 @@ export interface CatalogActiveSummary {
   activated_at: string;
 }
 
+/** Append-only active Catalog pointer history; NOT Snapshot revision history. */
+export interface CatalogActivationEventSummary {
+  source_name: string;
+  previous_revision_id: number | null;
+  activated_revision_id: number;
+  activated_at: string;
+}
+
 export interface CatalogQueryEnvelope<T> {
   source_name: string;
   revision_id: number;

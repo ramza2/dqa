@@ -1,6 +1,7 @@
 import { apiGet } from "./client";
 import type {
   CatalogActiveSummary,
+  CatalogActivationEventSummary,
   CatalogCategoryListResponse,
   CatalogColumnListResponse,
   CatalogIndexListResponse,
@@ -15,6 +16,16 @@ export function listActiveCatalogs(): Promise<CatalogActiveSummary[]> {
 
 export function getActiveCatalog(sourceName: string): Promise<CatalogActiveSummary> {
   return apiGet<CatalogActiveSummary>(`/catalog/active/${encodeURIComponent(sourceName)}`);
+}
+
+/** Read-only append-only Catalog activation events, not Snapshot revisions. */
+export function listCatalogActivations(
+  sourceName: string,
+  limit = 10,
+): Promise<CatalogActivationEventSummary[]> {
+  return apiGet<CatalogActivationEventSummary[]>("/catalog/activations", {
+    source_name: sourceName, limit, offset: 0,
+  });
 }
 
 export function listTables(
