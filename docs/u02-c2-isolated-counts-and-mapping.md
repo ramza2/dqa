@@ -27,7 +27,7 @@
 
 - **임시 DB 관리자 계정**으로 합성 Fixture와 제한된 Reader Role을 만든다.
   **Collector는 관리자 Session을 전달받지 않으며**, 신규
-  `u02c2_reader`가 가진 `SELECT`만 사용한다. 읽기 전용 Transaction 및
+  `u02c2_reader`가 가진 `SELECT`만 사용한다. 일관된 `REPEATABLE READ` + 읽기 전용 Transaction 및
   `has_table_privilege(..., 'INSERT') = false`를 검사한다.
 - 허가된 두 합성 Source ID만 내부 함수 매개변수로 사용한다.
   17개 집계 대상과 SQL join 경로는 하드코딩된 안전 목록이며, 사용자 제공 SQL이나
