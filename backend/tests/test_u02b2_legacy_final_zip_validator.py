@@ -147,7 +147,10 @@ def test_legacy_keys_categories_and_composite_mapping_survive(warning_zip):
     assert checked.parsed_documents["indexes.json"]["indexes"][0]["columns"] == [
         "PATIENT_ID", "SITE_ID",
     ]
-    assert checked.parsed_documents["validation/preflight.json"]["connection"]["username_exported"] is False
+    preflight = checked.parsed_documents["validation/preflight.json"]
+    assert preflight["connection"]["current_user_exported"] is False
+    assert preflight["security"]["username_exported"] is False
+    assert preflight["security"]["connection_host_exported"] is False
     assert checked.parsed_documents["diff/latest.json"]["available"] is False
 
 
