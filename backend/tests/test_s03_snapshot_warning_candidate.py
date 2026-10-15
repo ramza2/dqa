@@ -4,7 +4,6 @@ No Oracle, network, real DEMIS, Catalog import/activation or write DB.
 """
 from __future__ import annotations
 
-from datetime import timezone
 from hashlib import sha256
 
 import pytest
@@ -68,15 +67,23 @@ def test_second_build_reuses_existing_snapshot_and_yields_identical_bytes(monkey
 def test_superseded_snapshot_fails_before_rebuilding_package(monkeypatch):
     db = _history(monkeypatch, with_second=True)
 
-    def must_not_build(*_args, **_kwargs):
-        pytest.fail("stale Snapshot must not be exported")
+    original_builder = review.build_catalog_v2_candidate
+    calls = 0
 
-    monkeypatch.setattr(review, "build_catalog_v2_candidate", must_not_build)
+    def preview_only(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            pytest.fail("superseded Snapshot must not create export ZIP")
+        return original_builder(*args, **kwargs)
+
+    monkeypatch.setattr(review, "build_catalog_v2_candidate", preview_only)
     with pytest.raises(SnapshotReviewError) as caught:
         review.build_latest_snapshot_warning_candidate(
             db, source_name=SOURCE, revision_id=1,
         )
     assert caught.value.code == "SNAPSHOT_CANDIDATE_SUPERSEDED"
+    assert calls == 1  # existing review preview verifies the v2 candidate
 
 
 @pytest.mark.parametrize("source,revision_id", [("wrong_source", 1), (SOURCE, 999)])
