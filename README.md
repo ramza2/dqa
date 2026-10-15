@@ -2,13 +2,18 @@
 
 DQA is the **target single deployable DEMIS Schema Intelligence, Data Access
 and MCP Tool Platform**. The separate `demis-schema-search-poc` site remains a
-development/parity reference until DQA's Inspector and Catalog pipeline are
-validated; it will not be a final production dependency.
+development/parity reference during the approved migration and acceptance
+process; it is **not** the final production dependency and must not be
+decommissioned before G1/G5 cutover approval.
 
-**Current implemented runtime:** validated Catalog Package v2 import, immutable
-Catalog revision/activation, Data Discovery, approved read-only Query Template
-execution and internal MCP Discovery/Template Query Tools. No DQA-native Oracle
-Schema Inspector, approved clinical Insert path or production-exposed MCP yet.
+**Implemented code / development-verified (not real DEMIS approved):**
+Catalog Package v2 import, immutable Catalog revision and explicit READY-only
+activation; Data Discovery; approved read-only Query Template execution;
+internal MCP Discovery/Template Query Tools; and a **default-disabled,
+admin-gated metadata-only Oracle Schema Inspector**, append-only Snapshot
+capture/history, diff/review and offline **WARNING-only** v2 candidate.
+End-to-end site-approved Snapshot→READY→activation, clinical Insert and
+production-exposed external MCP/FHIR/SNUH.AI integration are **not** complete.
 
 **Target integrated architecture** (future work, not deployed):
 
@@ -18,7 +23,9 @@ SNUH.AI clinician UI / Agent Workflow
 MedicalStandard FHIR Service ← PACS / other medical systems
   ↕ (FHIR data exchange; authorized MCP or internal REST)
 DQA (single deployable platform)
-  ├─ Schema Inspector → Catalog Snapshot v2 → validate/import/activate
+  ├─ metadata-only Inspector [code; default-disabled, production gated]
+  │    → Snapshot/review → WARNING candidate [code]
+  │    → independent Preflight/READY → import/activate [future gated link]
   ├─ Catalog/Data Discovery / Query Template / MCP & REST
   ├─ approved read-only DEMIS Adapter            [implemented]
   └─ controlled clinical Insert Adapter           [planned; disabled]
@@ -50,7 +57,8 @@ See [Integrated DQA Platform Architecture](docs/integrated-platform-architecture
 - DQA DB: PostgreSQL + pgvector
 - LLM/Embedding: OpenAI-compatible provider abstraction / ModelOps Gateway configuration
 - DEMIS connectivity: dedicated Oracle read-only DB adapter (implemented);
-  Inspector metadata-only and controlled write adapters are future components
+  Oracle metadata-only Inspector code (default-disabled / site approval pending);
+  controlled write adapter not implemented
 - Deployment target: Docker Compose internal/on-premise (LAN frontend; Traefik optional)
 
 ## Repository layout
@@ -88,8 +96,11 @@ Explorer / Index Status), Query Assistant UI and internal Streamable HTTP MCP
 Tools: `dqa.mcp_ready`, `demis.search_schema`, `demis.describe_resource`,
 `demis.prepare_query`, `demis.execute_query`. The execution Tool requires
 an explicit feature gate and production identity/ingress is **not** configured.
-The Schema Inspector, business Capability Registry, operational external MCP
-and clinical Insert tools are **planned, not implemented**.
+The Oracle metadata-only Inspector, Snapshot history/review and WARNING
+candidate are implemented **as gated components**; site-approved inspector
+activation, complete independent Preflight/READY integration, the business
+Capability Registry, operational external MCP and clinical Insert tools
+remain **planned or externally gated**.
 
 ## Key safety rule
 
@@ -117,15 +128,17 @@ Start here:
 
 1. [AGENTS.md](AGENTS.md)
 2. [Architecture](docs/architecture.md) (current implementation)
-3. [Integrated Platform Architecture](docs/integrated-platform-architecture.md) (target)
+3. [Integrated Platform Architecture](docs/integrated-platform-architecture.md) (target; approvals pending)
 4. [Catalog Package Contract](docs/catalog-package-contract.md)
 5. [Query Template Design](docs/query-template-design.md)
 6. [Security](docs/security.md)
 7. [Roadmap](docs/roadmap.md)
 8. [Runtime and Deployment](docs/runtime-and-deployment.md)
 9. [Real DEMIS Onboarding & Acceptance Runbook](docs/real-demis-onboarding.md)
-10. [Cursor Handoff Guide](docs/cursor-handoff.md)
-11. [Bootstrap Design Review](docs/design-review.md)
+10. [U-02 Development Verification & Cutover Handoff](docs/u02-integration-acceptance-handoff.md)
+11. [U-02 External Decision / Approval Register](docs/u02-external-decision-register.md)
+12. [Cursor Handoff Guide](docs/cursor-handoff.md)
+13. [Bootstrap Design Review](docs/design-review.md)
 
 ## On-prem deployment (foundation)
 
