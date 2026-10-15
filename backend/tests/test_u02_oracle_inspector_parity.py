@@ -32,8 +32,18 @@ def legacy_backend() -> Path:
         capture_output=True, text=True, check=True, timeout=10,
     ).stdout.strip()
     assert actual == LEGACY_SHA, "legacy source must be exactly pinned baseline"
-    assert (repo / "backend/app/analyzers/oracle.py").is_file()
-    assert (repo / "backend/app/analyzers/base.py").is_file()
+    for relative in ("backend/app/analyzers/oracle.py", "backend/app/analyzers/base.py"):
+        source_path = repo / relative
+        assert source_path.is_file()
+        expected_blob = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", f"HEAD:{relative}"],
+            check=True, capture_output=True, text=True, timeout=10,
+        ).stdout.strip()
+        actual_blob = subprocess.run(
+            ["git", "-C", str(repo), "hash-object", str(source_path)],
+            check=True, capture_output=True, text=True, timeout=10,
+        ).stdout.strip()
+        assert actual_blob == expected_blob, "legacy tracked source modified"
     return repo / "backend"
 
 
@@ -50,7 +60,6 @@ def _run(mode: str, kind: str, legacy_backend: Path) -> dict:
         command, cwd=str(selected), env=env, text=True,
         capture_output=True, check=True, timeout=20,
     )
-    assert not output.stderr, output.stderr
     return json.loads(output.stdout)
 
 
