@@ -5,7 +5,7 @@
 
 ## 비교 대상 (고정 커밋)
 
-- 원본: [`ramza2/demis-schema-search-poc@c9b88f6`](https://github.com/ramza2/demis-schema-search-poc/tree/c9b88f6d6d14dc2598765efbf6bb41b4771f9b25), `backend/app/analyzers/oracle.py` 및 `base.py`.
+- 원본: [`ramza2/demis-schema-search-poc@c9b88f6`](https://github.com/ramza2/demis-schema-search-poc/tree/c9b88f6f6d14dc2598765efbf6bb41b4771f9b25), `backend/app/analyzers/oracle.py` 및 `base.py`.
 - 대상: DQA `b5b3c08`에서 분기, `backend/app/adapters/schema_inspector/oracle.py` 및 `base.py`.
 - 독립 실행: `backend/tests/u02_oracle_parity_runner.py`는 외부 DB 드라이버를 생성하지 않는 합성 `FakeEngine`만 사용. `backend/tests/test_u02_oracle_inspector_parity.py`가 각각을 별도 Python subprocess (`PYTHONPATH` 격리)로 import/실행.
 - 원본 Checkout은 **정확한 commit SHA + Oracle collector/base 파일의 Git blob SHA**를 검증하여 오염된 working-tree를 판정에서 배제. DQA/PoC 소스를 복사하거나 `sys.modules`를 공유하지 않는다.
@@ -32,7 +32,7 @@ Legacy의 `list_schemas` mapping 수명 문제는 의도적 DQA 수정으로서
 ## 재현 및 오프라인 실행 조건
 
 1. 원본 저장소를 기존 구동 인스턴스와 **별도** 디렉터리에 가져와
-   `c9b88f6d6d14dc2598765efbf6bb41b4771f9b25`로 checkout한다.
+   `c9b88f6f6d14dc2598765efbf6bb41b4771f9b25`로 checkout한다.
    기존 PoC Docker·DB·파일을 변경하지 않는다.
 2. PR 테스트용 DQA detached worktree에서 환경변수
    `DQA_U02_LEGACY_ROOT`를 **원본 git root**로 지정하고

@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "scope": "source-code-only-plan; no actual Legacy DB rows read",
+  "cutover_status": "NOT_APPROVED",
+  "snapshot_utc_date": "2026-10-15",
+  "source_repository": "ramza2/demis-schema-search-poc",
+  "source_sha": "c9b88f6f6d14dc2598765efbf6bb41b4771f9b25",
+  "target_repository": "ramza2/dqa",
+  "target_base_sha": "ded1b320b69a8dc90e1b04d7c07670423fbb2e47",
+  "legacy_orm_inventory": [
+    {
+      "legacy_model": "CatalogSource",
+      "legacy_table": "catalog_source",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "reconfigure",
+      "destination": "Package manifest source identity plus separately approved DQA ConnectionProfile; never move host/username/encrypted_password/connection_options",
+      "target_table": "connection_profiles",
+      "acceptance": "Source name+DB/schema mapping with collision checks; no credential migration"
+    },
+    {
+      "legacy_model": "CatalogAnalysisRun",
+      "legacy_table": "catalog_analysis_run",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "archive_lineage",
+      "destination": "Immutable evidence archive of every original run; latest only can appear as analysis/latest_run.json in each v2 package",
+      "target_table": null,
+      "acceptance": "Preserve source_id/run_id/status/times/counts/hash crosswalk; never map legacy run_id to DQA revision_id"
+    },
+    {
+      "legacy_model": "CatalogAnalysisSnapshot",
+      "legacy_table": "catalog_analysis_snapshot",
+      "legacy_model_file": "backend/app/models/catalog_history.py",
+      "disposition": "archive_lineage",
+      "destination": "Preserve all run-bound physical snapshots as source evidence; do not insert directly into DQA schema_snapshot_revisions",
+      "target_table": null,
+      "acceptance": "Archive full history with privacy review; DQA capture_request_id/previous_revision_id cannot be invented"
+    },
+    {
+      "legacy_model": "CatalogTable",
+      "legacy_table": "catalog_table",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "package_physical",
+      "destination": "Validated v2 tables.json and immutable catalog_import_revisions JSON",
+      "target_table": "catalog_import_revisions",
+      "acceptance": "Use schema_name+table_name natural identity and package count parity"
+    },
+    {
+      "legacy_model": "CatalogColumn",
+      "legacy_table": "catalog_column",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "package_physical",
+      "destination": "Validated v2 columns.json and immutable catalog_import_revisions JSON",
+      "target_table": "catalog_import_revisions",
+      "acceptance": "Check ordinal, type, precision, nullable, comments; audit default SQL egress before package import"
+    },
+    {
+      "legacy_model": "CatalogKeyConstraint",
+      "legacy_table": "catalog_key_constraint",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "package_physical",
+      "destination": "tables.json[].key_constraints inside validated v2 package",
+      "target_table": "catalog_import_revisions",
+      "acceptance": "Preserve PK/UK type and composite ordering; never infer uniqueness from composite membership"
+    },
+    {
+      "legacy_model": "CatalogKeyConstraintColumn",
+      "legacy_table": "catalog_key_constraint_column",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "package_physical",
+      "destination": "tables.json[].key_constraints[].columns inside validated v2 package",
+      "target_table": "catalog_import_revisions",
+      "acceptance": "Verify ordinal→column name mapping and no dangling constraints"
+    },
+    {
+      "legacy_model": "CatalogRelation",
+      "legacy_table": "catalog_relation",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "package_physical",
+      "destination": "relations.json inside validated v2 package",
+      "target_table": "catalog_import_revisions",
+      "acceptance": "Verify source/target table and foreign-key identity; handle out-of-scope references explicitly"
+    },
+    {
+      "legacy_model": "CatalogRelationColumn",
+      "legacy_table": "catalog_relation_column",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "package_physical",
+      "destination": "relations.json[].column_mapping inside validated v2 package",
+      "target_table": "catalog_import_revisions",
+      "acceptance": "Verify ordered source_column→target_column composite mappings"
+    },
+    {
+      "legacy_model": "CatalogIndex",
+      "legacy_table": "catalog_index",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "package_physical",
+      "destination": "indexes.json inside validated v2 package",
+      "target_table": "catalog_import_revisions",
+      "acceptance": "Preserve indexed column order and uniqueness, exclude or redact index_definition SQL as required"
+    },
+    {
+      "legacy_model": "CatalogIndexColumn",
+      "legacy_table": "catalog_index_column",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "package_physical",
+      "destination": "indexes.json[].columns inside validated v2 package",
+      "target_table": "catalog_import_revisions",
+      "acceptance": "Verify ordered indexed columns; detect missing/drop-column conflicts"
+    },
+    {
+      "legacy_model": "CatalogCategory",
+      "legacy_table": "catalog_category",
+      "legacy_model_file": "backend/app/models/catalog_category.py",
+      "disposition": "package_semantic",
+      "destination": "categories.json categories with provenance, verified by human; revision-scoped, not inferred from DB",
+      "target_table": "catalog_import_revisions",
+      "acceptance": "Check category_key uniqueness/name/active/sort_order; reject accidental semantic reinterpretation"
+    },
+    {
+      "legacy_model": "CatalogTableCategory",
+      "legacy_table": "catalog_table_category",
+      "legacy_model_file": "backend/app/models/catalog_category.py",
+      "disposition": "package_semantic",
+      "destination": "categories.json table_assignments with source keys and provenance",
+      "target_table": "catalog_import_revisions",
+      "acceptance": "Preserve table_key/category_key, is_primary, assignment_source, confidence and note"
+    },
+    {
+      "legacy_model": "CatalogPreflightResult",
+      "legacy_table": "catalog_preflight_result",
+      "legacy_model_file": "backend/app/models/catalog_validation.py",
+      "disposition": "archive_untrusted",
+      "destination": "Archive historical result records separately; latest validation/preflight.json is producer evidence ONLY",
+      "target_table": null,
+      "acceptance": "No legacy READY→trusted VERIFIED or automatic activation; scope/issuer/expiry/evidence separate"
+    },
+    {
+      "legacy_model": "CatalogSearchDocument",
+      "legacy_table": "catalog_search_document",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "rebuild",
+      "destination": "DQA data_discovery_documents rebuilt from activated validated catalog_import_revision",
+      "target_table": "data_discovery_documents",
+      "acceptance": "Compare Gold queries, provenance, builder versions and source/revision scoping"
+    },
+    {
+      "legacy_model": "CatalogEmbeddingRun",
+      "legacy_table": "catalog_embedding_run",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "rebuild",
+      "destination": "Preserve legacy run-summary evidence; execute DQA revision-scoped sync/coverage test",
+      "target_table": null,
+      "acceptance": "Record model identity, version, dimension and coverage metrics; no run ID reuse"
+    },
+    {
+      "legacy_model": "CatalogEmbedding",
+      "legacy_table": "catalog_embedding",
+      "legacy_model_file": "backend/app/models/catalog.py",
+      "disposition": "rebuild",
+      "destination": "DQA data_discovery_embeddings recreated from DQA discovery documents",
+      "target_table": "data_discovery_embeddings",
+      "acceptance": "No raw pgvector row/ID copy; validate model_key, 1024 dims, doc fingerprint and embeddings quality"
+    }
+  ],
+  "non_table_artifacts": [
+    {
+      "id": "legacy-v1-v2-export",
+      "decision": "archive_original_and_validate_v2",
+      "gate": "Preserve original final ZIP and DOCX/Diff/README in approved backup store; DQA imports parsed JSON+digests but not full ZIP/DOCX bytes"
+    },
+    {
+      "id": "legacy-fingerprint",
+      "decision": "recompute_and_crosswalk",
+      "gate": "Keep legacy fingerprint and DQA computed fingerprint separately; never require raw hash equality"
+    },
+    {
+      "id": "legacy-live-target-secrets",
+      "decision": "never_migrate",
+      "gate": "No host, username, encrypted credential or connection options copied; DQA separately approved secret refs"
+    },
+    {
+      "id": "legacy-streamlit-ui",
+      "decision": "replace_or_scope",
+      "gate": "ERD/DOCX reporting/Target CRUD/Category editing require scoped UI decisions; no wholesale Streamlit migration"
+    }
+  ]
+}
