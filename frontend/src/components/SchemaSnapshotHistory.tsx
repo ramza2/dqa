@@ -43,11 +43,11 @@ export function SchemaSnapshotHistory() {
   const detailSeq = useRef(0);
 
   const [offset, setOffset] = useState(0);
-  const [history, setHistory] = useState<DataState<SnapshotSummary[]>>(idle);
+  const [history, setHistory] = useState<DataState<SnapshotSummary[]>>(() => idle<SnapshotSummary[]>());
   const [selection, setSelection] = useState<SnapshotSummary | null>(null);
-  const [detail, setDetail] = useState<DataState<SnapshotDetail>>(idle);
-  const [preview, setPreview] = useState<DataState<SnapshotReviewPreview>>(idle);
-  const [reviews, setReviews] = useState<DataState<SnapshotReviewEvent[]>>(idle);
+  const [detail, setDetail] = useState<DataState<SnapshotDetail>>(() => idle<SnapshotDetail>());
+  const [preview, setPreview] = useState<DataState<SnapshotReviewPreview>>(() => idle<SnapshotReviewPreview>());
+  const [reviews, setReviews] = useState<DataState<SnapshotReviewEvent[]>>(() => idle<SnapshotReviewEvent[]>());
 
   useEffect(() => () => {
     listSeq.current += 1;
@@ -109,7 +109,7 @@ export function SchemaSnapshotHistory() {
       getSnapshotHistoryDetail(expectedSource, row.id),
       getSnapshotReviewPreview(expectedSource, row.id),
       listSnapshotReviewEvents(expectedSource, row.id),
-    ]);
+    ] as const);
     if (requestId !== detailSeq.current || sourceRef.current !== expectedSource) return;
     if (detailResult.status === "fulfilled") {
       const value = detailResult.value;
