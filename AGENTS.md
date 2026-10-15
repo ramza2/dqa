@@ -8,20 +8,29 @@ DQA is the **target single deployable DEMIS Schema Intelligence, Data Access and
 MCP Tool Platform**. The independent `demis-schema-search-poc` is a reference
 implementation and temporary parity baseline, **not a final production dependency**.
 
-**Currently implemented:** DQA consumes validated Catalog Package v2, supports
-Catalog/Data Discovery and approved Query Template **read-only** DEMIS execution,
-and has an internally restricted MCP surface. The independent Schema Analyzer
-still performs schema inspection in the existing deployment.
+**Implemented in code (not real-DEMIS-approved):** DQA validates/imports
+Catalog Package v2 with immutable revisions and explicit READY-only activation;
+provides Catalog/Data Discovery, approved Query Template **read-only**
+execution and an internally restricted MCP surface. A default-disabled,
+admin-gated Oracle **metadata-only Schema Inspector**, append-only Snapshot
+capture/history and review/diff with an offline **WARNING-only** v2 candidate
+also exist. The PoC Analyzer may remain separately deployed during transition;
+its operation and source data are not yet cut over.
 
-**Planned in separately reviewed implementation PRs:** an internal Oracle
-**metadata-only Schema Inspector**; Catalog snapshot/package generation and
-diff/activation integration; approved client-facing DEMIS MCP/REST operations;
-a **separate, default-disabled controlled clinical Insert** path subject to
-institutional approvals. Do not represent planned features as implemented.
+**Still planned or externally gated:** authorized production Inspector
+connection/metadata privileges; independent DBA Preflight issuer trust and
+READY-eligibility policy; complete Snapshot→review→Package→explicit activation
+integration and PoC replacement; approved external FHIR/SNUH.AI MCP/REST; and a
+**separate, default-disabled Controlled Clinical Insert** path. Code-level
+features and synthetic tests never imply military/DBA/clinical approval.
 
-See `docs/integrated-platform-architecture.md` and `docs/roadmap.md`.
-The single-clinician-UI/approval-verification clarification is in PR #66
-until that PR is merged; avoid depending on unmerged changes as runtime policy.
+See `docs/integrated-platform-architecture.md`, `docs/roadmap.md`,
+`docs/u02-integration-acceptance-handoff.md` and
+`docs/u02-external-decision-register.md`.
+Clinical approval UI and original approval evidence belong to SNUH.AI or an
+officially designated military system; DQA does not create a second HITL UI.
+PR #66's clarification and PR #77's independent Preflight proposal remain
+**unmerged Drafts** (2026-10-15); do not treat them as implemented policy.
 
 ## 2. Core boundary
 
@@ -57,7 +66,8 @@ The current Oracle mock schema is development/test data only.
 ## 3. Source of truth
 
 The **active, validated, immutable Catalog revision** remains authoritative
-for runtime discovery and read execution even after DQA gains direct inspection.
+for runtime discovery and read execution even when DQA captures internal
+Inspector Snapshots.
 A newly collected Snapshot is **not** execution authority until it passes the
 same v2 validation, is persisted as a new revision and explicitly activated.
 The activated Catalog Package is authoritative for:
@@ -258,8 +268,9 @@ Rules:
 - keep FastAPI routes thin
 - keep SQL safety logic outside route handlers
 - keep existing DEMIS **read execution** behind its dedicated read-only adapter;
-  introduce any future authorized metadata-only Inspector and Controlled Write
-  adapter through separately gated services, accounts and audit policies
+  keep the current metadata-only Inspector default-disabled and separately gated;
+  any future Controlled Write adapter needs separate reviewed services, accounts
+  and audit policies
 - keep Catalog Package parsing independent of live DB connectivity
 - keep LLM provider access behind an interface
 - keep import/activation separate from query runtime
@@ -344,8 +355,10 @@ Do not claim work complete based on static inspection only.
 
 The items below are **historical bootstrap order**, not the current
 post-Phase-29 task list. Current priority and gates are maintained in
-`docs/roadmap.md` (U-03 → U-02/S-01 Inspector → parity → read/MCP ICD →
-controlled-write planning/acceptance). Do not interpret this historical list
+`docs/roadmap.md` (U-03 → S-01 authorized Target/Preflight policy →
+S-03/S-04 review/import/activation integration → S-05/S-06 UI/parity →
+U-04 read/MCP ICD and separately gated controlled-write planning).
+Do not interpret this historical list
 as authorization to skip gates.
 
 Historical implementation order:
