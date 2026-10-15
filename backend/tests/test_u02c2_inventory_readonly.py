@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from u02c2_inventory_core import InventoryRejected, TABLES, validate_run_links
+from tests.u02c2_inventory_core import InventoryRejected, TABLES, validate_run_links
 
 
 def test_valid_source_run_crosswalk_retains_only_ephemeral_aliases():
