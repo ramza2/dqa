@@ -126,7 +126,7 @@ def main():
         with Session(engine) as db:
             with db.begin():
                 # Hard guard: exactly the expected disposable PG and a read-only TX.
-                db.execute(text("SET TRANSACTION READ ONLY"))
+                db.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"))
                 assert db.scalar(text("SELECT current_database()")) == EXPECTED_DB
                 assert db.scalar(text("SELECT current_user")) == READER
                 assert db.scalar(text("SELECT current_setting('transaction_read_only')")) == "on"
