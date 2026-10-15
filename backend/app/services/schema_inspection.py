@@ -7,13 +7,16 @@ only aggregate metadata counts. No Catalog, patient row or DEMIS writes.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from dataclasses import dataclass
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import URL
 from sqlalchemy.pool import NullPool
 
-from app.adapters.demis.env_credentials import EnvironmentCredentialResolver
+from app.adapters.demis.env_credentials import (
+    EnvironmentCredentialResolver, validate_demis_credential_env_prefix,
+)
 from app.adapters.schema_inspector.base import SchemaSnapshot
 from app.adapters.schema_inspector.oracle import OracleSchemaInspector, SYSTEM_SCHEMAS
 from app.core.config import Settings
@@ -23,6 +26,11 @@ from app.schemas.schema_inspector import SchemaInspectionSummary
 INSPECTOR_CREDENTIAL_PREFIX = "DEMIS_INSPECT_SECRET_"
 _ALLOWED_IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_$#]{0,127}$")
 _ALLOWED_SOURCE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$")
+_ALLOWED_HOST_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+_ALLOWED_SERVICE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
+_ALLOWED_SECRET_REF = re.compile(
+    r"^env:DEMIS_INSPECT_SECRET_[A-Z0-9_]+$"
+)
 _CONNECT_TIMEOUT_SECONDS = 5
 _CALL_TIMEOUT_MS = 15_000
 
@@ -33,6 +41,20 @@ class SchemaInspectionError(Exception):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+def _valid_host(host: str) -> bool:
+    """Only a literal IP or a bounded DNS hostname, never a URL/DSN."""
+    if not host or len(host) > 253:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return all(
+            _ALLOWED_HOST_LABEL.fullmatch(label) is not None
+            for label in host.split(".")
+        )
 
 
 @dataclass(frozen=True)
@@ -73,11 +95,32 @@ def _target_from_settings(settings: Settings) -> _InspectorTarget:
         raise SchemaInspectionError("INSPECTOR_NOT_CONFIGURED")
     if not _ALLOWED_IDENTIFIER.fullmatch(schema) or schema.upper() in SYSTEM_SCHEMAS:
         raise SchemaInspectionError("INSPECTOR_NOT_CONFIGURED")
-    # Service/host/username are operator-only config, never request inputs.
-    # Avoid accidental inline DSN/credential URI interpretation.
-    if any(x in host for x in "/:@?\\") or any(x in service for x in "/:@?\\"):
+    # Validate *all* operator config before credential dereference/DB connect.
+    # The hostname parser deliberately does not resolve DNS or certify the
+    # military DBA's actual host/schema allowlist (that requires G0 approval).
+    if not _valid_host(host) or _ALLOWED_SERVICE.fullmatch(service) is None:
         raise SchemaInspectionError("INSPECTOR_NOT_CONFIGURED")
-    if not ref.startswith("env:" + INSPECTOR_CREDENTIAL_PREFIX):
+    if (
+        _ALLOWED_IDENTIFIER.fullmatch(username) is None
+        or username.upper() in SYSTEM_SCHEMAS
+    ):
+        raise SchemaInspectionError("INSPECTOR_NOT_CONFIGURED")
+    if _ALLOWED_SECRET_REF.fullmatch(ref) is None:
+        raise SchemaInspectionError("INSPECTOR_NOT_CONFIGURED")
+
+    # A configurable Query Connection Profile prefix must never encompass the
+    # fixed Inspector namespace, and vice versa. Prevent credential-domain
+    # overlap even when the *individual* inspector ref is otherwise valid.
+    try:
+        read_prefix = validate_demis_credential_env_prefix(
+            settings.dqa_demis_credential_env_prefix
+        )
+    except Exception:
+        raise SchemaInspectionError("INSPECTOR_NOT_CONFIGURED") from None
+    if (
+        read_prefix.startswith(INSPECTOR_CREDENTIAL_PREFIX)
+        or INSPECTOR_CREDENTIAL_PREFIX.startswith(read_prefix)
+    ):
         raise SchemaInspectionError("INSPECTOR_NOT_CONFIGURED")
     return _InspectorTarget(
         source_name=source, schema_name=schema, host=host,
