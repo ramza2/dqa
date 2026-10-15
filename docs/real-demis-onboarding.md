@@ -1,7 +1,10 @@
 # Real DEMIS Onboarding & Acceptance Runbook
 
-Authoritative operator procedure for first-time real DEMIS linkage and
-controlled acceptance. This document does **not** change runtime behavior.
+Operator checklist for a **separately authorized**, first-time real DEMIS
+**read-only** connection and controlled acceptance. It does not grant site
+access/DBA authority, certify the outcome, or change runtime behavior. Do
+not execute production actions based on this template without institutional
+approval and an approved IdentityProvider.
 
 ## 1. 목적 / 적용 범위
 
@@ -23,32 +26,42 @@ controlled acceptance. This document does **not** change runtime behavior.
 | 영역 | 현재 구현 (개발 검증 범위) | 목표 통합 플랫폼 |
 |--|--|--|
 | 의료진 UI | DQA Query/Data Discovery 개발·운영 UI | **SNUH.AI 단일 의료진 UI** / DQA는 관리자 UI |
-| Schema 수집 | 별도 DEMIS Schema Analyzer → Package v2 Import | DQA 내부 **metadata-only Schema Inspector** |
-| Discovery | Catalog Explorer + Keyword/Semantic/Hybrid 및 Index Status | 통합 Inspector→Snapshot→Revision→Discovery 파이프라인 |
+| Schema 수집 | 기존 PoC 서비스·Package Import 유지; DQA 내부 metadata-only Inspector/Snapshot 캡처 **코드 존재**, 기본 비활성·운영 연결 차단 | 승인된 DQA 내부 Inspector→검증된 Snapshot→Preflight→READY Import/Activation |
+| Discovery | Catalog Explorer + Keyword/Semantic/Hybrid 및 Index Status; Snapshot 이력·diff/review·WARNING 후보는 격리 개발 검증 | 통합 Inspector→독립 승인→READY Revision→Discovery 재색인 파이프라인 |
 | MCP | 내부 Streamable HTTP, Discovery/Query Tool 4종 + readiness; 기본 제한 | 승인된 FHIR/SNUH.AI 클라이언트 연계 MCP/REST |
 | Read 실행 | Approved + Enabled Query Template / read-only Oracle Adapter | 동일 안전 경계, 승인된 업무별 Read Capability 추가 |
 | Write 실행 | **없음**; 모든 기존 경로에서 금지 | 기관이 승인한 **별도 Controlled Insert** (기본 disabled) |
 | 승인 감사 | DQA 조회 실행 감사 | SNUH.AI/공식 임상 승인 원본 + DQA 등록 실행 감사 분리 |
 
-별도 `demis-schema-search-poc` 사이트는 DQA 내부 Inspector 검증 전까지
-유지하는 참조 시스템이며, 최종 배포 의존성이 아니다. PoC 서비스/Volume을
-이 runbook에 따라 중지·삭제하지 않는다.
+별도 `demis-schema-search-poc` 사이트는 DQA Inspector 코드 존재 여부와
+관계없이 **실 DEMIS parity(G1) 및 기관이 서명한 운영 Cutover(G5)** 전까지
+유지하는 Legacy 서비스/참조 기준선이다. 최종 배포 의존성은 아니지만 이
+read-only onboarding 절차에 따라 PoC 서비스/DB/Volume을 중단·삭제하거나
+실제 Catalog 데이터를 마이그레이션하지 않는다.
 
 적용하지 않는 범위 (**이 문서로 인증하지 않음**):
 
-- Schema Inspector의 실제 DEMIS 수집 승인 및 별도 수집 Runbook
+- 기본 비활성 Inspector의 실제 DEMIS metadata 접속/DBA 수집 승인 및 별도 수집 Runbook
+- Legacy 전체 Source·Run·Snapshot/ZIP·Category 실데이터 이관, G1/G5 Cutover/운영 복구 승인
 - Dynamic Query 실행/MCP 외부 연계의 운영 인증·접근 수용
 - **임상문서·진료 결과 INSERT와 쓰기 계정/승인 증빙/쓰기 결과 대사**
 - arbitrary LLM Text-to-SQL 직접 실행
 - production IdentityProvider 구현 및 DBA 권한의 자동 PASS 판정
 
-**중요:** Oracle mock E2E 성공은 development evidence일 뿐이다. real DEMIS
-production readiness, production IdP readiness, 또는 DBA privilege acceptance를
-의미하지 않는다.
+**중요:** Oracle mock E2E 및 U-02 합성/격리 parity·백업 복원 시험 성공은
+개발 증빙에 한정된다. 실제 DEMIS 접근, 운영 IdP/DBA 권한, 임상 데이터
+사용, Legacy 서비스 종료 및 운영 복구 승인 증빙이 아니다.
+[U-02 인수인계](u02-integration-acceptance-handoff.md)와
+[미결정 승인 항목](u02-external-decision-register.md)의 G0/G1/G2/G5를
+별도로 충족해야 한다.
 
-현재 DQA는 **실 DEMIS에 대한 스키마 직접 수집 경로를 아직 구현하지
-않았다**. 향후 통합 Schema Inspector는 승인된 dictionary/catalog
-metadata 조회만 수행하며 일반 조회/쓰기 권한을 얻지 않는다.
+DQA는 **기본 비활성·관리자 제한의 Oracle metadata-only Inspector와
+append-only Snapshot 캡처/이력, diff/review, WARNING-only v2 후보** 코드를
+보유한다. 다만 운영 연결은 코드상 차단되어 있으며 **군/DBA의 실제 DEMIS
+Schema·계정 승인, 독립 Preflight 및 READY 전환, 운영 수용은 미완료**다.
+Inspector는 허가 후에도 Oracle `ALL_*` dictionary metadata 조회만
+수행하고 일반 업무 데이터 조회/쓰기 권한을 얻지 않는다. Snapshot은
+READY Catalog에 대한 자동 실행 권한이 아니다.
 LLM이 생성한 임의 SQL을 즉시 실행하는 기능은 금지된다.
 **현재 Read 실행 경로**의 SQL은 APPROVED + ENABLED Query Template에서만
 나오며, Structured Dynamic Query Plan의 실제 실행은 별도 승인·검증 전까지
