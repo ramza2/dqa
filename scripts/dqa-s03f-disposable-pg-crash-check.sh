@@ -146,7 +146,7 @@ read -r BEFORE_SYSTEM_ID BEFORE_STARTED <<< "$(pg_identity)"
   die "unable to capture baseline PG identity"
 
 RUN_DIR="$(mktemp -d /tmp/dqa-s03f.XXXXXXXX)"
-"${PYTHON}" tests/test_s03f_disposable_pg_crash.py \
+"${PYTHON}" -m tests.test_s03f_disposable_pg_crash \
   hold-uncommitted "${RUN_DIR}/writer-flushed" >"${RUN_DIR}/writer.log" 2>&1 &
 WRITER_PID=$!
 
