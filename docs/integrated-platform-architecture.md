@@ -19,13 +19,16 @@
 - **DQA / 오픈링크시스템:** DEMIS 대상 스키마 수집·분석, 버전 Catalog,
   Data Discovery, 승인된 의료데이터 **조회**, 군 측에서 허용한 업무에 한정된
   **임상문서 초안/진료 결과 Insert**, 안전한 DEMIS Adapter, 공용 REST/MCP Tool,
-  인증·권한·감사·운영 포털.
+  **승인증빙 자동 검증과 쓰기 실행 감사**, 관리자·운영자 포털.
+  일반 의료진용 승인/반려 UI나 중복 HITL 엔진은 개발하지 않는다.
 - **FHIR 서버 / 메디칼스탠다드:** DEMIS뿐 아니라 PACS 및 기타 의료시스템의
   데이터를 수집·매핑·표준화하여 FHIR R4 기반 의료정보를 SNUH.AI에 전달.
   DQA는 PACS 연계나 FHIR 변환/검증을 중복 구현하지 않는다.
 - **SNUH.AI / 인프메딕스:** 의료 AI 및 Agent Workflow, 임상문서 초안 생성,
-  임상 승인 절차와 연계된 호출. SNUH.AI가 생성했다는 사실 자체는
-  DEMIS 쓰기 권한 또는 임상의 승인 근거가 아니다.
+  **의료진 단일 통합 UI**에서 검토·수정·승인/반려와 승인 원본 이력 관리,
+  승인 완료 문서의 DEMIS 등록 요청 및 결과 표시. 의료진에게 DQA의
+  별도 승인 화면을 요구하지 않는다. SNUH.AI가 생성했다는 사실 또는
+  SNUH.AI의 임의 `approved=true` 전달 자체는 DEMIS 쓰기 권한이 아니다.
 - **군/병원/DEMIS 운영자:** 실제 데이터 접근 범위, 환자·Encounter 식별,
   임상 승인 주체 및 증빙, 쓰기 가능 대상/방식, 권한·운영 정책 승인.
 
@@ -172,12 +175,23 @@ Authenticated Web / MCP / internal REST
   필수 환자/Encounter 결합, 작성자·임상 검토자, 중복 처리 정책을
   명시적으로 정의한다. 환자/Encounter 정합성은 서버 측 권한 있는
   조회/매핑으로 재검증한다.
-- **HITL 승인/반려 UI를 DQA에 중복 구축하지 않는다.** 승인 주체는 군이
-  인정한 의료진/공식 상위 Workflow일 수 있으나, DQA는 단순
-  `approved=true`, 임의 헤더, 임의 사용자 식별자를 근거로 수락하지 않는다.
-  **검증 가능한 승인증빙**(승인 주체/권한·시간·문서 버전/해시·환자 및
-  Encounter·정책 ID·만료/취소 상태와 서명/신뢰 검증 등)의 계약을
-  협의하고 commit 직전에 재확인해야 한다.
+- **HITL 승인·반려는 SNUH.AI 단일 의료진 UI/군이 인정한 상위
+  임상 승인 Workflow의 책임**이다. 의료진은 문서를 검토·수정하고
+  **1회 명시 승인**한다. DQA에 별도 승인 버튼·의료진 승인 대기함/
+  승인 상태 원본을 중복 구현하지 않는다.
+- DQA는 의료진을 다시 승인시키지 않지만 **승인 유효성을 기계적으로
+  독립 검증**한다. 단순 `approved=true`, 임의 헤더, 전달받은 승인자
+  문자열만으로 쓰기를 허용하지 않는다. 신뢰된 승인 시스템에
+  승인 참조를 조회하거나, 승인 주체의 검증 가능한 서명 증빙을
+  확인한다. **검증 가능한 승인증빙**에는 승인 주체·권한·시각,
+  문서 ID·최종 버전/정규화 해시, 환자·Encounter, 업무 operation,
+  정책/대상, 만료·취소·문서 수정 여부가 포함되어야 한다.
+- **승인 원본과 의료진 수정·반려 이력은 SNUH.AI 또는 군 지정
+  승인 시스템이 보유한다.** DQA에는 승인 원본을 복제하지 않고,
+  승인 참조·검증 결과·operation·요청/실행 상태·DEMIS 결과 참조 등
+  필요한 최소 감사 메타데이터만 보존한다. 두 감사는 request/approval/
+  audit correlation ID로 연결한다. 승인증빙 원본 보관 여부는 군
+  보안·감사 정책에 따르며 기본적으로 PHI 원문을 DQA에 적재하지 않는다.
 - 읽기 계정은 SELECT만; Write Adapter는 승인 operation의 최소 저장
   대상만. 감사 DB와 의료 원장 DB의 일관성/재시도 시나리오를 별도 설계한다.
 
@@ -186,30 +200,38 @@ Authenticated Web / MCP / internal REST
 ~~~mermaid
 sequenceDiagram
   participant C as SNUH.AI/FHIR/Authorized Client
-  participant A as Approved Clinical Workflow
-  participant D as DQA Policy / MCP / REST
+  participant A as SNUH.AI clinician UI / approved workflow
+  participant D as DQA MCP / REST + Policy
+  participant V as Trusted approval verifier
   participant X as DEMIS Controlled Write Adapter
   participant DB as DEMIS
-  C->>D: prepare_write(operation, typed draft, patient/encounter, request id)
-  D->>D: auth + scope + allowlist + payload validation + policy
-  D-->>C: PREPARED / BLOCKED / NEEDS_APPROVAL + bindable draft digest
-  C->>A: clinical review and explicit approval
-  A-->>C: verifiable approval evidence bound to exact draft
-  C->>D: commit_write(preparation reference, approval evidence, idempotency key)
-  D->>D: reauthorize + verify approval / expiry / draft digest / target binding
-  D->>D: dedup + durable audit precondition
+  C->>D: prepare_write(operation, draft version, patient/encounter, request id)
+  D->>D: schema / scope / allowlist / payload checks, no DB write
+  D-->>C: PREPARED / BLOCKED + draft digest
+  C->>A: clinician reviews, edits and approves exactly once
+  A-->>C: approval reference bound to final approved digest
+  C->>D: commit_write(preparation, approval ref, final approved payload, idempotency key)
+  D->>D: authenticate service and operator context; revalidate request
+  D->>V: trusted server-to-server approval lookup / signature verification
+  V-->>D: verified approver + current status + exact document binding
+  D->>D: reject mismatch/revocation; idempotency and audit precondition
   D->>X: execute approved mapped operation (bound values)
-  X->>DB: approved transactional write or site-approved API
-  DB-->>X: committed outcome / generated reference
-  X-->>D: sanitized status
-  D-->>C: COMMITTED / REJECTED / RECONCILIATION_REQUIRED + correlation id
+  X->>DB: site-approved insert operation / official storage API
+  DB-->>X: committed result / DEMIS document reference
+  X-->>D: sanitized outcome
+  D-->>C: COMMITTED / REJECTED / RECONCILIATION_REQUIRED + audit id
+  C-->>A: show result / request manual reconciliation if uncertain
 ~~~
 
 **Write safety requirements**
 
-1. Prepare is **not** execution; commit verifies approval and eligibility
-   **again**, including Catalog revision/fingerprint, operation/payload digest,
-   patient/Encounter, actor, target and policy version.
+1. Prepare is **not** execution or approval. SNUH.AI UI에서 최종 문서
+   검토·수정 후 의료진 승인은 **1회만** 받는다. 승인 후 문서가 바뀌면
+   이전 승인 참조는 무효화하여 재검토한다.
+   Commit 시 DQA는 임상의에게 재승인을 요구하지 않고 **신뢰된 승인
+   서비스 조회 또는 서명 검증**으로 승인 상태·취소·만료·권한을 자동
+   확인하며, Catalog revision/fingerprint, operation/payload digest,
+   환자/Encounter, 요청자·대상·정책 버전을 다시 검증한다.
 2. Exactly-once cannot be inferred from a transport retry. Require durable
    idempotency key scoped to client+operation+clinical target+payload, unique
    source-side business key when feasible, and explicit reconciliation of
@@ -238,9 +260,9 @@ sequenceDiagram
 | `demis.describe_resource` | 구현 (internal) | 활성 물리 리소스/관계 설명 |
 | `demis.prepare_query` | 구현 (internal) | Approved Template 조회 준비 |
 | `demis.execute_query` | 구현, default disabled | 단기 opaque token으로 조회; 기존 TTL 중복 실행 가능, **쓰기용 재사용 금지** |
-| `demis.prepare_write` | **계획** | 허용된 임상쓰기 operation 및 문서 버전 검증; no write |
-| `demis.commit_write` | **계획** | 승인증빙·idempotency 검증 후 제한된 Insert |
-| `demis.get_write_status` | **계획** | 미확정 상태 대사 및 요청 결과 조회 |
+| `demis.prepare_write` | **계획** | SNUH.AI 단일 UI의 임상 승인 전후에 독립 호출 가능한 사전 검증, DQA 승인 UI 없음, no DB write |
+| `demis.commit_write` | **계획** | **SNUH.AI 임상 승인 1회**의 원본 참조를 신뢰 검증·동일 문서 바인딩 후 제한된 Insert, 중복 승인 없음 |
+| `demis.get_write_status` | **계획** | 미확정 상태 대사 및 실행 결과 조회 (임상 승인 상태 관리 기능 아님) |
 
 Tool명과 입출력은 **제안안**이다. 최종 MCP schema, 의료업무 리소스명,
 환자/Encounter 식별 계약 및 오류 코드·client capabilities는 FHIR/SNUH.AI/
@@ -259,9 +281,15 @@ FHIR가 DQA에 접근하는지, SNUH.AI가 직접 MCP를 호출하는지는 운�
 - 실제 환자정보는 mock 테스트, Git/PR, stdout, LLM 프롬프트, 감사로그,
   평가 Gold Set에 넣지 않는다. ModelOps로의 clinical egress는 별도
   정책 승인 전 차단한다.
-- 감사 기준: 호출자 시스템·검증된 사용자, request/trace ID, workflow ID,
-  operation type, source/revision, 정책·승인 reference, 결과/row count,
-  상태·시간·오류 범주. 원문 결과행/초안 텍스트는 기록하지 않는다.
+- **이원화된 감사 책임:** SNUH.AI/공식 승인 시스템은 문서 검토·수정·승인/
+  반려·승인취소의 원본 이력을 관리한다. DQA는 승인증빙 **검증 사실**
+  및 DEMIS 등록 실행·결과·미확정 대사를 관리한다. 두 시스템 간
+  `approval_id`, `client_request_id`, `workflow_id`, `audit_id`로
+  상관관계 추적하며 기록 원본을 중복 적재하지 않는다.
+- DQA 감사 기준: 호출자 시스템·검증된 사용자, request/trace ID, workflow ID,
+  operation type, source/revision, 정책·승인 reference 및 검증 상태,
+  결과/row count, 상태·시간·오류 범주. 원문 결과행/초안 텍스트는
+  기록하지 않는다.
 - 변경 이력은 변조 방지와 최소 보관을 원칙으로 하며, 규정상 감사에
   필요한 인덱스/증빙 원문 위치만 정책에 따라 보안 저장한다.
 - AI 임상 결과는 무조건적 저장 대상이 아니다. 의료진 검토, 진료 맥락,
@@ -316,3 +344,21 @@ Oracle Mock의 이번 세션 **계정 인증/실제 SELECT는 미검증**이며,
   새로운 승인된 Write/Inspector 경계로 일관되게 현행화해야 한다.
 
 상세 개발 WBS, 선후행 관계 및 acceptance는 [Roadmap](roadmap.md)에 따른다.
+
+## 10. 단일 UI 운영 포털 책임(추가 합의)
+
+| SNUH.AI 의료진 통합 UI | DQA 운영·관리자 UI |
+|---|---|
+| 환자/Encounter 진료 컨텍스트 확인, 의무기록 초안 검토·수정 | DEMIS 연결 프로필 및 Schema Inspector/Catalog 운영 |
+| 임상의 승인/반려/취소 및 의료진 검토 이력 | Query Template·Write Operation 승인된 정의/버전·연계 설정 |
+| 승인된 기록 DEMIS 등록 요청, 실패/결과 표시 | 서비스 연결·MCP Tool 가용성·역할/권한·검증 실패·실행 감사 |
+| 미확정 등록 상태 안내, 재처리 요청 | 미확정 Commit 결과 대사/운영 장애 처리(자동 재삽입 금지) |
+
+- 최종 사용자는 원칙적으로 **SNUH.AI UI 하나만** 사용한다. DQA는
+  관리자/DBA/보안 담당자의 시스템 설정·검증·감사용 UI를 제공한다.
+- DQA에서 의료진에게 중복 승인 화면, 환자별 임상 검토 화면,
+  독자적인 HITL 처리 엔진을 제공하지 않는다. 다만 **업무별 저장
+  Operation 정책/배포 변경 승인**은 임상문서 승인과 별개의 관리자
+  통제이므로 DQA 관리자 기능 범위에 포함될 수 있다.
+- DQA의 승인 검증 실패는 SNUH.AI에 적절한 상태로 반환하지만 DQA가
+  임상 승인 상태를 직접 수정하거나 승인자로 행세하지 않는다.
