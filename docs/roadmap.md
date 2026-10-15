@@ -40,7 +40,7 @@
 | WBS | 작업·내용 | 목표 구간 | 주 역할·협조 | 선행 / Gate | 산출물·완료 기준 | 상태 |
 |---|---|---|---|---|---|---|
 | U-01 | DQA 단일 플랫폼 아키텍처 및 책임분담 재정의 | 2026-10 | PL·SA / FHIR·SNUH.AI | 없음 / G0 | 논리·배포 구성, 조회/쓰기 경계 및 운영 책임 합의 | 진행 |
-| U-02 | 기존 Analyzer→DQA 기능/코드/데이터 Gap 분석 | 2026-10~11 | PL·백엔드·DBA | U-01 | 이관/재사용/제외 목록 및 스키마 동등성 기준 | 계획 |
+| U-02 | 기존 Analyzer→DQA 기능/코드/데이터 Gap 분석 | 2026-10~11 | PL·백엔드·DBA | U-01 | 이관/재사용/제외 목록 및 스키마 동등성 기준 | **진행 — 합성/격리 검증 기준선 완료, 운영 수용 대기** |
 | U-03 | `AGENTS.md`·README·운영 Runbook 및 보안 규칙 정합화 | 2026-10~11 | PL·SA·보안 | U-01 / G0 | 기존 read-only 금지 규칙 변경은 승인 범위로만 분리·현행화 | 계획 |
 | U-04 | DQA ↔ FHIR ↔ SNUH.AI ICD·호출 경로 확정 | 2026-11~12 | SA·PL / FHIR·SNUH.AI | U-01 / G0 | MCP vs REST, 공통 JSON, 환자/Encounter·trace·오류·소유권 계약 | 외부결정 대기 |
 | S-01 | Schema Inspector Target 및 metadata credential 정책 | 2026-11 | SA·DBA·보안 | U-02, U-03 | 검사 계정과 조회/쓰기 계정 격리; 허용 스키마 범위 | 계획 |
@@ -71,6 +71,8 @@
 
 *운영 기간/완료 Gate는 군 실증기관·컨소시엄 협의에 따라 변경될 수 있다.
 의료 QA는 각 기관 전문인력 협조 역할이며 DQA 개발 역할을 임의 확대하지 않는다.*
+
+> **U-02 검증 증빙 현행화 (2026-10-15):** Legacy Inspector·v2 Package/Fingerprint·17개 ORM 이관 분류·합성 Source/Run 및 격리 PostgreSQL 백업/복구 시험은 [#82–#88 검증 결과](u02-integration-acceptance-handoff.md)로 병합 완료. 이는 **개발·합성환경 기준선**이며 **실 DEMIS Schema/권한/Preflight 승인·데이터 이관·운영 Cutover 완료가 아니다.** 남은 외부 결정은 [U-02 승인/차단 레지스터](u02-external-decision-register.md) 참조. 원본 Analyzer 중단은 G1·G5 수용 후 별도 서면 승인까지 금지한다.
 
 ### C. Gate / 의사결정 및 선후행 요약
 
