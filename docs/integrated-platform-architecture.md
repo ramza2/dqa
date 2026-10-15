@@ -1,5 +1,13 @@
 # Integrated DQA Platform Architecture
 
+> **2026-10-15 구조 재검토 공지 (군 주간회의 후속):** 아래 2026-10-13 목표 구성도의
+> `DEMIS Oracle`에 대한 Inspector·Read/Write 직접 연결은 **기존 가정이며 최종 확정안이 아니다.**
+> 병원 운영 EMR 직접 조회가 아닌 **복제 EMR DB 조회 원천을 표시한 재설계 초안** 및
+> 의료정보체계과 DBMS·Oracle License·복제범위·권한 확인 질문은
+> [U-01-R1 복제 EMR DB 아키텍처 협의 초안](u01-replicated-emr-db-architecture-review.md)을 우선 참조한다.
+> Read-only Target과 운영 원장 Write Interface는 반드시 분리하며,
+> 실제 복제 방식·DBMS·API는 승인/협의 전 가정하지 않는다.
+
 > **Target architecture rebaseline — 2026-10-13 (planning document, not deployment approval).**
 > DQA is the single deployable **DEMIS Schema Intelligence, Data Access & MCP Tool Platform**.
 > This target **supersedes the producer/consumer deployment boundary** in Phase 26-B:

@@ -18,6 +18,8 @@
 | **DEC-08 / G0·S-05** | 별도 Legacy ERD/Report/Category 편집/Target/Preflight UI 기능의 필수·선택·제외 범위 | PM·PL·사용기관 / QA·프론트엔드 | 필수 화면별 사용자 시나리오/권한, 의료데이터 표시·다운로드 허용범위, 인수조건 | UI 범위 임의 축소/전면 복제 금지 | **미확정** |
 | **DEC-09 / W-01/G4** | 실제 DEMIS 임상의무기록 저장 경로(공식 API 우선) 및 허용 Operation·필드·상태·임상 승인 방식 | PM·PL·SA·DBA·의료 QA / 군·병원·DEMIS·SNUH.AI | 지원 Operation 계약, 저장 대상/상태, 최소권한, 승인 증빙·책임/취소·대사 정책 | **실 DEMIS Insert 및 Controlled Write 활성화 금지** | **미승인, U-02와 독립 Gate** |
 
+| **DEC-10 / G0·R-01(제안)** | **복제 EMR DB를 공식 조회 원천으로 채택할지**, 원본↔복제 위치·DBMS/Version·데이터 범위·동기화/허용 지연·Read/Dictionary 권한·장애/복구 책임, Oracle Database/복제 옵션 라이선스·비용·소유를 누구 명의로 승인할지 | PL·SA·DBA·보안·인프라·계약 / 군·의료정보체계과·DEMIS/EMR 운영사 | 복제 DB 구성도·Replication 계약/SLA·Data Scope·승인 Read Source/Schema·License 확인서·전력/망 실측 확인표 및 역할별 서면 답변 ([협의 질의 Q01–Q09](u01-replicated-emr-db-architecture-review.md)) | **운영 EMR 직접 연결 금지**, 복제 DB 연결/계정 발급·실조회·Inspector Target 확정·기존 Catalog Source 전환 금지. 임상 Write는 별도 **DEC-09** 유지 | **회의 요청 수령, 상세 미확정/미승인** |
+
 **중요:** “미확정”은 협의/기획 단계의 현 상태이며 거절 판정이 아니다.
 그 밖의 법률·정보보호·병원 내부 절차는 관계기관의 별도 승인 양식에 따른다.
 이 표에 날짜·이름을 임의 기입하거나 시험 통과를 기관 승인으로 대체하지 않는다.
