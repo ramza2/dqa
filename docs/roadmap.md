@@ -45,7 +45,7 @@
 | U-04 | DQA ↔ FHIR ↔ SNUH.AI ICD·호출 경로 확정 | 2026-11~12 | SA·PL / FHIR·SNUH.AI | U-01 / G0 | MCP vs REST, 공통 JSON, 환자/Encounter·trace·오류·소유권 계약 | 외부결정 대기 |
 | S-01 | Schema Inspector Target 및 metadata credential 정책 | 2026-11 | SA·DBA·보안 | U-02, U-03 | 검사 계정과 조회/쓰기 계정 격리; 허용 스키마 범위 | **진행 — 합성 정책/Dictionary 거부 회귀 검증, G0·DBA 승인 대기** |
 | S-02 | Oracle Schema Inspector·connection diagnostics 이관 | 2026-11~12 | 백엔드·DBA | S-01 | Table/Column/PK/UK/FK/Index/Comment 수집 테스트 | 계획 |
-| S-03 | Snapshot·fingerprint·Catalog Package v2 생성·검증 연결 | 2026-12 | 백엔드·DBA | S-02 | 기존 immutable import/READY 활성화 경로 재사용 | 계획 |
+| S-03 | Snapshot·fingerprint·Catalog Package v2 생성·검증 연결 | 2026-12 | 백엔드·DBA | S-02 | 기존 immutable import/READY 활성화 경로 재사용 | **진행 — 내부 WARNING 후보 ZIP 연계, 독립 Preflight/READY 승인·활성화 연결 대기** |
 | S-04 | 스키마 변경 Diff·검토·활성화 및 오류 복구 | 2026-12~2027-01 | 백엔드·QA | S-03 | 수동 승인·이전 Revision 보존·실패 시 rollback | 계획 |
 | S-05 | DQA 포털 Target/Analyze/Revision 운영 UI | 2027-01 | 프론트엔드(백엔드)·PL | S-03, S-04 | 독립 Streamlit 없이 분석/상태/변경 확인 | 계획 |
 | S-06 | Analyzer parity + 문서/Embedding 동기화 회귀 평가 | 2027-01~02 | QA·AI엔지니어·DBA | S-04, S-05 / G1 | 25-table Oracle Mock 기본 fixture 및 확장 테스트, Gold Set/검색 품질 확인 | 계획 |
