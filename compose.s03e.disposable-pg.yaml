@@ -1,0 +1,21 @@
+# S-03-E only: fresh disposable PostgreSQL with volume surviving container restart.
+# This file MUST NOT be combined with DQA development/on-prem Compose.
+services:
+  disposable-pg:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: dqa_s03e_disposable
+      POSTGRES_USER: dqa_s03e_user
+      POSTGRES_PASSWORD: dqa_s03e_test_only
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:55440:5432"
+    volumes:
+      - s03e_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dqa_s03e_user -d dqa_s03e_disposable"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  s03e_pgdata:
