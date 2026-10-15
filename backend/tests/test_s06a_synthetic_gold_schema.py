@@ -30,7 +30,7 @@ def _gold_changes():
     current.tables[1] = replace(current.tables[1], table_comment="")
     current.columns[0] = replace(current.columns[0], column_comment="")
     current.primary_keys.append(
-        InspectedPrimaryKey("DEMIS_OWNER", "TB_PARENT", "PK_PARENT", "AREA_ID", 2),
+        InspectedPrimaryKey("DEMIS_OWNER", "TB_CHILD", "PK_CHILD", "PARENT_ID", 2),
     )
     current.unique_constraints = [
         InspectedUniqueConstraint("DEMIS_OWNER", "TB_CHILD", "UQ_CHILD", "PARENT_ID", 1),
@@ -59,7 +59,7 @@ GOLD_CHANGED = {
     ("TABLE", ("DEMIS_OWNER", "TB_PARENT")): ("table_comment",),
     ("TABLE", ("DEMIS_OWNER", "TB_CHILD")): ("table_comment",),
     ("COLUMN", ("DEMIS_OWNER", "TB_PARENT", "ID")): ("column_comment",),
-    ("PRIMARY_KEY", ("DEMIS_OWNER", "TB_PARENT", "PK_PARENT")): ("columns",),
+    ("PRIMARY_KEY", ("DEMIS_OWNER", "TB_CHILD", "PK_CHILD")): ("columns",),
     ("UNIQUE_CONSTRAINT", ("DEMIS_OWNER", "TB_CHILD", "UQ_CHILD")): ("columns",),
     ("FOREIGN_KEY", ("DEMIS_OWNER", "TB_CHILD", "FK_CHILD_PARENT")): (
         "columns", "target_schema",
