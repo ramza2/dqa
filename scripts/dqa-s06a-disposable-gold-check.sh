@@ -79,5 +79,7 @@ finally:
 PY
 
 "${PYTHON}" -m alembic -c alembic.ini upgrade head
-"${PYTHON}" -m pytest -q -rs tests/test_s06a_disposable_pg_transactions.py
+"${PYTHON}" -m pytest -q -rs -s \
+  tests/test_s06a_synthetic_gold_schema.py \
+  tests/test_s06a_disposable_pg_gold_search.py
 echo "DQA_S06A_SYNTHETIC_GOLD_PASS"
