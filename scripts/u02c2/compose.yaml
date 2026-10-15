@@ -1,0 +1,51 @@
+# Disposable U-02-C-2 evidence only. NO host ports / external network.
+services:
+  catalog-db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: u02b2b_catalog
+      POSTGRES_USER: u02b2b_user
+      POSTGRES_PASSWORD: u02b2b_fixture_only_never_prod
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ${DQA_U02_LEGACY_ROOT:?pinned Legacy path required}/database/schema_catalog/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U u02b2b_user -d u02b2b_catalog"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [isolated]
+
+  collector:
+    build:
+      context: ../u02b2b
+      dockerfile: Dockerfile
+    depends_on:
+      catalog-db:
+        condition: service_healthy
+    environment:
+      PYTHONPATH: /legacy/backend
+      CATALOG_DB_HOST: catalog-db
+      CATALOG_DB_PORT: "5432"
+      CATALOG_DB_NAME: u02b2b_catalog
+      CATALOG_DB_USER: u02b2b_user
+      CATALOG_DB_PASSWORD: u02b2b_fixture_only_never_prod
+      MEDICAL_DB_HOST: non-existent-test-medical-host
+      MEDICAL_DB_REQUIRED: "false"
+      EMBEDDING_PROVIDER: fake
+    volumes:
+      - ${DQA_U02_LEGACY_ROOT:?pinned Legacy path required}/backend:/legacy/backend:ro
+      - ${DQA_U02_DQA_ROOT:?DQA path required}/backend/tests/u02c2_inventory_core.py:/inventory_core.py:ro
+      - ${DQA_U02_DQA_ROOT:?DQA path required}/backend/tests/u02c2_legacy_pg_inventory_runner.py:/runner.py:ro
+      - ${DQA_U02_ARTIFACT_DIR:?output directory required}:/output
+    read_only: true
+    tmpfs: [/tmp]
+    command: ["python", "-B", "/runner.py"]
+    networks: [isolated]
+
+networks:
+  isolated:
+    internal: true
+
+volumes:
+  pgdata:
