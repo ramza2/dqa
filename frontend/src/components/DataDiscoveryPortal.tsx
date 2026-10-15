@@ -2,8 +2,9 @@ import { useState } from "react";
 import { CatalogExplorer } from "./CatalogExplorer";
 import { DataDiscoveryIndexStatus } from "./DataDiscoveryIndexStatus";
 import { SchemaSearch } from "./SchemaSearch";
+import { SchemaSnapshotHistory } from "./SchemaSnapshotHistory";
 
-type DiscoveryTab = "search" | "explorer" | "index";
+type DiscoveryTab = "search" | "explorer" | "index" | "snapshot";
 
 export function DataDiscoveryPortal() {
   const [tab, setTab] = useState<DiscoveryTab>("search");
@@ -41,11 +42,22 @@ export function DataDiscoveryPortal() {
         >
           Index Status
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "snapshot"}
+          className={tab === "snapshot" ? "nav-tab active" : "nav-tab"}
+          onClick={() => setTab("snapshot")}
+          data-testid="dd-tab-snapshot"
+        >
+          Snapshot History
+        </button>
       </div>
 
       {tab === "search" ? <SchemaSearch /> : null}
       {tab === "explorer" ? <CatalogExplorer /> : null}
       {tab === "index" ? <DataDiscoveryIndexStatus /> : null}
+      {tab === "snapshot" ? <SchemaSnapshotHistory /> : null}
     </div>
   );
 }
