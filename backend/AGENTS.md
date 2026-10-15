@@ -32,9 +32,9 @@ backend/
       connection_profile/
       db/
       demis/          # existing read-only DEMIS boundary
+      schema_inspector/ # metadata-only Oracle code; production default-disabled
       llm/
-    # Planned in later PRs (do not create prematurely):
-    # schema_inspector/   metadata-only Oracle inspection boundary
+    # Planned in separately reviewed PRs (do not create prematurely):
     # controlled_write/   approved clinical Insert boundary
   tests/
 ```
@@ -57,14 +57,17 @@ fail-closed rules as Web APIs. Never trust caller-supplied `user_id` / `role` /
 Connection Profile/credentials, validator, preview, query/MCP execute endpoints
 and tokens **must not** gain write capability.
 
-A **future metadata-only Schema Inspector** may query approved Oracle
-`ALL_*` catalog views only, using a separately constrained metadata
-credential/profile and read-only sessions. It must not read patient rows,
-perform DML/DDL, or infer capabilities beyond the active Catalog. Metadata
-inspection is triggered explicitly by authorized admin action, not inline
-with general query execution. Schema Snapshot → v2 Package validation →
-immutable revision import → explicit READY activation is the reuse path.
-No production inspection connection in this documentation-only PR.
+The **existing metadata-only Schema Inspector code** selects Oracle
+`ALL_*` dictionary views, uses an inspector-specific credential namespace,
+is default-disabled and production-blocked pending explicit authorization.
+Only approved Schema Scope, distinct least-privilege metadata credentials,
+read-only sessions and an authorized admin trigger may be used. It must not
+read patient rows, perform DML/DDL or infer clinical/query capabilities from
+an unactivated Snapshot. Existing append-only Snapshot capture/history,
+diff/review and offline **WARNING-only** candidate code does **not** grant
+Catalog activation authority. The final Snapshot → independent Preflight →
+validated v2 import → explicit READY activation chain remains gated.
+This documentation PR does not enable live Inspector connectivity.
 
 A **future Controlled Write subsystem** is architecturally separate from both
 the metadata inspector and read adapter. Only hospital/DEMIS-approved clinical
@@ -139,14 +142,18 @@ Production FastAPI docs (`/docs`, `/redoc`, `/openapi.json`) are disabled when
 ## Catalog Package
 
 Treat validated Catalog Package data and live DEMIS connectivity as separate
-concerns. The **existing external package upload** and proposed internal
-metadata-generated package share the same v2 manifest/checksum/schema
-validation, import and activation lifecycle.
+concerns. The **existing external package upload** and offline internal
+metadata-generated **WARNING-only candidate** use the same v2
+manifest/checksum/schema validation contract. Only an authorized
+READY package may follow the existing explicit import/activation lifecycle;
+the candidate is not eligible for activation.
 
 Package validation/import code must not require a live DEMIS DB connection.
-The planned Inspector may connect only to retrieve metadata and produce a
-candidate Snapshot/Package. Collection never auto-activates a revision or
-makes unsafe data executable.
+The default-disabled Inspector may connect only after separate site/DBA
+authorization to retrieve metadata and produce a candidate Snapshot/Package.
+Collection and Snapshot capture never auto-activate a revision or make
+unsafe data executable. No independent trusted external Preflight/READY issuer
+is approved as of this documentation change.
 
 Imported package revisions must be immutable after successful import.
 Only READY revisions may be activated through the existing authorized
