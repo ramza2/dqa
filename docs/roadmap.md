@@ -43,7 +43,7 @@
 | U-02 | 기존 Analyzer→DQA 기능/코드/데이터 Gap 분석 | 2026-10~11 | PL·백엔드·DBA | U-01 | 이관/재사용/제외 목록 및 스키마 동등성 기준 | **진행 — 합성/격리 검증 기준선 완료, 운영 수용 대기** |
 | U-03 | `AGENTS.md`·README·운영 Runbook 및 보안 규칙 정합화 | 2026-10~11 | PL·SA·보안 | U-01 / G0 | 기존 read-only 금지 규칙 변경은 승인 범위로만 분리·현행화 | **진행 — 현재 구현/최종 목표 문서 정합화, G0 외부승인 대기** |
 | U-04 | DQA ↔ FHIR ↔ SNUH.AI ICD·호출 경로 확정 | 2026-11~12 | SA·PL / FHIR·SNUH.AI | U-01 / G0 | MCP vs REST, 공통 JSON, 환자/Encounter·trace·오류·소유권 계약 | 외부결정 대기 |
-| S-01 | Schema Inspector Target 및 metadata credential 정책 | 2026-11 | SA·DBA·보안 | U-02, U-03 | 검사 계정과 조회/쓰기 계정 격리; 허용 스키마 범위 | 계획 |
+| S-01 | Schema Inspector Target 및 metadata credential 정책 | 2026-11 | SA·DBA·보안 | U-02, U-03 | 검사 계정과 조회/쓰기 계정 격리; 허용 스키마 범위 | **진행 — 합성 정책/Dictionary 거부 회귀 검증, G0·DBA 승인 대기** |
 | S-02 | Oracle Schema Inspector·connection diagnostics 이관 | 2026-11~12 | 백엔드·DBA | S-01 | Table/Column/PK/UK/FK/Index/Comment 수집 테스트 | 계획 |
 | S-03 | Snapshot·fingerprint·Catalog Package v2 생성·검증 연결 | 2026-12 | 백엔드·DBA | S-02 | 기존 immutable import/READY 활성화 경로 재사용 | 계획 |
 | S-04 | 스키마 변경 Diff·검토·활성화 및 오류 복구 | 2026-12~2027-01 | 백엔드·QA | S-03 | 수동 승인·이전 Revision 보존·실패 시 rollback | 계획 |
