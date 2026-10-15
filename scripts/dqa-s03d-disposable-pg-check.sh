@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT="dqa-s03d-disposable"
 COMPOSE="${ROOT}/compose.s03d.disposable-pg.yaml"
-PYTHON="${ROOT}/.venv/bin/python"
+PYTHON="${DQA_S03D_PYTHON:-${HOME}/dqa/.venv/bin/python}"
 
 die() { echo "S03D_REFUSED: $*" >&2; exit 2; }
 
