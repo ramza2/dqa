@@ -7,6 +7,7 @@ do not use the integration db_session fixture: it TRUNCATEs catalog tables.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import pytest
 
@@ -49,6 +50,11 @@ class SyntheticImportRepository:
 
     def add(self, revision):
         revision.id = len(self.store.imports) + 1
+        # PostgreSQL populates this via server_default=func.now() on INSERT.
+        # The isolated in-memory repository must emulate that DB-generated
+        # field for the real Import Detail response schema (no DB calls).
+        if revision.created_at is None:
+            revision.created_at = datetime.now(timezone.utc)
         self.store.imports[revision.id] = revision
         return revision
 
@@ -183,6 +189,7 @@ def test_warning_snapshot_zip_import_and_activation_rejection_preserve_active_an
 
     warning_detail = client.get(f"/api/v1/catalog/imports/{warning_id}")
     assert warning_detail.status_code == 200
+    assert warning_detail.json()["created_at"] is not None
     assert warning_detail.json()["package_readiness"] == "WARNING"
     assert warning_detail.json()["activation_eligible"] is False
 
