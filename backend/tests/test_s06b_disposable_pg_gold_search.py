@@ -109,13 +109,13 @@ def _assert_provenance(response, source, revision):
 
 
 def test_s06b_metric_arithmetic_relevant_and_missing():
-    assert _metrics(["A", "B", "C"], {"A", "C"}, 3) == {
-        "recall_at_k": 1.0,
-        "precision_at_k": 2 / 3,
-        "mrr_at_k": 1.0,
-        "ndcg_at_k": 1.0 / (1.0 + 1.0 / log2(3))
-        * (1.0 + 1.0 / log2(4)),
-    }
+    actual = _metrics(["A", "B", "C"], {"A", "C"}, 3)
+    assert actual["recall_at_k"] == 1.0
+    assert actual["precision_at_k"] == pytest.approx(2 / 3)
+    assert actual["mrr_at_k"] == 1.0
+    assert actual["ndcg_at_k"] == pytest.approx(
+        (1 + 1 / log2(4)) / (1 + 1 / log2(3))
+    )
     missing = _metrics(["X", "Y"], {"A"}, 2)
     assert all(value == 0.0 for value in missing.values())
     with pytest.raises(AssertionError):
