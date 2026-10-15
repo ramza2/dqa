@@ -6,6 +6,7 @@ It does not approve, persist, import, activate, or mark a package READY.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
@@ -170,4 +171,96 @@ def preview_snapshot_review(
         preflight_status="NOT_VERIFIED",
         activation_eligible=False,
         required_gates=REQUIRED_GATES,
+    )
+
+
+@dataclass(frozen=True)
+class LatestSnapshotWarningCandidate:
+    """Internal-only metadata artifact; not permission to import or activate.
+
+    archive_bytes can contain schema/column comments and must only be handled
+    by an explicitly authorized, separate future workflow. No HTTP endpoint.
+    """
+
+    source_name: str
+    revision_id: int
+    schema_fingerprint: str
+    archive_sha256: str
+    archive_bytes: bytes
+    package_readiness: Literal["WARNING"] = "WARNING"
+    preflight_status: Literal["NOT_VERIFIED"] = "NOT_VERIFIED"
+    activation_eligible: Literal[False] = False
+
+
+def build_latest_snapshot_warning_candidate(
+    session: Session, *, source_name: str, revision_id: int,
+) -> LatestSnapshotWarningCandidate:
+    """Build a v2 WARNING ZIP from a verified, source-scoped latest Snapshot.
+
+    Internal adapter only: caller must establish authorization independently.
+    No credentials, Oracle calls, DB mutation, Catalog import/READY or HTTP
+    surface. A later capture makes this provisional artifact stale; checking
+    again here is defensive, not a transactional activation lock.
+    """
+    preview = preview_snapshot_review(
+        session, source_name=source_name, revision_id=revision_id,
+    )
+    if not preview.is_latest:
+        raise SnapshotReviewError("SNAPSHOT_CANDIDATE_SUPERSEDED")
+
+    try:
+        row = get_snapshot_revision(
+            session, revision_id, source_name=source_name,
+        )
+        if (
+            row is None
+            or row.id != preview.revision_id
+            or row.source_name != preview.source_name
+            or row.schema_fingerprint != preview.schema_fingerprint
+            or row.captured_at != preview.captured_at
+        ):
+            raise ValueError("verified revision changed")
+
+        # Reuse existing immutable Snapshot representation and the same
+        # candidate builder/v2 validator as the ordinary review preview.
+        snapshot = _snapshot_from_payload(row.snapshot_json)
+        archive = build_catalog_v2_candidate(
+            snapshot,
+            source_name=preview.source_name,
+            generated_at=preview.captured_at,
+        )
+        package = validate_catalog_package_bytes(archive)
+        if (
+            package.package_readiness != "WARNING"
+            or package.activation_eligible
+            or package.source.source_name != preview.source_name
+            or package.source.database_name != row.database_name
+            or package.source.default_schema != row.schema_name
+            or package.schema_fingerprint != preview.schema_fingerprint
+        ):
+            raise ValueError("candidate does not match reviewed snapshot")
+
+        latest = list_snapshot_revisions(
+            session, source_name=source_name, limit=1,
+        )
+        if (
+            not latest
+            or latest[0].id != preview.revision_id
+            or latest[0].source_name != preview.source_name
+            or latest[0].schema_fingerprint != preview.schema_fingerprint
+            or latest[0].captured_at != preview.captured_at
+        ):
+            raise SnapshotReviewError("SNAPSHOT_CANDIDATE_SUPERSEDED")
+    except SnapshotReviewError:
+        raise
+    except Exception:
+        # Do not expose metadata, DB/provider exceptions or content in errors.
+        raise SnapshotReviewError("SNAPSHOT_CANDIDATE_UNVERIFIABLE") from None
+
+    return LatestSnapshotWarningCandidate(
+        source_name=source_name,
+        revision_id=preview.revision_id,
+        schema_fingerprint=preview.schema_fingerprint,
+        archive_sha256=hashlib.sha256(archive).hexdigest(),
+        archive_bytes=archive,
     )
