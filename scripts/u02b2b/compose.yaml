@@ -11,7 +11,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ${DQA_U02_LEGACY_ROOT:?pinned legacy root required}/database/schema_catalog/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U u02b2b_user -d u02b2b_catalog"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U u02b2b_user -d u02b2b_catalog"]
       interval: 2s
       timeout: 3s
       retries: 30
