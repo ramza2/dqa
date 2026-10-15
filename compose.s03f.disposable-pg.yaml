@@ -1,0 +1,21 @@
+# S-03-F ONLY: isolated PostgreSQL for SIGKILL/WAL crash recovery.
+# NEVER combine with an existing DQA or operational Compose project.
+services:
+  disposable-pg:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: dqa_s03f_disposable
+      POSTGRES_USER: dqa_s03f_user
+      POSTGRES_PASSWORD: dqa_s03f_test_only
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:55441:5432"
+    volumes:
+      - s03f_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dqa_s03f_user -d dqa_s03f_disposable"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+volumes:
+  s03f_pgdata:
