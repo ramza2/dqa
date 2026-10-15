@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 
-LEGACY_SHA = "c9b88f6d6d14dc2598765efbf6bb41b4771f9b25"
+LEGACY_SHA = "c9b88f6f6d14dc2598765efbf6bb41b4771f9b25"
 BACKEND = Path(__file__).resolve().parents[1]
 RUNNER = Path(__file__).with_name("u02_package_contract_runner.py")
 
