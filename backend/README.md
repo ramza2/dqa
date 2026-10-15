@@ -12,7 +12,10 @@ Implemented:
 - authentication/RBAC foundation with fail-closed production provider configuration
 - Connection Profile management and environment-scoped credential reference boundary
 - deterministic execution form/preview eligibility checks
-- production-selectable Oracle thin-mode read-only DEMIS adapter
+- production-selectable Oracle thin-mode **read-only query** DEMIS adapter
+- default-disabled/admin-gated Oracle **metadata-only Inspector** and separate
+  append-only Snapshot capture/history, diff/review and WARNING-only v2 candidate
+  (development verified; production Inspector access/independent READY not approved)
 - audited read-only query execution with timeout/row-limit controls
 - public error contracts and regression guards for exception-data leakage
 - `/health` liveness and `/health/ready` DQA PostgreSQL readiness
@@ -98,6 +101,14 @@ See also:
 - `../docs/roadmap.md`
 
 ## Production boundary
+
+**Release boundary:** DQA already contains metadata Inspector/Snapshot
+code, but the site-approved full Inspector→independent Preflight→READY Catalog
+activation path remains incomplete. Neither internal Snapshot integrity checks,
+Legacy Package READY nor synthetic U-02 parity/restore tests grant real DEMIS
+credentials or clinical execution permission. See
+[U-02 Handoff](../docs/u02-integration-acceptance-handoff.md) and
+[External Gate Register](../docs/u02-external-decision-register.md).
 
 Repository support for Oracle read-only execution does not by itself authorize or
 prove real DEMIS clinical connectivity. Production use still requires an approved
