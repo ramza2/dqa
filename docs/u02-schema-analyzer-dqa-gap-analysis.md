@@ -6,6 +6,8 @@
 
 > **2026-10-15 U-02-C 진행 현황:** 최초 작성 후 U-02-A (#82), U-02-B-1 (#83), U-02-B-2-A (#84), U-02-B-2-B (#85)의 **합성/격리 테스트가 main에 병합되어 검증됨**. 이는 실제 DEMIS parity·의료 운영 승인/전체 레거시 데이터 이관 검증을 의미하지 않는다. **U-02-C-1(전체 Legacy ORM 17개 대상 정적 분류/이관 계획)은 [별도 Cutover 문서](u02-c-cutover-plan.md)와 [기계 검증 인벤토리](u02-c-legacy-cutover-inventory.json)에서 관리한다.** 원본 U-02 기능별 Gap 표의 'parity 미검증' 등 표기는 *2026-10-14 분석 시점 상태*이다.
 
+> **U-02 종합 현황 (2026-10-15, PR #88까지):** 위 문단은 과거 정적 비교 기준선의 기록이다. U-02-C-1 [17개 ORM 이관 분류](u02-c-cutover-plan.md) (#86), U-02-C-2 [격리 SELECT-only 집계/Run 관계](u02-c2-isolated-counts-and-mapping.md) (#87), U-02-C-3 [격리 PG 백업·복구/행 해시 검증](u02-c3-backup-restore-rehearsal.md) (#88)도 merge되어 **개발·합성환경 검증** 완료. 전체 [U-02 인수인계·미검증 기능 현황](u02-integration-acceptance-handoff.md)과 [외부 승인·차단 레지스터](u02-external-decision-register.md)에서 *운영 전환 여부*를 별도로 추적한다. 실제 운영 데이터 이관/실 DEMIS parity/G1·G5 승인은 아직 미완료.
+
 ## 1. 비교 기준과 목표
 
 | 대상 | 고정 기준선 | 분석 대상 |
