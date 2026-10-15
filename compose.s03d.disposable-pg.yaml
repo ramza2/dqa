@@ -1,0 +1,19 @@
+# S-03-D disposable PostgreSQL only. NEVER include with live DQA Compose.
+# No persistent volumes, no network-facing bind, unique compose project.
+services:
+  disposable-pg:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: dqa_s03d_disposable
+      POSTGRES_USER: dqa_s03d_user
+      POSTGRES_PASSWORD: dqa_s03d_test_only
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:55439:5432"
+    tmpfs:
+      - /var/lib/postgresql/data:rw,nosuid,nodev,size=512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dqa_s03d_user -d dqa_s03d_disposable"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
