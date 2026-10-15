@@ -12,6 +12,8 @@ die() { echo "S03D_REFUSED: $*" >&2; exit 2; }
 
 command -v docker >/dev/null 2>&1 || die "docker is not installed"
 [[ -z "${DOCKER_HOST:-}" ]] || die "remote/custom DOCKER_HOST is forbidden"
+docker_endpoint="$(docker context inspect --format '{{(index .Endpoints "docker").Host}}')"
+[[ "${docker_endpoint}" == unix://* ]] || die "non-local Docker context forbidden"
 [[ -f "${COMPOSE}" && -x "${PYTHON}" ]] || die "missing Compose or ${PYTHON}"
 cd "${ROOT}"
 
