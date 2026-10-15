@@ -6,7 +6,7 @@
 
 ## 비교 고정 버전
 
-- Legacy `ramza2/demis-schema-search-poc@c9b88f6d6d14dc2598765efbf6bb41b4771f9b25`.
+- Legacy `ramza2/demis-schema-search-poc@c9b88f6f6d14dc2598765efbf6bb41b4771f9b25`.
   - `backend/app/services/catalog_writer.py::schema_snapshot_fingerprint`
   - `backend/app/services/fingerprint.py::fingerprint`
   - `backend/app/services/catalog_package_finalizer.py::build_final_catalog_package`
