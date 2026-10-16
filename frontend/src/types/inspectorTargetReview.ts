@@ -13,5 +13,5 @@ export interface InspectorTargetReview {
   inspector_bound_to_profile: false;
   connection_authorized: false;
   live_connection_tested: false;
-  inspector_credentials_shared: false;
+  credential_values_resolved: false;
 }
