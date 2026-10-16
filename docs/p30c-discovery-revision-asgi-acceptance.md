@@ -44,7 +44,7 @@
 |---|---|---|
 | P30C-01 | Source A/B의 동일 Table Key + 각자 독점 객체, 두 Source 별 Rebuild/Sync | HTTP keyword/semantic/hybrid 3종 모두 Search Response Source/Revision/Fingerprint·각 Hit Identity 일치, 상대 Source 독점 객체 누출 없음. Index Status 두 Source 모두 READY |
 | P30C-02 | Source A1 READY + Embedding READY, B1 유지 → Source A2 활성화 | A2 문서 0 시 검색 3종 409 DISCOVERY_INDEX_NOT_READY. A2 문서만 Rebuild 후 Keyword는 A2만 노출, Semantic/Hybrid는 409 EMBEDDING_NOT_READY. A2 Sync 후 모두 A2만 검색·READY, A1 옛 문서 보존, B1 영향 없음 |
-| P30C-03 | 같은 현재 Revision 대상 Rebuild×2, Embedding Sync×2 | 두 번째 Rebuild upsert=0, Sync embedded=0/skipped=1, Status READY 및 상태 조회로 모델 `embed_*` 호출 없음 |
+| P30C-03 | 같은 현재 Revision 대상 Rebuild×2, Embedding Sync×2 | 두 번째 Rebuild에서도 처리 문서 수(upserted_count)=1, 삭제=0. Document ID·Key·Fingerprint·본문과 Embedding ID·Fingerprint 유지, 중복 row 생성 없음. 두 번째 Sync embedded=0/skipped=1, Status READY 및 상태 조회로 모델 `embed_*` 호출 없음 |
 | P30C-04 | 무권한 사용자의 검색·상태 조회, Viewer의 관리 API 접근, 없는 Source | 무권한 CATALOG_READ 403, Viewer CATALOG_MANAGE 403 (읽기는 원래 허용), 없는 Source 404. 대기 인덱스가 저절로 생성되지 않음 |
 
 **범위 한계:** HTTP TestClient는 ASGI 인프로세스 요청이며 실제 원격
