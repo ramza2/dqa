@@ -206,4 +206,23 @@ describe("S-05-C1 Connection Profile metadata UI", () => {
       restore();
     }
   });
+  it("paginates and applies Source filter without retaining rows from prior pages", async () => {
+    const mock = mockProfiles(Array.from({ length: 21 }, (_, index) => profile(index + 1)));
+    try {
+      render(<ConnectionProfilePortal />);
+      expect(await screen.findByRole("button", { name: "상세: Mock profile 1" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "상세: Mock profile 21" })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "다음" }));
+      expect(await screen.findByRole("button", { name: "상세: Mock profile 21" })).toBeInTheDocument();
+      await userEvent.type(screen.getByRole("textbox", { name: "Profile source filter" }), "test_source_5");
+      await userEvent.click(screen.getByRole("button", { name: "조회" }));
+      expect(await screen.findByRole("button", { name: "상세: Mock profile 5" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "상세: Mock profile 21" })).not.toBeInTheDocument();
+      expect(mock.calls.some((c) => c.method !== "GET")).toBe(false);
+      expect(mock.calls.some((c) => /test-connection|\/enable/.test(c.path))).toBe(false);
+    } finally {
+      mock.restore();
+    }
+  });
+
 });
