@@ -58,7 +58,7 @@ export function InspectorTargetReviewPanel({ profileId }: { profileId: number })
         result.connection_authorized !== false ||
         result.live_connection_tested !== false ||
         result.inspector_bound_to_profile !== false ||
-        result.inspector_credentials_shared !== false
+        result.credential_values_resolved !== false
       ) {
         setError("안전한 설정 대조 응답을 확인할 수 없습니다.");
         return;
