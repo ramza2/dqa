@@ -15,7 +15,7 @@ function review(id: number, overrides: Partial<InspectorTargetReview> = {}): Ins
     comparison_state: "STRUCTURAL_MATCH_UNVERIFIED",
     mismatch_fields: [], profile_enabled: false,
     inspector_bound_to_profile: false, connection_authorized: false,
-    live_connection_tested: false, inspector_credentials_shared: false,
+    live_connection_tested: false, credential_values_resolved: false,
     ...overrides,
   };
 }
