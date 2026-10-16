@@ -249,16 +249,23 @@ def test_discovery_manage_rbac_and_unknown_source_fail_closed(
 ) -> None:
     client, factory, providers = api
     rev = _seed(factory, source=SOURCE_A, fingerprint="p30c-rbac", tables=("TB_ACCESS",))
-    for method, url, data in (
+    no_permissions = {"X-DQA-Dev-Actor": "p30c-denied", "X-DQA-Dev-Roles": ""}
+    read_requests = (
         ("GET", f"{ROOT}/{SOURCE_A}/index-status", None),
         ("POST", f"{ROOT}/search", {
-            "source_name": SOURCE_A, "query": "TB_ACCESS", "mode": "keyword"
+            "source_name": SOURCE_A, "query": "TB_ACCESS", "mode": "keyword",
         }),
-        ("POST", f"{ROOT}/{SOURCE_A}/documents/rebuild", None),
-        ("POST", f"{ROOT}/{SOURCE_A}/embeddings/sync", None),
-    ):
-        response = client.request(method, url, headers=VIEWER, json=data)
-        assert response.status_code == 403, response.text
+    )
+    for method, url, data in read_requests:
+        denied = client.request(method, url, headers=no_permissions, json=data)
+        assert denied.status_code == 403, denied.text
+
+    # VIEWER intentionally has CATALOG_READ but not CATALOG_MANAGE.
+    viewer_status = client.get(f"{ROOT}/{SOURCE_A}/index-status", headers=VIEWER)
+    assert viewer_status.status_code == 200
+    for route in ("documents/rebuild", "embeddings/sync"):
+        denied = client.post(f"{ROOT}/{SOURCE_A}/{route}", headers=VIEWER)
+        assert denied.status_code == 403, denied.text
 
     assert _status(client, SOURCE_A, rev)["document_state"] == "NOT_READY"
     unknown = client.get(f"{ROOT}/p30c_missing_source/index-status")
