@@ -38,7 +38,7 @@ Backend는 `CONNECTION_PROFILE_MANAGE` 권한을 모든 Profile Endpoint에서 �
 | `frontend/src/api/client.ts` | 기존 auth/error 공통경계로 PATCH 추가 |
 | `frontend/src/types/connectionProfile.ts` | 기존 Backend Schema와 일치하는 타입 |
 | `frontend/src/App.css` | 테이블/상세/입력 UI |
-| `frontend/src/test/ConnectionProfiles.test.tsx` | Mock HTTP 기반 5건 신규 테스트 |
+| `frontend/src/test/ConnectionProfiles.test.tsx` | Mock HTTP 기반 6건 신규 테스트 |
 | `docs/s05c1-connection-profile-admin-ui.md` | 설계/위험/검증 계약 |
 
 테스트(실 DB, DEMIS, 네트워크 호출 없음):
@@ -47,6 +47,7 @@ Backend는 `CONNECTION_PROFILE_MANAGE` 권한을 모든 Profile Endpoint에서 �
 - 활성 프로필 수정 차단, `window.confirm` 비활성화 거부/동의 분기
 - 403 오류 메시지의 임의 문자열 미출력
 - 이전 프로필 상세 응답이 늦게 돌아와도 새 선택을 덮지 않음
+- 21건 목록 페이지 이동 및 Source 필터 적용 시 이전 페이지가 남지 않음
 
 ### 서버 Frontend 검증 — 아직 미실행
 
@@ -62,7 +63,7 @@ git worktree add --detach /tmp/dqa-s05c1-review \
   npm ci && \
   npm run build && \
   npm run lint && \
-  npm test -- --run
+  npm test -- --run src/test/ConnectionProfiles.test.tsx
 ) && \
 git -C /tmp/dqa-s05c1-review diff --check 65df930 HEAD && \
 echo "DQA_S05C1_REVIEW_PASS"
