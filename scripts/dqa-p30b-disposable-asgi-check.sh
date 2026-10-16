@@ -49,10 +49,11 @@ started=0
 cleanup() {
   if [[ "${started}" == 1 ]]; then
     # Only an originally empty disposable project, tmpfs holds all DB bytes.
-    dc down --remove-orphans >/dev/null || true
+    dc down --remove-orphans >/dev/null || return 1
+    started=0
   fi
 }
-trap cleanup EXIT
+trap 'cleanup || echo "P30B_CLEANUP_FAILED: manual inspection required" >&2' EXIT
 started=1
 dc up -d --wait --wait-timeout 90 disposable-pg
 
@@ -103,5 +104,5 @@ PY
   tests/p30b/test_web_mcp_isolated_asgi.py
 
 cleanup
-started=0
+trap - EXIT
 echo "DQA_P30B_ISOLATED_ASGI_PASS"
