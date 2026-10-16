@@ -32,4 +32,4 @@ class InspectorTargetReviewResponse(BaseModel):
     inspector_bound_to_profile: Literal[False] = False
     connection_authorized: Literal[False] = False
     live_connection_tested: Literal[False] = False
-    inspector_credentials_shared: Literal[False] = False
+    credential_values_resolved: Literal[False] = False
