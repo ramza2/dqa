@@ -735,3 +735,27 @@
     padding: 0.85rem;
   }
 }
+
+/* S-05-C1: bounded metadata-only Connection Profile management layout. */
+.cp-portal { align-content: start; }
+.cp-filters { align-items: end; }
+.cp-filter-actions { align-items: center; }
+.cp-table-wrap { max-width: 100%; overflow-x: auto; }
+.cp-table { min-width: 690px; }
+.cp-table td { overflow-wrap: anywhere; }
+.cp-detail, .cp-editor {
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.8rem;
+}
+.cp-detail h3, .cp-editor h3 { margin: 0; font-size: 1rem; }
+.cp-editor-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.8rem;
+}
+.cp-form-actions { grid-column: 1 / -1; }
+.cp-detail .value { overflow-wrap: anywhere; }

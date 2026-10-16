@@ -155,3 +155,21 @@ export async function apiPost<TRequest, TResponse>(
   }
   return (await response.json()) as TResponse;
 }
+
+/** Standard JSON PATCH using the same auth/error boundary as other API helpers. */
+export async function apiPatch<TRequest, TResponse>(
+  path: string,
+  body: TRequest,
+  init?: RequestInit,
+): Promise<TResponse> {
+  const response = await fetch(buildUrl(path), {
+    ...init,
+    method: "PATCH",
+    headers: mergeRequestHeaders(init, true),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return (await response.json()) as TResponse;
+}
