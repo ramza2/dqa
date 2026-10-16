@@ -8,7 +8,7 @@
 - Inspector: DQA_SCHEMA_INSPECTOR_* 환경변수 단독 Target, 개발/테스트만 실행 허용; production/staging 차단, 조회계정과 분리된 Inspector credential namespace.
 - 신설 GET /api/v1/connection-profiles/{profile_id}/inspector-target-review: 기존 CONNECTION_PROFILE_MANAGE 권한 검사, DQA DB의 Profile metadata와 서버 Inspector 설정을 오프라인 문자열/숫자 비교.
 - 결과: inspector_configuration_state(DISABLED/ENV_BLOCKED/INVALID/CONFIGURED_UNVERIFIED), comparison_state(NOT_COMPARABLE/TARGET_METADATA_MISMATCH/STRUCTURAL_MATCH_UNVERIFIED), mismatch_fields(항목명만). Host, Account, Credential Ref/Password, DSN, 원시 DB metadata 출력 없음.
-- 4개 Literal false: inspector_bound_to_profile, connection_authorized, live_connection_tested, inspector_credentials_shared. 구조 일치도 미검증이며 허가가 아니다.
+- 4개 Literal false: inspector_bound_to_profile, connection_authorized, live_connection_tested, credential_values_resolved. 구조 일치도 미검증이며 허가가 아니다.
 - 비교 항목: 환경, Source, DBMS, Host, Port, Database Name vs Oracle Service Name, Username. 특히 Database Name과 Oracle Service Name은 의미상 동일하다고 확정된 계약이 아니므로 단순 문자열 비교에 불과하다.
 - Frontend Connection Profile 상세에서 관리자 명시적 [설정 대조 조회 (연결 없음)] 버튼을 눌러야 GET 호출. 이전 Profile의 느린 응답 무시; 오류는 고정 메시지만 출력.
 
