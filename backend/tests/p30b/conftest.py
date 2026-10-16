@@ -74,7 +74,7 @@ def test_settings_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
         "DQA_MCP_BIND_HOST": "127.0.0.1",
         "DQA_MCP_QUERY_EXECUTION_ENABLED": "true",
         "DQA_MCP_EXECUTION_TOKEN_KEY": (
-            "cDMwYi1pbnRlZ3JhdGlvbi10ZXN0LWtleS0zMmJ5dGUh"  # see test code below
+            "cDMwYi1pbnRlZ3JhdGlvbi10ZXN0LWtleS0zMmJ5dGU="  # fixed 32-byte test-only key
         ),
         "DQA_MCP_EXECUTION_TOKEN_TTL_SECONDS": "300",
         "DQA_SCHEMA_INSPECTOR_ENABLED": "false",
