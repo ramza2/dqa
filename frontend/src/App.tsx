@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { DataDiscoveryPortal } from "./components/DataDiscoveryPortal";
 import { QueryAssistant } from "./components/QueryAssistant";
+import { ConnectionProfilePortal } from "./components/ConnectionProfilePortal";
 import "./App.css";
 
-type AppView = "assistant" | "discovery";
+type AppView = "assistant" | "discovery" | "profiles";
 
 export default function App() {
   const [view, setView] = useState<AppView>("assistant");
@@ -31,9 +32,20 @@ export default function App() {
           >
             Data Discovery
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === "profiles"}
+            className={view === "profiles" ? "nav-tab active" : "nav-tab"}
+            onClick={() => setView("profiles")}
+          >
+            Connection Profiles
+          </button>
         </div>
       </nav>
-      {view === "assistant" ? <QueryAssistant /> : <DataDiscoveryPortal />}
+      {view === "assistant" ? <QueryAssistant /> : null}
+      {view === "discovery" ? <DataDiscoveryPortal /> : null}
+      {view === "profiles" ? <ConnectionProfilePortal /> : null}
     </div>
   );
 }
