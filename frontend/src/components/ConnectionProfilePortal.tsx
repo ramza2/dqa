@@ -210,14 +210,25 @@ export function ConnectionProfilePortal() {
       setActionError("필수 항목과 포트(1~65535)를 확인하세요.");
       return;
     }
+    if (mode !== "create" && mode !== "edit") return;
     if (mode === "edit" && (!detail || detail.enabled)) return;
+    const changes = detail ? changedFields(form, detail) : {};
+    if (mode === "edit" && Object.keys(changes).length === 0) {
+      setActionError("변경된 항목이 없습니다.");
+      return;
+    }
     setSaving(true);
     setActionError(null);
     setMessage(null);
     try {
-      const result = mode === "create"
-        ? await createConnectionProfile(create)
-        : await updateConnectionProfile(detail!.id, changedFields(form, detail!));
+      let result: ConnectionProfile;
+      if (mode === "create") {
+        result = await createConnectionProfile(create);
+      } else if (detail) {
+        result = await updateConnectionProfile(detail.id, changes);
+      } else {
+        return;
+      }
       setMode("view");
       setSelectedId(result.id);
       setMessage(mode === "create" ? "비활성 프로필을 등록했습니다." : "프로필 정보를 수정했습니다.");
