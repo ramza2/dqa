@@ -49,7 +49,7 @@ def _settings(**overrides) -> Settings:
 def _never_authorized(result) -> None:
     assert result.connection_authorized is False
     assert result.inspector_bound_to_profile is False
-    assert result.inspector_credentials_shared is False
+    assert result.credential_values_resolved is False
     assert result.live_connection_tested is False
     serialized = result.model_dump_json()
     for raw in ("synthetic.invalid", "metadata_reader", "SYNTHETICPDB",
