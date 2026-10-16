@@ -52,9 +52,11 @@ class SiteTargetExpectation:
 class ReplicaTargetScreeningResult:
     code: ReplicaTargetScreeningCode
     structurally_matching: bool
-    # Deliberately no successful runtime authorization path. A separate
-    # authenticated, verified, time-bound, revocable site gate is required.
-    connection_authorized: bool = False
+    # No mutable or constructor-provided approval flag. An independent,
+    # authenticated, expiring/revocable site gate must be implemented later.
+    @property
+    def connection_authorized(self) -> bool:
+        return False
 
 
 def screen_replica_read_target(
