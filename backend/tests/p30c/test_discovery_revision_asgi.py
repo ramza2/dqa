@@ -14,11 +14,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.adapters.catalog.query_errors import CatalogQueryErrorCode
 from app.adapters.db.session import get_engine, get_session_factory
 from app.api.routes import data_discovery as api_module
 from app.core.config import get_settings
 from app.main import create_app
 from app.models.data_discovery import DataDiscoveryDocument
+from app.models.data_discovery_embedding import DataDiscoveryEmbedding
 from app.services.catalog_active import activate_catalog_revision
 from tests.fakes.embedding_provider import StubEmbeddingProvider
 from tests.test_data_discovery_search import _make_revision
@@ -229,13 +231,44 @@ def test_rebuild_and_embedding_sync_idempotent_for_current_revision(
     rev = _seed(factory, source=SOURCE_A, fingerprint="p30c-idempotent", tables=("TB_STABLE",))
     first = _rebuild(client, SOURCE_A, rev)
     assert first["upserted_count"] == 1
+    assert first["deleted_count"] == 0
+    with factory() as db:
+        doc = db.scalars(select(DataDiscoveryDocument).where(
+            DataDiscoveryDocument.catalog_import_revision_id == rev,
+        )).one()
+        original = (doc.id, doc.document_key, doc.document_fingerprint,
+                    doc.searchable_text)
     second = _rebuild(client, SOURCE_A, rev)
-    assert second["upserted_count"] == 0
+    # The existing upserted_count contract counts processed documents,
+    # including unchanged rows; it is NOT the number of new/changed rows.
+    assert second["upserted_count"] == 1
+    assert second["deleted_count"] == 0
+    with factory() as db:
+        docs = list(db.scalars(select(DataDiscoveryDocument).where(
+            DataDiscoveryDocument.catalog_import_revision_id == rev,
+        )).all())
+        assert len(docs) == 1
+        assert (docs[0].id, docs[0].document_key,
+                docs[0].document_fingerprint, docs[0].searchable_text) == original
+
     first_sync = _sync(client, SOURCE_A, rev)
     assert first_sync["embedded_count"] == 1
+    with factory() as db:
+        embedding = db.scalars(select(DataDiscoveryEmbedding).where(
+            DataDiscoveryEmbedding.data_discovery_document_id == original[0],
+        )).one()
+        embedding_id = embedding.id
+        assert embedding.document_fingerprint == original[2]
     second_sync = _sync(client, SOURCE_A, rev)
     assert second_sync["embedded_count"] == 0
     assert second_sync["skipped_count"] == 1
+    with factory() as db:
+        embeddings = list(db.scalars(select(DataDiscoveryEmbedding).where(
+            DataDiscoveryEmbedding.data_discovery_document_id == original[0],
+        )).all())
+        assert len(embeddings) == 1
+        assert embeddings[0].id == embedding_id
+        assert embeddings[0].document_fingerprint == original[2]
     assert _status(client, SOURCE_A, rev)["embedding_state"] == "READY"
     # Repeated status calls require only model metadata, never embedding generation.
     before = sum(len(p.query_texts) + len(p.document_texts) for p in providers)
@@ -270,6 +303,6 @@ def test_discovery_manage_rbac_and_unknown_source_fail_closed(
     assert _status(client, SOURCE_A, rev)["document_state"] == "NOT_READY"
     unknown = client.get(f"{ROOT}/p30c_missing_source/index-status")
     assert unknown.status_code == 404
-    assert unknown.json()["detail"]["code"] == "ACTIVE_REVISION_NOT_FOUND"
+    assert unknown.json()["detail"]["code"] == CatalogQueryErrorCode.ACTIVE_REVISION_NOT_FOUND
     assert providers  # status fetched stub metadata, no external model calls
     assert all(not p.query_texts and not p.document_texts for p in providers)
