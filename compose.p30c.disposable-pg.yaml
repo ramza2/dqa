@@ -1,0 +1,19 @@
+# P30-C ONLY. Ephemeral, loopback-only PostgreSQL + pgvector for synthetic ASGI.
+# Never compose this file into any existing DQA stack or attach persistent volumes.
+services:
+  disposable-pg:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: dqa_p30c_disposable
+      POSTGRES_USER: dqa_p30c_user
+      POSTGRES_PASSWORD: p30c_synthetic_only
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:55448:5432"
+    tmpfs:
+      - /var/lib/postgresql/data:rw,nosuid,nodev,size=512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dqa_p30c_user -d dqa_p30c_disposable"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
