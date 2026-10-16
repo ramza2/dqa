@@ -101,7 +101,7 @@ PY
 
 "${PYTHON}" -m alembic -c alembic.ini upgrade head
 "${PYTHON}" -m pytest -q -rs \
-  tests/p30c/test_web_mcp_isolated_asgi.py
+  tests/p30c/test_discovery_revision_asgi.py
 
 cleanup
 trap - EXIT
