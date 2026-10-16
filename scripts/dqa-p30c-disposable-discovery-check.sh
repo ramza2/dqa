@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# P30-C: disposable, loopback-only, tmpfs PostgreSQL + test-only Oracle adapter.
-# DANGER: root conftest.db_session TRUNCATEs tables. Run ONLY here, after
+# P30-C: disposable, loopback-only, tmpfs PostgreSQL + local stub embeddings.
+# SAFETY: do not use root conftest.db_session (TRUNCATEs tables). Run only after
 # verifying a new Docker Compose project + identity marker; NEVER on DQA DB.
 set -euo pipefail
 
