@@ -759,3 +759,20 @@
 }
 .cp-form-actions { grid-column: 1 / -1; }
 .cp-detail .value { overflow-wrap: anywhere; }
+
+/* S-05-C2: advisory-only Inspector target review within Profile detail. */
+.cp-target-review {
+  border-top: 1px solid var(--border);
+  padding-top: 0.8rem;
+  display: grid;
+  gap: 0.65rem;
+}
+.cp-target-review h4 { margin: 0; font-size: 0.95rem; }
+.cp-target-review-result {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.65rem 0.8rem;
+  overflow-wrap: anywhere;
+}
+.cp-target-review-result p { margin: 0 0 0.3rem; }
+.cp-target-review-result p:last-child { margin-bottom: 0; }

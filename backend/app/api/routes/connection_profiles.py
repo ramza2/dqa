@@ -17,6 +17,9 @@ from app.adapters.db.deps import get_db_session
 from app.api.public_errors import PublicErrorSpec, build_public_http_error
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
+from app.core.config import Settings, get_settings
+from app.schemas.inspector_target_review import InspectorTargetReviewResponse
+from app.services.inspector_target_review import review_inspector_target_configuration
 from app.schemas.connection_profile import (
     ConnectionProfileCreateRequest,
     ConnectionProfileDiagnosticsResponse,
@@ -179,6 +182,27 @@ def test_profile_connection(
         return test_connection_profile_live_connection(session, profile_id)
     except ConnectionProfileError as exc:
         raise _profile_http_error(exc) from None
+
+
+
+@router.get(
+    "/{profile_id}/inspector-target-review",
+    response_model=InspectorTargetReviewResponse,
+)
+def review_profile_inspector_target(
+    profile_id: int,
+    session: Session = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+) -> InspectorTargetReviewResponse:
+    """Offline config-only review, NOT a connection/approval/binding operation."""
+    try:
+        profile = get_connection_profile(session, profile_id)
+    except ConnectionProfileError as exc:
+        raise _profile_http_error(exc) from None
+    return review_inspector_target_configuration(profile, settings)
 
 
 def _profile_http_error(exc: ConnectionProfileError) -> HTTPException:

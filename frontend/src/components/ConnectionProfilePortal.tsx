@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CatalogApiError } from "../types/catalog";
+import { InspectorTargetReviewPanel } from "./InspectorTargetReviewPanel";
 import type {
   ConnectionProfile, ConnectionProfileCreate, ConnectionProfileDiagnostics,
   ConnectionProfileList, ConnectionProfileUpdate,
@@ -385,6 +386,7 @@ export function ConnectionProfilePortal() {
                 <ul>{diagnostics.issues.map((issue, i) => <li key={`${issue.code}-${i}`}>{issueLabel(issue.code)}</li>)}</ul>
               ) : null}
               <p className="dd-guidance">실제 DB 접속 검사: 미실행 · 연결 가능 여부 및 승인 여부는 확인되지 않았습니다.</p>
+              <InspectorTargetReviewPanel key={detail.id} profileId={detail.id} />
               <div className="dd-action-row">
                 <button type="button" className="dd-secondary-btn"
                   disabled={saving || detail.enabled} onClick={openEdit}>
