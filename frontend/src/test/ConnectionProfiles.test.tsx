@@ -89,8 +89,8 @@ describe("S-05-C1 Connection Profile metadata UI", () => {
       expect(await screen.findByTestId("connection-profile-portal")).toBeInTheDocument();
       await userEvent.click(await screen.findByRole("button", { name: "상세: Mock profile 1" }));
       const panel = await screen.findByRole("region", { name: "Connection Profile 상세" });
-      expect(within(panel).getByText("설정됨 (값 비표시)")).toBeInTheDocument();
-      expect(within(panel).getByText("설정 완료 · 비활성")).toBeInTheDocument();
+      expect(await within(panel).findByText("설정됨 (값 비표시)")).toBeInTheDocument();
+      expect(await within(panel).findByText("설정 완료 · 비활성")).toBeInTheDocument();
       expect(screen.queryByText(HIDDEN_REF)).not.toBeInTheDocument();
       expect(mock.calls.some((c) => /test-connection|\/enable/.test(c.path))).toBe(false);
       expect(mock.calls.some((c) => c.path.endsWith("/diagnostics"))).toBe(true);
@@ -148,7 +148,7 @@ describe("S-05-C1 Connection Profile metadata UI", () => {
       render(<ConnectionProfilePortal />);
       await userEvent.click(await screen.findByRole("button", { name: "상세: Mock profile 2" }));
       const panel = await screen.findByRole("region", { name: "Connection Profile 상세" });
-      expect(within(panel).getByRole("button", { name: /정보 수정/ })).toBeDisabled();
+      expect(await within(panel).findByRole("button", { name: /정보 수정/ })).toBeDisabled();
       await userEvent.click(within(panel).getByRole("button", { name: "비활성화" }));
       expect(confirm).toHaveBeenCalledOnce();
       expect(mock.calls.some((c) => c.path.endsWith("/disable"))).toBe(false);
