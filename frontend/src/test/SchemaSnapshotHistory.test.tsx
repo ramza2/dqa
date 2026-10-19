@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DataDiscoveryPortal } from "../components/DataDiscoveryPortal";
@@ -314,11 +314,11 @@ describe("S-05-A Snapshot read-only UI", () => {
       await user.click(button);
       expect(await screen.findByTestId("snapshot-preview")).toHaveTextContent("WARNING");
       expect(previewCalls).toBe(2);
-      releaseFirst?.(jsonResponse({ ...preview, activation_eligible: true }));
-      await waitFor(() => {
-        expect(screen.getByTestId("snapshot-preview")).toHaveTextContent("NOT_VERIFIED");
-        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      await act(async () => {
+        releaseFirst?.(jsonResponse({ ...preview, activation_eligible: true }));
       });
+      expect(screen.getByTestId("snapshot-preview")).toHaveTextContent("NOT_VERIFIED");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     } finally { restore(); }
   });
 
