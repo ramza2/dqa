@@ -26,7 +26,7 @@
 - frontend/src/test/InspectorTargetReview.test.tsx: 6개 Mock 테스트(수동 요청만, 값 비노출, 변조된 허가 false 위반 거부, stale 응답 무시, 403 오류 sanitization). 기존 ConnectionProfiles.test.tsx 6개 회귀 추가.
 - 테스트에서는 실제 DB/Oracle/LLM/ModelOps 네트워크·Credential Resolve를 수행하지 않는다.
 
-## 서버 검증 — 아직 미실행
+## 서버 검증 — 2026-10-19 PASS (PuTTY 실행 로그 확인)
 
     cd ~/dqa && git fetch origin && \
     git worktree add --detach /tmp/dqa-s05c2-review origin/feature/s05c2-inspector-target-offline-review && \
@@ -35,7 +35,13 @@
     git -C /tmp/dqa-s05c2-review diff --check 36d8fc2 HEAD && \
     echo DQA_S05C2_REVIEW_PASS
 
-기대: Python 13건, UI 6건 신규 + 기존 6건. PASS 출력 전 성공 주장 금지. PR 별도 승인 전 머지/실환경 배포 금지.
+- 검증 코드: `feature/s05c2-inspector-target-offline-review@4b7e8a9` (분리된 `/tmp/dqa-s05c2-review` worktree, 기준 `main@36d8fc2`).
+- Backend: pytest **13 passed**. Starlette/httpx deprecation warning 1건(테스트 실패 아님).
+- Frontend: `npm ci` 성공, `npm run build` PASS, `npm run lint` PASS, Vitest 신규 6 + 회귀 6 = **12 passed**.
+- `git diff --check 36d8fc2 HEAD` PASS, 최종 마커 `DQA_S05C2_REVIEW_PASS` 확인.
+- `npm ci` 보고: 취약점 4건(Moderate 1 / High 1 / Critical 2). 취약 패키지 및 실제 영향은 **별도 `npm audit` 분석 필요**; 이번 PR은 패키지 의존성 변경 없음. 무검토 `npm audit fix --force` 금지.
+- GitHub Actions CI 상태 검증 없음(해당 HEAD의 실행 기록 미확인). 실제 DEMIS/Oracle 연결, 실제 병원 DB, 서비스 배포/런타임 검증 **미실행**.
+- 이후 문서-only 변경은 테스트한 `4b7e8a9` 코드 로직을 변경하지 않음. PR 별도 승인 전 머지/실환경 배포 금지.
 
 ## 후속
 
