@@ -26,9 +26,21 @@ Data Discovery → Snapshot History에서 Snapshot Revision의 **상세 Diff**, 
 
 추가 Backend Endpoint, DB/Alembic Migration, Oracle/Credential/Query Core, Catalog Import/Activation, Snapshot Capture/Review POST, 임상 Write/UI, 보안/승인 정책, Docker/서버 설정 변경 없음.
 
-## 서버 Acceptance — 미실행
+## 서버 Acceptance — PASS (2026-10-19)
 
-기준 Frontend **15 files / 127 tests**, 신규 통합 3건으로 **예상 15 files / 130 tests**.
+- **검증 HEAD `711e6a3`**, 독립 detached `/tmp/dqa-s05i-review`, 기준 `main@4afe786`.
+- `npm ci`: **PASS** (258 packages added / 259 packages audited, **0 vulnerabilities**). `whatwg-encoding` 및 ESLint deprecation 안내는 비차단 경고.
+- `npm run build`: **PASS** — TypeScript와 Vite 6.4.3 production build, 65 modules transformed.
+- `npm run lint`: **PASS**.
+- `npm test -- --run`: **15 Test Files / 130 Tests PASS**. SchemaSnapshotHistory 21 tests 및 기존 Frontend 전체 회귀 확인.
+- `git diff --check 4afe786 HEAD`: **PASS**, 최종 출력 **`DQA_S05I_REVIEW_PASS`** 확인.
+- 본 결과 기록은 **문서만 변경하는 후속 커밋**으로, 검증한 Frontend 코드·테스트·의존성은 그대로 유지.
+- GitHub Actions CI/운영 Docker 배포/실제 DEMIS 조회/군·DBA 독립 Preflight·G1/G5 및 외부 DEC-01/02/08/10 승인은 별도 검증 대상.
+- **사용자 명시 승인 전 `main` 머지 및 운영 배포 금지**.
+
+## 서버 Acceptance — 실행했던 Worktree 명령
+
+기준 Frontend **15 files / 127 tests**, 신규 통합 3건 추가 후 **15 files / 130 tests PASS** 확인.
 
 실제 운영 컨테이너, DEMIS/DB 및 기존 `~/dqa/frontend/node_modules`를 변경하지 않는 detached Worktree 검증:
 
@@ -47,6 +59,6 @@ git -C /tmp/dqa-s05i-review diff --check 4afe786 HEAD && \
 echo DQA_S05I_REVIEW_PASS
 ```
 
-- PASS 전에 코드·테스트 수용을 주장하지 않는다. 성공 후 검증 HEAD와 정확한 130건 여부를 기록한다.
+- Build, Lint, Vitest, diff 검사와 최종 PASS 마커를 모두 확인했다.
 - GitHub Actions CI, 운영 Docker 빌드·재배포, 실제 DEMIS/Oracle 및 외부 G1/G5·DEC-01/02/08/10 승인은 별도.
 - 사용자 명시 승인 전 Draft→Ready 여부와 무관하게 `main` Squash Merge 또는 운영 배포 금지.
