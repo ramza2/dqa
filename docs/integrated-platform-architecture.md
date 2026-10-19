@@ -70,9 +70,9 @@ flowchart TB
   T --> CORE
   CORE <--> C
   CORE --> R
-  CORE --> I
+  CORE -.-> I
   INS -.->|"authorized metadata only, if supported"| D
-  INS -->|"immutable Catalog revision"| C
+  INS -.->|"gated candidate/review to Catalog"| C
   R -.->|"approved read route and scope only"| D
   I -.->|"separately approved clinical write only"| SAVE
   CORE -.->|"approved AI data egress only"| M
