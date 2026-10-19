@@ -35,10 +35,22 @@ S-05-J의 **오류 상태에서만 표시되는 재조회 버튼을 사용할 �
 **Backend/API 경로·DB/Alembic Migration·Oracle/DEMIS Adapter·Credential/Query Core·
 기존 Snapshot Capture/Review POST·Catalog Import/READY/Activation·MCP·환자 쓰기 및 군/HITL 승인·운영 Docker 설정은 변경하지 않는다.**
 
-## 서버 Acceptance — 미실행
+## 서버 Acceptance — 최종 PASS (2026-10-19)
+
+- **서버 검증 코드 HEAD `1153bfa`**, 격리된 detached Worktree `/tmp/dqa-s05k-review`, 기준 `main@93ca45a`.
+- `npm ci`: **PASS**, 258개 패키지 설치 / 259개 패키지 감사 / **0 vulnerabilities**. whatwg-encoding·ESLint 지원 종료 경고는 비차단.
+- `npm run build`: **PASS**, TypeScript + Vite 6.4.3 production build, **66 modules transformed**.
+- `npm run lint`: **PASS**, ESLint 오류 없음.
+- `npm test -- --run`: **16 Test Files / 141 Tests PASS**. SnapshotPanelDeadline 단위 5건, SchemaSnapshotHistory UI 27건 포함 전체 Frontend 회귀.
+- `git diff --check 93ca45a HEAD`: **PASS**, `DQA_S05K_REVIEW_PASS` 출력 확인.
+- 이 결과 기록은 **문서만 변경하는 후속 커밋**이다. 서버 검증된 Frontend 기능/테스트/의존성은 `1153bfa`와 동일하다.
+- 이번 검증은 synthetic mock 기반이며, 실제 Oracle/DEMIS 및 현장 15초 네트워크 실측, 군/DBA Preflight·READY/Activation·G1/G5, GitHub Actions CI, Docker 운영 배포의 증빙은 아니다.
+- **사용자 별도 명시 승인 전 `main` 머지 및 운영 배포 금지.**
+
+## 서버 Acceptance — 실행한 격리 Worktree 명령
 
 기준 Frontend **15 files / 134 tests**.
-신규 helper 테스트 5건 + 화면 통합 2건 → **예상 16 files / 141 tests**.
+신규 helper 테스트 5건 + 화면 통합 2건 → **16 files / 141 tests PASS 확인**.
 
 ```bash
 cd ~/dqa && git fetch origin && \
@@ -55,7 +67,7 @@ git -C /tmp/dqa-s05k-review diff --check 93ca45a HEAD && \
 echo DQA_S05K_REVIEW_PASS
 ```
 
-검증된 코드 HEAD 및 전체 수치를 기록하기 전에는 테스트 완료라고 주장하지 않는다.
+검증 코드 HEAD와 141건 PASS, 최종 검증 마커를 확인했다.
 이번 검증은 synthetic mock 기반 Frontend 테스트이며, 실제 15초 네트워크 지연·Oracle 권한
 테스트 또는 군/DBA Preflight 승인을 의미하지 않는다. GitHub Actions CI, 운영 Docker 배포,
 실 DEMIS 연계 및 G1/G5 수용은 별도다.
