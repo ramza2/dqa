@@ -31,7 +31,10 @@ const preview: SnapshotReviewPreview = {
   review_status: "REVIEW_REQUIRED", diff_status: "COMPARED",
   identical: false, total_changes: 1, snapshot_verified: true,
   candidate_package_valid: true, candidate_package_readiness: "WARNING",
-  preflight_status: "NOT_VERIFIED", activation_eligible: false, required_gates: ["G0", "G1"],
+  preflight_status: "NOT_VERIFIED", activation_eligible: false, required_gates: [
+    "MANUAL_CHANGE_REVIEW", "INDEPENDENT_PREFLIGHT", "EXPLICIT_CATALOG_IMPORT",
+    "READY_ELIGIBILITY_VERIFICATION", "MANUAL_ACTIVATION",
+  ],
 };
 const event: SnapshotReviewEvent = {
   id: 11, source_name: SRC_A, snapshot_revision_id: 10,
@@ -52,6 +55,7 @@ function responses(options: {
   onList?: (url: URL) => Promise<Response> | Response;
   onDetail?: (url: URL) => Promise<Response> | Response;
   previewStatus?: number;
+  onPreview?: (url: URL) => Promise<Response> | Response;
 } = {}): Handler[] {
   return [
     (url, init) => {
@@ -63,6 +67,7 @@ function responses(options: {
       if (!suffix) return options.onList?.(url) ?? jsonResponse(options.items ?? [snapshot]);
       if (suffix === "/10") return options.onDetail?.(url) ?? jsonResponse(detail);
       if (suffix === "/10/review") {
+        if (options.onPreview) return options.onPreview(url);
         if (options.previewStatus) return jsonResponse(
           { detail: { code: "SNAPSHOT_REVIEW_UNVERIFIABLE", message: "not verifiable" } },
           options.previewStatus,
@@ -97,6 +102,9 @@ describe("S-05-A Snapshot read-only UI", () => {
     expect(status).toHaveTextContent("NOT_VERIFIED");
     expect(status).toHaveTextContent("WARNING");
     expect(status).toHaveTextContent("false");
+    const gates = await screen.findByTestId("snapshot-review-gates");
+    expect(within(gates).getAllByRole("listitem")).toHaveLength(5);
+    expect(gates).toHaveTextContent("INDEPENDENT_PREFLIGHT");
     expect(await screen.findByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
     expect(screen.queryByRole("button", { name: /activate|approve|READY|capture|import/i })).not.toBeInTheDocument();
     restore();
@@ -165,9 +173,43 @@ describe("S-05-A Snapshot read-only UI", () => {
     expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
     expect(await screen.findByRole("alert")).toHaveTextContent("SNAPSHOT_REVIEW_UNVERIFIABLE");
     expect(screen.queryByTestId("snapshot-preview")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("snapshot-review-gates")).not.toBeInTheDocument();
     restore();
   });
 
+  it("rejects a promoted or unknown Gate review payload without hiding an independent Diff", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(responses({
+      onPreview: () => jsonResponse({
+        ...preview, activation_eligible: true,
+        required_gates: ["INDEPENDENT_PREFLIGHT", "UNRECOGNIZED_SECRET"],
+      }),
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect(await screen.findByRole("alert")).toHaveTextContent("Gate 안전 상태");
+      expect(screen.queryByTestId("snapshot-preview")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("snapshot-review-gates")).not.toBeInTheDocument();
+      expect(screen.queryByText("UNRECOGNIZED_SECRET")).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+  it("handles null review preview safely while leaving the Diff accessible", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(responses({ onPreview: () => jsonResponse(null) }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect(await screen.findByRole("alert")).toHaveTextContent("Gate 안전 상태");
+      expect(screen.queryByTestId("snapshot-review-gates")).not.toBeInTheDocument();
+    } finally { restore(); }
+  });
   it("fails closed on list Source mismatch without rendering cross-source rows", async () => {
     const user = userEvent.setup();
     const restore = installFetchMock(responses({

@@ -590,10 +590,12 @@ describe("DataDiscoveryIndexStatus", () => {
   it("ignores sync response when revision snapshot no longer matches", async () => {
     const user = userEvent.setup();
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    let statusCalls = 0;
     const restore = installFetchMock(
       discoveryHandlers({
-        status: () =>
-          jsonResponse({
+        status: () => {
+          statusCalls += 1;
+          return jsonResponse({
             ...indexReady,
             embedding_state: "NOT_READY",
             coverage: {
@@ -603,7 +605,8 @@ describe("DataDiscoveryIndexStatus", () => {
               stale_count: 0,
               missing_count: 10,
             },
-          }),
+          });
+        },
         sync: () =>
           jsonResponse({
             source_name: activeSource.source_name,
@@ -622,6 +625,12 @@ describe("DataDiscoveryIndexStatus", () => {
     await user.click(screen.getByTestId("sync-embeddings"));
     expect(confirmSpy).toHaveBeenCalled();
     expect(await screen.findByTestId("index-stale-warning")).toHaveTextContent(
+      /Catalog revision changed during the operation/i,
+    );
+    // The stale-action handler refreshes index status. The warning must still
+    // be visible after that refresh, not just during a short render window.
+    await waitFor(() => expect(statusCalls).toBeGreaterThan(1));
+    expect(screen.getByTestId("index-stale-warning")).toHaveTextContent(
       /Catalog revision changed during the operation/i,
     );
     expect(screen.queryByTestId("index-action-message")).not.toBeInTheDocument();
