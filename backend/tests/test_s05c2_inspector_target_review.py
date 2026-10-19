@@ -105,11 +105,20 @@ def test_review_fail_closed_config_states(settings_overrides, state):
 
 def test_http_requires_profile_manage_and_never_reaches_db_or_inspector(client, monkeypatch):
     from app.api.routes import connection_profiles as route
+    from app.services import schema_inspection
+    calls = {"profile": 0}
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("review must not resolve credentials or open an Oracle engine")
+
+    monkeypatch.setattr(schema_inspection, "create_engine", forbidden)
+    monkeypatch.setattr(schema_inspection, "EnvironmentCredentialResolver", forbidden)
 
     def no_real_db():
         yield object()  # never used; route's profile get is mocked
 
     def profile_stub(_session, _id):
+        calls["profile"] += 1
         assert _id == 5
         return _profile()
 
@@ -123,8 +132,10 @@ def test_http_requires_profile_manage_and_never_reaches_db_or_inspector(client, 
             headers={"X-DQA-Dev-Actor": "synthetic-viewer", "X-DQA-Dev-Roles": "viewer"},
         )
         assert denied.status_code == 403
+        assert calls["profile"] == 0  # RBAC denies before profile lookup
         ok = client.get("/api/v1/connection-profiles/5/inspector-target-review")
         assert ok.status_code == 200, ok.text
+        assert calls["profile"] == 1
         assert ok.json()["comparison_state"] == "STRUCTURAL_MATCH_UNVERIFIED"
         assert ok.json()["connection_authorized"] is False
         for secret in ("synthetic.invalid", "DEMIS_INSPECT_SECRET_", "metadata_reader"):
