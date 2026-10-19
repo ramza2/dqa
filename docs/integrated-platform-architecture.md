@@ -1,12 +1,13 @@
 # Integrated DQA Platform Architecture
 
-> **2026-10-15 구조 재검토 공지 (군 주간회의 후속):** 아래 2026-10-13 목표 구성도의
-> `DEMIS Oracle`에 대한 Inspector·Read/Write 직접 연결은 **기존 가정이며 최종 확정안이 아니다.**
-> 병원 운영 EMR 직접 조회가 아닌 **복제 EMR DB 조회 원천을 표시한 재설계 초안** 및
-> 의료정보체계과 DBMS·Oracle License·복제범위·권한 확인 질문은
-> [U-01-R1 복제 EMR DB 아키텍처 협의 초안](u01-replicated-emr-db-architecture-review.md)을 우선 참조한다.
-> Read-only Target과 운영 원장 Write Interface는 반드시 분리하며,
-> 실제 복제 방식·DBMS·API는 승인/협의 전 가정하지 않는다.
+> **2026-10-19 U-03 문서 정합화 (2026-10-15 군 협의 요청 반영):**
+> 기존 2026-10-13 도식의 `DEMIS Oracle` 직접 Inspector·Read/Write
+> 연결은 **옛 목표 가정**이다. 아래 도식의 **복제 EMR Read Source**와
+> **공식 운영 원장 Write Interface**는 서로 분리된 *미승인 제안*으로
+> 표시한다. 허용 DBMS·접속 방식·복제 주기/범위·계정/라이선스 책임은
+> [U-01-R1 복제 EMR 검토](u01-replicated-emr-db-architecture-review.md)
+> DEC-10/01, 쓰기는 별도 DEC-09/G4의 서면 결정 전까지 미확정이다.
+> 어떤 점선도 현재 운영 연결이나 임상 접근 승인을 뜻하지 않는다.
 
 > **Target architecture rebaseline — 2026-10-13 (planning document, not deployment approval).**
 > DQA is the single deployable **DEMIS Schema Intelligence, Data Access & MCP Tool Platform**.
@@ -17,10 +18,11 @@
 >
 > **Status separation:** implemented != mock-verified != real DEMIS-approved.
 > See [Roadmap](roadmap.md) and [Real DEMIS Onboarding](real-demis-onboarding.md).
-> Root/backend `AGENTS.md`, `README.md` and parts of the existing runbook still
-> describe a strictly read-only DQA and an independent Schema Analyzer.
-> They must be aligned through reviewed PRs **before any write-path implementation**.
-> This document alone does not loosen those existing prohibitions.
+> Root/backend `AGENTS.md` and the real-DEMIS onboarding runbook
+> **correctly preserve today's strictly read-only execution restrictions**.
+> A future clinical-write capability and final retirement of the independent
+> Analyzer require their own reviewed implementation/policy PRs and the
+> applicable site approvals. This planning document does not loosen them.
 
 ## 1. 목표 및 시스템 책임
 
@@ -52,11 +54,12 @@ flowchart TB
   W["DQA Web Portal"]
   T["DQA MCP Tool + internal REST boundary"]
   CORE["DQA Shared Application Core<br/>Identity / RBAC / Catalog / Safety<br/>Read / Write Policy / Audit"]
-  INS["DQA Schema Inspector<br/>Oracle metadata only"]
+  INS["DQA Schema Inspector<br/>Oracle metadata code, disabled"]
   C["DQA Catalog / Discovery<br/>PostgreSQL + pgvector"]
-  R["DEMIS Read-only Adapter<br/>separate SELECT account"]
-  I["DEMIS Controlled Insert Adapter<br/>separate approved write account"]
-  D["DEMIS Oracle"]
+  R["DQA Read-only Adapter<br/>Oracle code exists; source pending"]
+  I["Future Controlled Write Boundary<br/>not implemented"]
+  D["Proposed replicated EMR read source<br/>DBMS/API/grants pending DEC-10/01"]
+  SAVE["Proposed official operational EMR save interface<br/>undecided DEC-09/G4"]
   M["ModelOps Gateway<br/>LLM / BGE-M3 (policy-gated)"]
 
   S <-->|"FHIR exchange / workflow"| F
@@ -68,12 +71,17 @@ flowchart TB
   CORE <--> C
   CORE --> R
   CORE --> I
-  INS -->|"approved metadata inspect"| D
+  INS -.->|"authorized metadata only, if supported"| D
   INS -->|"immutable Catalog revision"| C
-  R -->|"parameter-bound SELECT"| D
-  I -->|"approved scoped INSERT"| D
+  R -.->|"approved read route and scope only"| D
+  I -.->|"separately approved clinical write only"| SAVE
   CORE -.->|"approved AI data egress only"| M
 ~~~
+
+**도식의 점선은 미승인·미구현 연계 제안**이며, 실제 DEMIS/복제 DB
+접속이나 Controlled Write 기능이 배포됐다는 뜻이 아니다. DQA에 구현된
+Oracle 전용 Read/Metadata Adapter의 존재만으로 **DBMS가 아직 알려지지 않은
+복제 DB에 연결 가능**하다고 판단하지 않는다.
 
 **연계 배치 원칙**
 
@@ -139,7 +147,7 @@ Authenticated Web / MCP / internal REST
 → Active Catalog / approved logical resource mapping
 → Approved + Enabled Query Template (current safe path)
 → validated typed parameters / eligibility / SQL safety / preview
-→ Read-only Oracle adapter (SELECT-only credentials + bounded query)
+→ Read-only Adapter (existing Oracle code; approved source/DBMS/route pending)
 → bounded, minimized source-data JSON
 → audit metadata / correlation
 → caller (FHIR standardizes if needed)
@@ -280,7 +288,7 @@ FHIR가 DQA에 접근하는지, SNUH.AI가 직접 MCP를 호출하는지는 운�
 1. **Baseline:** PoC Schema Analyzer와 DQA의 동일 Oracle Mock 스키마 결과
    (테이블/컬럼/PK/FK/Index/comment/fingerprint), 검색 Gold Set 및
    화면·운영 기능 차이를 정량 비교한다.
-2. **DQA Inspector 이관:** Metadata collector + Catalog Snapshot/Package +
+2. **DQA Inspector 이관:** 승인된 Read Source/Schema와 DBMS 계약 확인 후 Metadata collector + Catalog Snapshot/Package +
    diff/version + run status를 통합하고 독립 Analyzer의 임상 운영 의존성을 제거한다.
 3. **Read API/MCP:** approved Query Template, external REST/MCP contract,
    FHIR/SNUH.AI interface, Oracle Mock read-only E2E 및 감사 등가성을 검증한다.
@@ -296,7 +304,7 @@ FHIR가 DQA에 접근하는지, SNUH.AI가 직접 MCP를 호출하는지는 운�
 | Gate | 최소 합격 조건 | Authority |
 |---|---|---|
 | G0 Architecture | 역할 분담, 검사/조회/쓰기 경계, MCP 호출 경로 및 책임 승인 | 컨소시엄/PL |
-| G1 Inspector | 동일 Mock 스키마 분석 parity, immutable Catalog, rebuild/sync 검증 | 개발/QA |
+| G1 Inspector | Mock 합성 회귀는 선행 기준선. 실제 G1은 DBA 승인 Source/Schema·수집 시점에 대한 PoC↔DQA canonical metadata/검색 Gold 동등성 및 문서·Embedding/복구 경계의 기관 수용 | QA·DBA / 군 검수(승인 주체 확인 필요) |
 | G2 Read | 승인 조회 E2E, audit, RBAC/IdP, TLS, 실 DEMIS SELECT 권한 확인 | 군/병원/보안 |
 | G3 Write mock | 승인증빙 위조/만료/취소, 중복/재시도/실패/롤백 포함 무해한 fixture 실증 | 의료 QA/보안 |
 | G4 Real write | 대상 기록 유형/필드/공식 인터페이스/DBA grant/임상의 승인과 실증서 승인 | 군/병원/DEMIS 운영 |
@@ -319,8 +327,9 @@ Oracle Mock의 이번 세션 **계정 인증/실제 SELECT는 미검증**이며,
 - 어떤 클라이언트가 MCP를 호출할지, FHIR REST 변환 책임, 의료 오류
   코드/성능·감사정보 최소집합 — **연계 ICD 협의 필요**.
 - `AGENTS.md`, `backend/AGENTS.md`, `README.md` 및
-  `real-demis-onboarding.md`의 기존 'read-only consumer' 규칙은
-  실행 코드 관점에서 **계속 유효**하다. 첫 코드 구현 이전에
-  새로운 승인된 Write/Inspector 경계로 일관되게 현행화해야 한다.
+  `real-demis-onboarding.md`의 **현행 read-only 금지/권한 규칙은 계속 유효**하다.
+  별도 실기관 승인·설계 및 reviewed PR 없이 Oracle Read Adapter나 기존
+  Query/MCP 경로에 임상 Write를 추가하지 않는다. 독립 Analyzer 종료도 G1/G5
+  기관 수용 및 별도 전환 승인이 있을 때만 진행한다.
 
 상세 개발 WBS, 선후행 관계 및 acceptance는 [Roadmap](roadmap.md)에 따른다.
