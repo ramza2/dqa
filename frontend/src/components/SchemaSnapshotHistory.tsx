@@ -129,10 +129,10 @@ export function SchemaSnapshotHistory() {
     if (previewResult.status === "fulfilled") {
       const value = previewResult.value;
       setPreview(
-        value.revision_id === row.id
+        isSafeSnapshotReviewPreview(value)
+        && value.revision_id === row.id
         && value.source_name === expectedSource
         && value.schema_fingerprint === row.schema_fingerprint
-        && isSafeSnapshotReviewPreview(value)
           ? ready(value)
           : failed("검토 미리보기의 Revision/Source/Fingerprint 또는 Gate 안전 상태가 일치하지 않습니다."),
       );
