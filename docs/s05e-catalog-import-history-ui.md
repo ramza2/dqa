@@ -31,7 +31,19 @@ S-05-A~D는 Snapshot History/Diff, 활성 Catalog/Activation Events, Connection 
 - `frontend/src/test/CatalogImportHistory.test.tsx`: 분리 Mock 검증(정상·공백·cross Source·중복/변조·권한/에러 sanitization·stale response·ID/FP 비교).
 - `frontend/src/test/SnapshotCatalogContext.test.tsx`, `SchemaSnapshotHistory.test.tsx`: 연계 및 기존 화면 회귀 Mock.
 
-## 서버 acceptance — 미실행
+## 서버 Acceptance — 최종 PASS (2026-10-19)
+
+- 검증 코드 HEAD: `c916bec`, 별도 detached Worktree `/tmp/dqa-s05e-review`.
+- `npm ci`: **PASS**, 설치·감사 패키지 259개 기준 **취약점 0건**.
+- `npm run build`: **PASS** — TypeScript, Vite 6.4.3 production build (62 modules).
+- `npm run lint`: **PASS**, ESLint 오류 없음.
+- `npm test -- --run`: **12 Test Files / 100 Tests PASS** — 신규 CatalogImportHistory 7건, SnapshotCatalogContext 10건, SchemaSnapshotHistory 10건 및 전체 Frontend 회귀.
+- `git diff --check 156bad2 HEAD`: **PASS**. 최종 마커 `DQA_S05E_REVIEW_PASS` 확인.
+- 이 문서는 검증 이후 결과만 기록하는 후속 커밋이다. **실행된 애플리케이션·테스트 코드와 의존성은 해당 검증 HEAD 대비 변경하지 않았다.**
+- GitHub Actions CI 및 실제 Docker 이미지 빌드·운영 재배포·실 DEMIS/Oracle 데이터 연결은 미실행. 이 테스트는 군/DBA 승인·인수 수용 증빙이 아니다.
+- 독립적으로 명시 승인하기 전에는 `main` 병합 및 운영 배포를 진행하지 않는다.
+
+## 서버 검증에 사용한 명령 (실행 완료)
 
 로컬 운영 서비스, DEMIS/DB, 공유 frontend 의존성 설치 상태를 변경하지 않고 별도 Worktree에서만 실행:
 
