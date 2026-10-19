@@ -33,10 +33,22 @@ S-05-I에서는 한 GET의 지연/오류가 다른 패널의 렌더링을 막지
 Catalog Import/READY/Activate, 임상 데이터 조회·쓰기·승인 UI, Docker 운영설정 변경 없음.
 기존 `CATALOG_READ`로 조회되는 정보 외 노출 없음.
 
-## 서버 Acceptance — 미실행
+## 서버 Acceptance — 최종 PASS (2026-10-19)
+
+- 서버 검증 코드 HEAD **`fdf426c`**, 격리된 detached Worktree `/tmp/dqa-s05j-review`, 기준 `main@8cae439`.
+- `npm ci`: **PASS**, 258개 패키지 설치, 259개 패키지 감사 결과 **0 vulnerabilities**. `whatwg-encoding` / ESLint deprecation은 비차단 안내.
+- `npm run build`: **PASS**, TypeScript + Vite 6.4.3 production build, 65 modules transformed.
+- `npm run lint`: **PASS**, ESLint 오류 없음.
+- `npm test -- --run`: **15 Test Files / 134 Tests PASS**. Snapshot UI 25건, 전체 Frontend 회귀 포함.
+- `git diff --check 8cae439 HEAD`: **PASS**. 최종 **`DQA_S05J_REVIEW_PASS`** 출력 확인.
+- 이 검증 결과의 후속 기록은 **문서 전용 커밋**이며 테스트를 통과한 Frontend 코드·테스트·의존성을 변경하지 않는다.
+- GitHub Actions CI / Docker 운영 빌드·배포 / 실제 Oracle·DEMIS 연결 및 외부 군·DBA Preflight·READY·G1/G5 승인은 이번 검증에 포함되지 않았다.
+- 사용자 별도 승인 전 `main` 머지 및 운영 배포 금지.
+
+## 서버 Acceptance — 실행 완료한 검증 명령
 
 기준 Frontend **15 Test Files / 130 tests**, 신규 통합 4건 추가 후
-**예상 15 Test Files / 134 tests**. 실제 운영 컨테이너와 DB는 그대로 두고 detached Worktree에서만 검증:
+**15 Test Files / 134 tests PASS**를 확인했다. 실제 운영 컨테이너와 DB는 그대로 두고 detached Worktree에서만 검증:
 
 ```bash
 cd ~/dqa && git fetch origin && \
@@ -53,6 +65,6 @@ git -C /tmp/dqa-s05j-review diff --check 8cae439 HEAD && \
 echo DQA_S05J_REVIEW_PASS
 ```
 
-- 최종 PASS 마커 이전에는 테스트 수용을 주장하지 않는다.
+- 최종 PASS 마커까지 확인했으며 합성/Frontend 테스트 수용 이외의 운영 승인으로 해석하지 않는다.
 - GitHub Actions CI·운영 Docker 배포·실 Oracle/DEMIS·군/DBA Preflight·G1/G5 인수는 별도.
 - 사용자 명시 승인 전 `main` Squash Merge/운영 배포 금지.
