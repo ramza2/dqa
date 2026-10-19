@@ -8,6 +8,7 @@ eligible for activation and does not establish independent DBA preflight.
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 
 from app.models.catalog_import import CatalogImportRevision
 from app.services.data_discovery_document import build_documents_for_revision
@@ -65,7 +66,6 @@ def test_inspector_warning_package_yields_six_bound_metadata_documents():
     assert "IX_VISIT_PATIENT" in visit.searchable_text
     assert "FK_VISIT_PATIENT" in visit.searchable_text
     assert "PATIENT_ID->PATIENT_ID, SITE_ID->SITE_ID" in visit.searchable_text
-    assert "S06D_SENSITIVE" not in " ".join(doc.searchable_text for doc in documents)
     assert revision.package_readiness == "WARNING"
 
 
@@ -132,3 +132,28 @@ def test_dictionary_row_order_does_not_rewrite_derived_document_fingerprints():
         key: (doc.source_fingerprint, doc.document_fingerprint, doc.searchable_text)
         for key, doc in after.items()
     }
+
+
+def test_sensitive_dictionary_expressions_cannot_enter_search_documents():
+    baseline = _inspect()
+    noisy = deepcopy(baseline)
+    noisy.columns[0] = replace(
+        noisy.columns[0], default_value="S06E_SENSITIVE_DEFAULT_SQL",
+    )
+    noisy.indexes[0] = replace(
+        noisy.indexes[0], index_definition="S06E_SENSITIVE_INDEX_SQL",
+    )
+    first_rev, first_docs = _in_memory_warning_revision(baseline)
+    second_rev, second_docs = _in_memory_warning_revision(noisy)
+    assert first_rev.schema_fingerprint == second_rev.schema_fingerprint
+    first, second = _by_key(first_docs), _by_key(second_docs)
+    assert {
+        key: (doc.searchable_text, doc.document_fingerprint, doc.source_fingerprint)
+        for key, doc in first.items()
+    } == {
+        key: (doc.searchable_text, doc.document_fingerprint, doc.source_fingerprint)
+        for key, doc in second.items()
+    }
+    assert "S06E_SENSITIVE" not in " ".join(
+        doc.searchable_text for doc in second_docs
+    )
