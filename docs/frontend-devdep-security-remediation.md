@@ -18,47 +18,33 @@
 - **이 PR은 lockfile 미생성 상태의 준비 브랜치**에서 시작한다. 정상적인 `npm ci` 실행 전에 별도 worktree에서 `npm install --package-lock-only`로 lockfile을 재생성해 커밋해야 한다.
 - 이 변경은 앱 기능, Backend, API, DB, Oracle/DEMIS, Runtime/Compose 배포에 영향을 주지 않는다.
 
-## 단일 서버 수용 (안전한 별도 worktree, 미실행)
+## 실패 분석 (2026-10-19)
+
+Node v22.14.0 서버에서 1차 `npm install --package-lock-only`가 `Cannot read properties of null (reading 'edgesOut')`로 중단되었다. 따라서 npm ci/Build/Lint/Vitest/Audit 및 패치 lockfile push는 **미실행**이다. 이 오류는 npm 10 Arborist의 Vitest 4 peer dependency 재귀 해석 버그와 일치한다. npm/cli #9787, #8261 및 fix #8448 참고. npm 11.6.0 이상에는 관련 수정 포함.
+
+보완: 운영 npm/Node 변경 없이 `npx --yes npm@11.6.0`으로 **잠금 파일 생성과 감사만** 실행하고, 기존 `npm ci`도 반드시 검사한다. 구버전 npm ci가 실패한다면 현재 Dockerfile/CI 호환성이 확보되지 않은 것이므로, **커밋/푸시 전에 중단**한다. `--legacy-peer-deps` 및 `--force`로 우회하지 않는다.
+
+## 서버 수용 재시도 (안전한 기존 worktree, 미실행)
+
+PR 브랜치에 `scripts/dqa-frontend-secfix-acceptance.sh`를 추가했다. 기존 `/tmp/dqa-frontend-secfix-review` worktree를 **재사용**한다.
 
 ```bash
 cd ~/dqa && git fetch origin && \
-git worktree add --detach /tmp/dqa-frontend-secfix-review \
+git -C /tmp/dqa-frontend-secfix-review switch --detach \
   origin/fix/frontend-devdep-security-20261019 && \
-bash -euo pipefail <<'DQA_SECURITY_ACCEPT'
-cd /tmp/dqa-frontend-secfix-review/frontend
-node --version
-npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-npm ci
-npm run build
-npm run lint
-npm test -- --run
-npm audit --audit-level=moderate
-npm audit --omit=dev --audit-level=moderate
-node - <<'JS'
-const p = require("./package-lock.json").packages;
-if (p["node_modules/vitest"]?.version !== "4.1.12") throw Error("Vitest version mismatch");
-if (p["node_modules/@vitest/mocker"]?.version !== "4.1.12") throw Error("Mocker version mismatch");
-const version = p["node_modules/source-map-js"]?.version || "";
-if (Number(version.split(".")[0]) < 1 ||
-    (version.startsWith("1.") && Number(version.split(".")[1]) < 2) ||
-    (version.startsWith("1.2.") && Number(version.split(".")[2]) < 2)) {
-  throw Error("source-map-js is not patched");
-}
-const pool = p["node_modules/tinypool"]?.version;
-if (pool && Number(pool.split(".")[0]) < 2) throw Error("Old tinypool remains");
-console.log("DQA_FRONTEND_PATCH_VERSIONS_OK", {vitest: p["node_modules/vitest"].version, sourceMap: version, tinypool: pool || "absent"});
-JS
-cd /tmp/dqa-frontend-secfix-review
-git diff --check
-test "$(git status --porcelain)" = " M frontend/package-lock.json"
-git add frontend/package-lock.json
-git commit -m "chore(frontend): lock patched test dependencies"
-git push origin HEAD:refs/heads/fix/frontend-devdep-security-20261019
-echo DQA_FRONTEND_SECURITY_REVIEW_PASS
-DQA_SECURITY_ACCEPT
+bash -n /tmp/dqa-frontend-secfix-review/scripts/dqa-frontend-secfix-acceptance.sh && \
+bash /tmp/dqa-frontend-secfix-review/scripts/dqa-frontend-secfix-acceptance.sh
 ```
 
-**위 명령은 사용자 실행을 전제로 제시**: npm registry에 대한 정상적 접속·개발 의존성 다운로드가 필요하다. 마지막 `push`는 모든 검사 성공 후에만 해당 **feature branch**로 커밋하며 main을 수정하거나 PR을 머지하지 않는다. `npm audit fix --force` 절대 사용 금지. 실제 DEMIS/Oracle/Postgres, 기존 컨테이너, 운영 서비스에 접근하지 않는다.
+스크립트는 다음을 검증한다.
+- 대상 worktree가 정확히 분리된 HEAD이며, 원격 PR HEAD와 일치하고 수정 파일이 없는 상태인지 확인.
+- npm 11.6.0을 임시 npx 실행 (전역 npm 설치·업그레이드 없음), `package-lock.json`만 생성.
+- **기본 npm의** `npm ci`, build, lint, **전체** Vitest 테스트.
+- npm 11로 전체/production `audit --audit-level=moderate`를 각각 확인. 취약점 0건 필수.
+- `vitest/@vitest/mocker=4.1.12`, `source-map-js>=1.2.2`, 취약 `tinypool` 잔존 여부를 잠금 파일에서 검사.
+- 검증 통과 및 `frontend/package-lock.json` 단일 파일 변경 확인 후에만 그 파일을 **PR 기능 브랜치로** commit/push; main은 변경하지 않음.
+
+최종 `DQA_FRONTEND_SECURITY_REVIEW_PASS` 출력 전 성공 주장 금지. worktree에 이전 실패로 수정 파일이 남아 있으면 스크립트가 거부한다. 이 경우 자동 강제 복구하지 말고 해당 파일을 별도 확인한다.
 
 ## 검증·승인
 
