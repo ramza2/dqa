@@ -56,7 +56,18 @@ Inventory 또는 Oracle Mock 배포의 실측 건수가 아니다.
   이 합성 회귀 결과만으로 판정하지 않는다.
 - 별도 LLM Draft PR #124는 미머지/보류 유지.
 
-## 4. PuTTY 서버 검증 — 실행 대기
+## 4. PuTTY 서버 검증 — PASS (2026-10-19)
+
+- **실제 검증한 코드 HEAD:** `b373a1e` · `/tmp/dqa-s06g-review` detached Worktree · 기준 `main@33417ee`.
+- `python3 -m venv .venv` 및 `pip install -e '.[dev]'`: **PASS**, Worktree 전용 Python 환경 생성.
+- `python -m pytest -q -rs`: **33 passed / 0 failed / 0 skipped**, 신규 S-06-G 5건 및 S-06-E/D/C·Catalog 후보 회귀 포함. `................................. [100%]` 성공 점 33개와 종료 코드 0 확인.
+- `git diff --check 33417ee HEAD`: **PASS**. 최종 `DQA_S06G_REVIEW_PASS` 마커 확인.
+- `StarletteDeprecationWarning` 1건은 비차단.
+- 결과 기록을 위한 후속 커밋은 **문서만 변경**하며, 서버 검증을 통과한 Test/Production 코드 및 의존성을 변경하지 않는다.
+- **실 DEMIS·기존 Oracle Mock 25개 테이블의 실제 DB 검증, Independent DBA Preflight/READY, G1/G2/G5, 실 검색품질·임상정보, CI 및 운영 Docker 배포 증빙이 아니다.**
+- LLM 관련 PR #124는 여전히 Draft로 보류한다.
+
+## 5. PuTTY 서버 검증 — 실행한 격리 Worktree 명령
 
 **운영 DQA Postgres/Oracle/Docker 미접근.** 독립 Worktree와 해당
 Worktree 전용 venv로 아래 DB 없는 테스트 파일만 실행한다.
@@ -84,6 +95,4 @@ echo DQA_S06G_REVIEW_PASS
 이번 S-06-G의 DB-free 테스트 명령에는 포함하지 않는다.
 S-06-F의 8건 PASS는 별도 2026-10-19 서버 수용 기록으로 유지한다.
 
-서버 Acceptance는 이번 실행 로그 수신 후에만 확정한다.
-`DQA_S06G_REVIEW_PASS`가 출력되기 전 PR 승격/머지 또는 운영 배포를
-진행하지 않는다. **사용자 명시 승인 전 `main` 머지 금지.**
+서버 로그에서 **33 PASS / 0 SKIP** 및 `DQA_S06G_REVIEW_PASS`가 확인됐다. 해당 결과는 합성 개발 회귀 수용에 한정하며, 운영 기관의 승인 또는 실제 DB Parity로 해석하지 않는다. **사용자 명시 승인 전 `main` 머지 금지.**
