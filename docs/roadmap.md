@@ -74,6 +74,13 @@
 
 > **U-02 검증 증빙 현행화 (2026-10-15):** Legacy Inspector·v2 Package/Fingerprint·17개 ORM 이관 분류·합성 Source/Run 및 격리 PostgreSQL 백업/복구 시험은 [#82–#88 검증 결과](u02-integration-acceptance-handoff.md)로 병합 완료. 이는 **개발·합성환경 기준선**이며 **실 DEMIS Schema/권한/Preflight 승인·데이터 이관·운영 Cutover 완료가 아니다.** 남은 외부 결정은 [U-02 승인/차단 레지스터](u02-external-decision-register.md) 참조. 원본 Analyzer 중단은 G1·G5 수용 후 별도 서면 승인까지 금지한다.
 
+> **S-06 개발 회귀 / 현장 G1 인수 준비 (2026-10-19):** S-06-A~H 합성
+> Oracle Inspector·Catalog WARNING·Data Discovery/Embedding 및 일회용 PG
+> 경계 검증을 종합한 [G1 실기관 수용 준비 체크리스트](s06-g1-site-acceptance-handoff.md)를 추가했다.
+> WBS의 S-06 `계획` 및 **G1 미검증** 상태는 변경하지 않는다. DEC-10·01·04의
+> 실 Source/DBMS/Schema 범위·동등성 판정이 확정되기 전 현장 Inspector 접속,
+> 실제 환자정보 조회 및 Legacy 서비스 종료는 금지한다.
+
 ### C. Gate / 의사결정 및 선후행 요약
 
 | Gate | 결정 항목 / 검증 책임 | 통과 전 금지 |
