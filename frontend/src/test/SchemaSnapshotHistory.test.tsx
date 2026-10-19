@@ -322,6 +322,111 @@ describe("S-05-A Snapshot read-only UI", () => {
     } finally { restore(); }
   });
 
+  it("retries only a failed Diff GET and preserves successful Preview and journal", async () => {
+    const user = userEvent.setup();
+    let detailCalls = 0;
+    let previewCalls = 0;
+    let reviewCalls = 0;
+    const restore = installFetchMock(responses({
+      onDetail: () => ++detailCalls === 1
+        ? jsonResponse({ detail: { code: "DIFF_UNAVAILABLE", message: "synthetic" } }, 503)
+        : jsonResponse(detail),
+      onPreview: () => { previewCalls += 1; return jsonResponse(preview); },
+      onReviews: () => { reviewCalls += 1; return jsonResponse([event]); },
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 503");
+      expect(await screen.findByTestId("snapshot-preview")).toHaveTextContent("WARNING");
+      expect(await screen.findByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
+      await user.click(screen.getByRole("button", { name: "변경 Diff 다시 조회" }));
+      expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect(screen.queryByRole("button", { name: "변경 Diff 다시 조회" })).not.toBeInTheDocument();
+      expect([detailCalls, previewCalls, reviewCalls]).toEqual([2, 1, 1]);
+    } finally { restore(); }
+  });
+
+  it("retries only a failed Preview GET without elevating Gate status", async () => {
+    const user = userEvent.setup();
+    let detailCalls = 0;
+    let previewCalls = 0;
+    let reviewCalls = 0;
+    const restore = installFetchMock(responses({
+      onDetail: () => { detailCalls += 1; return jsonResponse(detail); },
+      onPreview: () => jsonResponse(++previewCalls === 1
+        ? { ...preview, activation_eligible: true } : preview),
+      onReviews: () => { reviewCalls += 1; return jsonResponse([event]); },
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Gate 안전 상태");
+      expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect(await screen.findByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
+      await user.click(screen.getByRole("button", { name: "검토 미리보기 다시 조회" }));
+      expect(await screen.findByTestId("snapshot-preview")).toHaveTextContent("NOT_VERIFIED");
+      expect(screen.getByTestId("snapshot-preview")).toHaveTextContent("WARNING");
+      expect(screen.getByTestId("snapshot-review-gates")).toHaveTextContent("INDEPENDENT_PREFLIGHT");
+      expect([detailCalls, previewCalls, reviewCalls]).toEqual([1, 2, 1]);
+    } finally { restore(); }
+  });
+
+  it("retries only a broken Review Journal and retains independent Diff and Preview", async () => {
+    const user = userEvent.setup();
+    let detailCalls = 0;
+    let previewCalls = 0;
+    let reviewCalls = 0;
+    const restore = installFetchMock(responses({
+      onDetail: () => { detailCalls += 1; return jsonResponse(detail); },
+      onPreview: () => { previewCalls += 1; return jsonResponse(preview); },
+      onReviews: () => jsonResponse(++reviewCalls === 1
+        ? [{ ...event, previous_review_event_id: 999 }] : [event]),
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("이벤트 연결 관계");
+      expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect(await screen.findByTestId("snapshot-preview")).toHaveTextContent("WARNING");
+      await user.click(screen.getByRole("button", { name: "변경 검토 이력 다시 조회" }));
+      expect(await screen.findByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
+      expect([detailCalls, previewCalls, reviewCalls]).toEqual([1, 1, 2]);
+    } finally { restore(); }
+  });
+
+  it("discards a pending panel-only retry after switching Sources", async () => {
+    const user = userEvent.setup();
+    let releaseRetry: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => { releaseRetry = resolve; });
+    let detailCalls = 0;
+    const restore = installFetchMock(responses({
+      onList: (url) => jsonResponse(url.searchParams.get("source_name") === SRC_A
+        ? [snapshot] : []),
+      onDetail: () => ++detailCalls === 1
+        ? jsonResponse({ detail: { code: "DIFF_UNAVAILABLE", message: "synthetic" } }, 503)
+        : pending,
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      await screen.findByRole("button", { name: "변경 Diff 다시 조회" });
+      await user.click(screen.getByRole("button", { name: "변경 Diff 다시 조회" }));
+      expect(screen.getByText("변경 Diff 조회 중…")).toBeInTheDocument();
+      await user.clear(screen.getByRole("textbox", { name: "Snapshot source name" }));
+      await enterSource(user, SRC_B);
+      expect(await screen.findByText("이 Source에 저장된 Snapshot이 없습니다.")).toBeInTheDocument();
+      await act(async () => { releaseRetry?.(jsonResponse(detail)); });
+      expect(screen.queryByTestId("snapshot-detail-panel")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("snapshot-diff")).not.toBeInTheDocument();
+      expect(detailCalls).toBe(2);
+    } finally { restore(); }
+  });
+
   it("keeps Diff visible if independent review preview returns 409, and shows HTTP errors", async () => {
     const user = userEvent.setup();
     const restore = installFetchMock(responses({ previewStatus: 409 }));

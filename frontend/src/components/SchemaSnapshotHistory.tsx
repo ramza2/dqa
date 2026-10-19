@@ -47,6 +47,9 @@ export function SchemaSnapshotHistory() {
   const sourceRef = useRef<string | null>(null);
   const listSeq = useRef(0);
   const detailSeq = useRef(0);
+  const diffSeq = useRef(0);
+  const previewSeq = useRef(0);
+  const reviewsSeq = useRef(0);
 
   const [offset, setOffset] = useState(0);
   const [history, setHistory] = useState<DataState<SnapshotSummary[]>>(() => idle<SnapshotSummary[]>());
@@ -101,18 +104,12 @@ export function SchemaSnapshotHistory() {
     }
   };
 
-  const openSnapshot = (row: SnapshotSummary) => {
-    if (!source || !history.data || !history.data.some((item) => item.id === row.id)) return;
-    const requestId = ++detailSeq.current;
-    const expectedSource = source;
-    const isCurrent = () => requestId === detailSeq.current && sourceRef.current === expectedSource;
-    setSelection(row);
+  const loadDiff = (row: SnapshotSummary, requestId: number, expectedSource: string) => {
+    if (requestId !== detailSeq.current || sourceRef.current !== expectedSource) return;
+    const panelId = ++diffSeq.current;
+    const isCurrent = () => requestId === detailSeq.current
+      && panelId === diffSeq.current && sourceRef.current === expectedSource;
     setDetail(loading());
-    setPreview(loading());
-    setReviews(loading());
-
-    // Each GET settles its own panel. A slow/failed Preview or journal must
-    // not block a valid Diff (and vice versa). Never commit stale responses.
     void getSnapshotHistoryDetail(expectedSource, row.id).then((value) => {
       if (!isCurrent()) return;
       setDetail(
@@ -129,7 +126,14 @@ export function SchemaSnapshotHistory() {
     }).catch((error: unknown) => {
       if (isCurrent()) setDetail(failed(errorText(error)));
     });
+  };
 
+  const loadPreview = (row: SnapshotSummary, requestId: number, expectedSource: string) => {
+    if (requestId !== detailSeq.current || sourceRef.current !== expectedSource) return;
+    const panelId = ++previewSeq.current;
+    const isCurrent = () => requestId === detailSeq.current
+      && panelId === previewSeq.current && sourceRef.current === expectedSource;
+    setPreview(loading());
     void getSnapshotReviewPreview(expectedSource, row.id).then((value) => {
       if (!isCurrent()) return;
       setPreview(
@@ -143,7 +147,14 @@ export function SchemaSnapshotHistory() {
     }).catch((error: unknown) => {
       if (isCurrent()) setPreview(failed(errorText(error)));
     });
+  };
 
+  const loadReviews = (row: SnapshotSummary, requestId: number, expectedSource: string) => {
+    if (requestId !== detailSeq.current || sourceRef.current !== expectedSource) return;
+    const panelId = ++reviewsSeq.current;
+    const isCurrent = () => requestId === detailSeq.current
+      && panelId === reviewsSeq.current && sourceRef.current === expectedSource;
+    setReviews(loading());
     void listSnapshotReviewEvents(expectedSource, row.id).then((values) => {
       if (!isCurrent()) return;
       setReviews(
@@ -158,6 +169,18 @@ export function SchemaSnapshotHistory() {
     }).catch((error: unknown) => {
       if (isCurrent()) setReviews(failed(errorText(error)));
     });
+  };
+
+  const openSnapshot = (row: SnapshotSummary) => {
+    if (!source || !history.data || !history.data.some((item) => item.id === row.id)) return;
+    const requestId = ++detailSeq.current;
+    const expectedSource = source;
+    setSelection(row);
+    // Initial selection issues three GETs, but each panel is independent.
+    // A panel-only retry below never restarts the other two GETs.
+    loadDiff(row, requestId, expectedSource);
+    loadPreview(row, requestId, expectedSource);
+    loadReviews(row, requestId, expectedSource);
   };
 
   const status = <T,>(value: DataState<T>, label: string) => {
@@ -267,6 +290,13 @@ export function SchemaSnapshotHistory() {
               <span className="value">{selection.captured_by}</span></div>
           </div>
           {status(detail, "변경 Diff")}
+          {detail.status === "error" && source ? (
+            <button type="button" className="dd-secondary-btn"
+              aria-label="변경 Diff 다시 조회"
+              onClick={() => loadDiff(selection, detailSeq.current, source)}>
+              변경 Diff 다시 조회
+            </button>
+          ) : null}
           {detail.status === "ready" && detail.data ? (
             <div data-testid="snapshot-diff">
               {detail.data.diff_status === "NO_BASELINE" ? (
@@ -313,6 +343,13 @@ export function SchemaSnapshotHistory() {
           ) : null}
           <h3>검토 미리보기 (조회 전용)</h3>
           {status(preview, "검토 미리보기")}
+          {preview.status === "error" && source ? (
+            <button type="button" className="dd-secondary-btn"
+              aria-label="검토 미리보기 다시 조회"
+              onClick={() => loadPreview(selection, detailSeq.current, source)}>
+              검토 미리보기 다시 조회
+            </button>
+          ) : null}
           {preview.status === "ready" && preview.data ? (
             <div className="status-grid dd-meta-grid" data-testid="snapshot-preview">
               <div className="status-item"><span className="label">Review</span>
@@ -332,6 +369,13 @@ export function SchemaSnapshotHistory() {
           ) : null}
           <h3>변경 검토 이력 (관리자 승인 아님)</h3>
           {status(reviews, "변경 검토 이력")}
+          {reviews.status === "error" && source ? (
+            <button type="button" className="dd-secondary-btn"
+              aria-label="변경 검토 이력 다시 조회"
+              onClick={() => loadReviews(selection, detailSeq.current, source)}>
+              변경 검토 이력 다시 조회
+            </button>
+          ) : null}
           {reviews.status === "ready" && reviews.data?.length === 0 ? (
             <p className="dd-guidance">기록된 검토 이벤트가 없습니다.</p>
           ) : null}
