@@ -23,17 +23,21 @@ export const SNAPSHOT_REVIEW_GATE_LABELS: Record<(typeof SNAPSHOT_REVIEW_REQUIRE
 export function isSafeSnapshotReviewPreview(value: unknown): value is SnapshotReviewPreview {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const preview = value as Partial<SnapshotReviewPreview>;
+  const revisionId = preview.revision_id;
+  const latestRevisionId = preview.latest_revision_id;
   const gates: unknown = preview.required_gates;
   return preview.preflight_status === "NOT_VERIFIED"
     && preview.candidate_package_readiness === "WARNING"
     && preview.activation_eligible === false
     && preview.snapshot_verified === true
     && preview.candidate_package_valid === true
-    && Number.isSafeInteger(preview.revision_id)
-    && preview.revision_id > 0
-    && Number.isSafeInteger(preview.latest_revision_id)
-    && preview.latest_revision_id >= preview.revision_id
-    && preview.is_latest === (preview.latest_revision_id === preview.revision_id)
+    && typeof revisionId === "number"
+    && Number.isSafeInteger(revisionId)
+    && revisionId > 0
+    && typeof latestRevisionId === "number"
+    && Number.isSafeInteger(latestRevisionId)
+    && latestRevisionId >= revisionId
+    && preview.is_latest === (latestRevisionId === revisionId)
     && preview.review_status === (preview.is_latest ? "REVIEW_REQUIRED" : "SUPERSEDED")
     && Array.isArray(gates)
     && gates.length === SNAPSHOT_REVIEW_REQUIRED_GATES.length
