@@ -71,7 +71,6 @@ git worktree add --detach /tmp/dqa-s06g-review \
   .venv/bin/pip install -e '.[dev]' && \
   .venv/bin/python -m pytest -q -rs \
     tests/test_s06g_25table_oracle_gold.py \
-    tests/test_s06f_disposable_warning_search_isolation.py \
     tests/test_s06e_warning_candidate_discovery.py \
     tests/test_s06d_synthetic_dictionary_drift.py \
     tests/test_s06c_oracle_inspector_candidate_chain.py \
@@ -81,12 +80,9 @@ git -C /tmp/dqa-s06g-review diff --check 33417ee HEAD && \
 echo DQA_S06G_REVIEW_PASS
 ```
 
-**주의:** `test_s06f_disposable_warning_search_isolation.py`는
-S-06-A용 Docker 일회용 PostgreSQL Fixture를 가져오지만,
-`DQA_S06A_ISOLATED_PG=1`이 없으면 해당 모듈에서 SKIP한다.
-따라서 본 S-06-G DB-free 검증에서 S-06-F 기존 PG 테스트는
-**실행하지 않고 SKIP**될 수 있다. S-06-F PG 8 PASS는 별도
-2026-10-19 서버 수용 기록으로 유지하며 다시 실행할 필요는 없다.
+**주의:** S-06-F는 일회용 PostgreSQL이 필요한 통합 테스트이므로
+이번 S-06-G의 DB-free 테스트 명령에는 포함하지 않는다.
+S-06-F의 8건 PASS는 별도 2026-10-19 서버 수용 기록으로 유지한다.
 
 서버 Acceptance는 이번 실행 로그 수신 후에만 확정한다.
 `DQA_S06G_REVIEW_PASS`가 출력되기 전 PR 승격/머지 또는 운영 배포를
