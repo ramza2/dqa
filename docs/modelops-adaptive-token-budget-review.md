@@ -81,15 +81,20 @@ git worktree add --detach /tmp/dqa-modelops-llm-review \
   .venv/bin/pip install -e '.[dev]' && \
   .venv/bin/python -m pytest -q \
     tests/test_llm_provider.py \
-    tests/test_template_recommendation.py \
-    tests/test_parameter_extraction.py \
     tests/test_llm_egress_policy.py
 ) && \
 git -C /tmp/dqa-modelops-llm-review diff --check 6ae26e8 HEAD && \
 echo DQA_LLM_LENGTH_REVIEW_PASS
 ```
 
-개발 서버 패키지 설치가 제한되는 경우 이 명령을 강제로 반복하지 말고 기존 Backend 개발용 venv에서
-동일 테스트만 수행하며, Worktree의 운영/실 DEMIS 데이터는 접근하지 않는다.
+**DB 파괴적 Fixture 안전 경계:** `tests/test_template_recommendation.py` / `tests/test_parameter_extraction.py`는
+`db_session` / `db_client` Fixture를 사용하며, `backend/tests/conftest.py`는 해당 Fixture에서
+기본 `localhost:5432/dqa` DB에 마이그레이션 및 `TRUNCATE ... RESTART IDENTITY CASCADE`를 수행한다.
+**운영/기존 개발 DB를 사용할 수 있는 PuTTY 서버에서 위 DB 통합 테스트를 실행하지 않는다.**
+이번 패치는 Provider 공통 경계만 수정했으므로 DB 미사용 Provider/egress 단위 테스트만 서버 Acceptance에 포함한다.
+추후 추천·추출 통합 회귀는 격리된 일회용 PostgreSQL/전용 테스트 DB가 준비되었을 때만 진행한다.
+
+개발 서버 패키지 설치가 제한되면 강제로 반복하지 말고 별도 격리된 Backend 개발 venv에서
+동일 두 개 단위 테스트만 수행한다. 실 DEMIS 데이터에는 접근하지 않는다.
 
 사용자 명시 승인 전 `main` Merge/운영 배포 금지.
