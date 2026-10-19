@@ -40,10 +40,22 @@
 - `frontend/src/test/SchemaSnapshotHistory.test.tsx` — 실제 Snapshot 화면에서 집계/NO_BASELINE/오류 격리 회귀 3건.
 - 이 문서.
 
-## 서버 Acceptance — 미실행
+## 서버 Acceptance — 최종 PASS (2026-10-19)
+
+- **검증 코드 HEAD: `a350f92`**, 독립 Detached Worktree `/tmp/dqa-s05g-review`, 비교 기준 `main@02cc2c0`.
+- `npm ci`: **PASS** — 258개 패키지 설치, 259개 패키지 감사 결과 **취약점 0건**. `whatwg-encoding`/`eslint` deprecation warning은 비차단 안내.
+- `npm run build`: **PASS** — TypeScript/Vite 6.4.3 production build, 64 modules transformed.
+- `npm run lint`: **PASS** — ESLint 오류 없음.
+- `npm test -- --run`: **14 files / 117 tests PASS** — 신규 SnapshotDiffOverview 6건, SchemaSnapshotHistory 15건 포함 전체 Frontend 회귀.
+- `git diff --check 02cc2c0 HEAD`: **PASS**; 최종 마커 **`DQA_S05G_REVIEW_PASS`** 확인.
+- 본 수용 결과 추가는 **문서 전용 후속 커밋**이며, 검증 당시 Frontend 기능·테스트 코드 및 의존성은 변경하지 않았다.
+- GitHub Actions CI, 실제 Docker 운영 빌드/재배포, Oracle/DEMIS 접속 및 군·DBA 승인·실증은 이번 시험 범위가 아니다.
+- 사용자 별도 승인 전 `main` 머지·운영 배포 금지.
+
+## 서버 수용에 사용한 명령 (실행 완료)
 
 현재 `main@02cc2c0` Frontend **13 files / 108 tests**에서
-6개 순수 Helper + 3개 통합 테스트를 추가하므로 **예상 14 files / 117 tests**.
+6개 순수 Helper + 3개 통합 테스트를 추가해 **14 files / 117 tests PASS**를 확인했다.
 운영 서비스에 영향을 주지 않는 별도 Detached Worktree에서 확인:
 
 ```bash
@@ -61,6 +73,6 @@ git -C /tmp/dqa-s05g-review diff --check 02cc2c0 HEAD && \
 echo DQA_S05G_REVIEW_PASS
 ```
 
-- Build, Lint, Vitest 전체, Diff 검사 및 마지막 `DQA_S05G_REVIEW_PASS`까지 확인하기 전 PASS로 간주하지 않는다.
+- Build, Lint, Vitest 전체, Diff 검사 및 마지막 `DQA_S05G_REVIEW_PASS` 확인을 완료했다.
 - 사용자 명시적 승인 전 GitHub `main` Merge, Docker 운영 재배포 및 DEMIS 실측 연결 금지.
 - 외부 결정 `DEC-01/02/08/10`과 `G1/G5` 수용은 계속 별개이다.
