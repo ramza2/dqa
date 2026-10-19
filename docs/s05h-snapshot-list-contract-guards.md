@@ -35,16 +35,28 @@
 Backend route/DB/DDL/Oracle Adapter/권한·Credential·Query Core/LLM·MCP/FHIR 및 Docker 운영 구성 변경 없음.
 Snapshot Capture/Review POST, Catalog Import/Activate, 외부 Approval, 임상 환자 조회·쓰기 경로를 추가하지 않는다.
 
-## 서버 Acceptance — 1차 실패 및 재검증 대기 (2026-10-19)
+## 서버 Acceptance — 최초 TS2698 실패 기록 (2026-10-19)
 
 - 최초 검증 코드 HEAD `ddd0a4e`, 격리된 `/tmp/dqa-s05h-review` Worktree.
 - `npm ci`: **PASS**, 258개 패키지 설치, 259개 감사 기준 **0 vulnerabilities**.
 - `npm run build`의 TypeScript `TS2698` 1건으로 중단 (`SnapshotHistoryList.test.ts:59`): 테스트의 `patch`를 `unknown`으로 선언하고 `...patch`로 전개한 타입 오류.
 - 객체 패치 테스트 배열을 `Record<string, unknown>[]`로 좁혀 실제 payload의 `unknown` 검증 계약은 유지하고 테스트 컴파일 오류만 수정.
 - 기존 Source 불일치 회귀 테스트의 오류 메시지 단언도 새 공통 fail-closed 메시지(`응답 정합성`)와 정합화.
-- Lint, Vitest, Git whitespace 최종 `DQA_S05H_REVIEW_PASS`는 **아직 미확인**. 검증 전 PASS/머지/배포 주장 금지.
+- 당시 Lint, Vitest, Git whitespace, 최종 `DQA_S05H_REVIEW_PASS`는 **미실행/미확인**이었다. 이후 재검증 PASS 결과는 아래에 별도로 기록한다.
 
-## 재검증 명령 — 기존 Worktree 사용
+## 서버 Acceptance — 최종 재검증 PASS (2026-10-19)
+
+- 검증 코드 HEAD: **`0108b97`**, detached `/tmp/dqa-s05h-review`; 기준 `main@c6fe161`.
+- 최초 `npm ci` **PASS**: 258 packages added, 259 packages audited, **0 vulnerabilities**. 재검증은 변경 없는 `node_modules`를 재사용.
+- `npm run build`: **PASS** (TypeScript + Vite 6.4.3 production build, 65 modules transformed).
+- `npm run lint`: **PASS** (ESLint).
+- `npm test -- --run`: **15 Test Files / 127 Tests PASS**; SnapshotHistoryList 신규 7건, SchemaSnapshotHistory 18건 및 전체 Frontend 회귀.
+- `git diff --check c6fe161 HEAD`: **PASS**; 최종 출력 **`DQA_S05H_REVIEW_PASS`** 확인.
+- 이 결과를 기록하는 후속 커밋은 **문서만 변경**한다. 검증된 애플리케이션·테스트·의존성은 `0108b97`과 동일하다.
+- GitHub Actions CI, 운영 Docker 배포, 실제 Oracle/DEMIS 접속 및 외부 군·DBA Preflight/READY/G1/G5 인수는 검증 범위 밖이다.
+- 사용자 명시 승인 전 `main` Squash Merge 및 운영 배포 금지.
+
+## 재검증 명령 — 실행 완료 (기존 Worktree)
 
 ```bash
 cd ~/dqa && git fetch origin && \
@@ -64,7 +76,7 @@ echo DQA_S05H_REVIEW_PASS
 
 
 기존 Frontend 14 files/117 tests에 단위 7건, 화면 통합 3건 추가.
-**예상 15 files/127 tests**. 별도 Detached Worktree에서만 실행:
+**15 files/127 tests PASS 확인**. 별도 Detached Worktree에서 실행:
 
 ```bash
 cd ~/dqa && git fetch origin && \
