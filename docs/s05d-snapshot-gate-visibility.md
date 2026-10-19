@@ -36,21 +36,33 @@
 - `frontend/src/App.css`: 안내 패널 최소 스타일
 - `frontend/src/components/DataDiscoveryIndexStatus.tsx` 및 `frontend/src/test/DataDiscovery.test.tsx`: 전체 Suite 검증 중 드러난 자동 refresh 경고 소실 최소 수정 및 회귀 증명
 
-## 서버 Acceptance — 1차 Build 오류, 수정 후 재검증 대기
+## 서버 Acceptance — 1차 Build 오류 및 대응 기록
 
 - 2026-10-19 최초 서버 수용 시 `npm ci` 성공(258 packages, vulnerabilities 0), `npm run build` TypeScript 단계에서 **TS18048 3건**으로 중단. `npm run lint`, Vitest 및 최종 PASS 마커는 **미실행**.
 - 문제: `Number.isSafeInteger(preview.revision_id)` 검사만으로 `Partial<SnapshotReviewPreview>`의 선택적 숫자 필드를 TypeScript가 좁히지 못함.
 - 수정: `frontend/src/utils/snapshotReviewGates.ts`에서 두 Revision ID의 타입을 `typeof ... === "number"`로 명시 검증 후 범위 비교. Invalid/undefined 입력을 계속 fail-closed 처리.
-- 이후 테스트 성공 전 기능 검증 완료 또는 PR Ready를 주장하지 않는다.
+- 이후 검증에서 TypeScript 오류 해결을 확인했으며, 최종 통과 내용은 아래 3차 결과에 별도 기록한다.
 
-## 서버 Acceptance 2차 결과 및 원인 분석 (2026-10-19)
+## 서버 Acceptance — 2차 91/92 및 원인 분석 (2026-10-19)
 
 - 재검증 기준 `b7c0d73`: `npm run build` PASS, `npm run lint` PASS, Vitest **91 PASS / 1 FAIL (92건)**. S-05-D 신규/변경 테스트 14건 모두 통과.
 - 실패: 기존 `DataDiscovery.test.tsx`의 `ignores sync response when revision snapshot no longer matches`에서 `index-stale-warning` 검색 실패.
 - 원인: `DataDiscoveryIndexStatus.rejectStaleActionOnCurrentSource`가 revision mismatch 경고를 설정한 뒤 `refreshSources`를 호출하고, 이어지는 `loadStatus`가 `setStaleWarning(null)`으로 경고를 즉시 지우는 상태 갱신 순서. **비동기 타이밍에 따라 경고가 사용자에게 표시되지 않는 기존 UX 결함**으로 확인.
 - 수정: 자동 상태 갱신에서만 경고 제거를 하지 않음. `onSelect` 및 신규 Rebuild/Sync 작업 시작에서는 기존처럼 경고 초기화. `DataDiscovery.test.tsx`는 자동 index status 재조회 후에도 경고가 유지되는지 회귀 검사.
 - 범위 예외: 본 S-05-D 기능과 직접 관계없는 UI 회귀이지만, 전체 Suite를 통과하지 못하게 하는 기존 경고 동작 결함이어서 **두 파일의 최소 변경을 같은 PR에 명시적으로 포함**. Backend/DB/DEMIS 변경 없음.
-- **최종 PASS 대기**. 새 수정 HEAD에서 전체 Vitest 92건과 Build/Lint를 다시 실행하기 전 머지/배포 금지.
+- 이후 3차 검증에서 전체 통과를 확인했다. 이 실패는 당시 실행 결과로 기록을 유지한다.
+
+## 서버 Acceptance — 3차 최종 PASS (2026-10-19)
+
+- 검증 코드 HEAD: `70c9978` (분리된 `/tmp/dqa-s05d-review` worktree, `main@fb46fa1` 대비 검사).
+- `npm run build`: **PASS** — TypeScript 빌드 + Vite 6.4.3 production bundle (61 modules).
+- `npm run lint`: **PASS** — ESLint 오류 없음.
+- `npm test -- --run`: **11 files / 92 tests passed** — SnapshotReviewGates 4건, SchemaSnapshotHistory 10건, DataDiscovery 18건 포함.
+- `git diff --check fb46fa1 HEAD`: **PASS**.
+- 최종 마커 **`DQA_S05D_REVIEW_PASS`** 확인.
+- 본 결과 기록은 검증 이후 **문서 전용 추가 commit**이므로, 기능 코드와 테스트 파일은 검증 당시 `70c9978` 대비 변경되지 않는다.
+- GitHub Actions CI 실행 기록 없음; 운영 컨테이너 재배포, 실제 DEMIS/Oracle 연결 및 임상 데이터 사용 **없음**.
+- GitHub `main` Merge는 별도 사용자 승인 전 진행 금지. 독립 DBA Preflight, Catalog READY 및 실제 기관 승인과 이 테스트 결과는 별개다.
 
 ## 서버 재검증 (기존 worktree 재사용)
 
