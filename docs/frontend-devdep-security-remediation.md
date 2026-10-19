@@ -24,18 +24,17 @@
 cd ~/dqa && git fetch origin && \
 git worktree add --detach /tmp/dqa-frontend-secfix-review \
   origin/fix/frontend-devdep-security-20261019 && \
-(
-  set -e
-  cd /tmp/dqa-frontend-secfix-review/frontend
-  node --version
-  npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-  npm ci
-  npm run build
-  npm run lint
-  npm test -- --run
-  npm audit --audit-level=moderate
-  npm audit --omit=dev --audit-level=moderate
-  node - <<'JS'
+bash -euo pipefail <<'DQA_SECURITY_ACCEPT'
+cd /tmp/dqa-frontend-secfix-review/frontend
+node --version
+npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+npm ci
+npm run build
+npm run lint
+npm test -- --run
+npm audit --audit-level=moderate
+npm audit --omit=dev --audit-level=moderate
+node - <<'JS'
 const p = require("./package-lock.json").packages;
 if (p["node_modules/vitest"]?.version !== "4.1.12") throw Error("Vitest version mismatch");
 if (p["node_modules/@vitest/mocker"]?.version !== "4.1.12") throw Error("Mocker version mismatch");
@@ -49,13 +48,14 @@ const pool = p["node_modules/tinypool"]?.version;
 if (pool && Number(pool.split(".")[0]) < 2) throw Error("Old tinypool remains");
 console.log("DQA_FRONTEND_PATCH_VERSIONS_OK", {vitest: p["node_modules/vitest"].version, sourceMap: version, tinypool: pool || "absent"});
 JS
-) && \
-git -C /tmp/dqa-frontend-secfix-review diff --check && \
-test "$(git -C /tmp/dqa-frontend-secfix-review status --porcelain)" = " M frontend/package-lock.json" && \
-git -C /tmp/dqa-frontend-secfix-review add frontend/package-lock.json && \
-git -C /tmp/dqa-frontend-secfix-review commit -m "chore(frontend): lock patched test dependencies" && \
-git -C /tmp/dqa-frontend-secfix-review push origin HEAD:refs/heads/fix/frontend-devdep-security-20261019 && \
+cd /tmp/dqa-frontend-secfix-review
+git diff --check
+test "$(git status --porcelain)" = " M frontend/package-lock.json"
+git add frontend/package-lock.json
+git commit -m "chore(frontend): lock patched test dependencies"
+git push origin HEAD:refs/heads/fix/frontend-devdep-security-20261019
 echo DQA_FRONTEND_SECURITY_REVIEW_PASS
+DQA_SECURITY_ACCEPT
 ```
 
 **위 명령은 사용자 실행을 전제로 제시**: npm registry에 대한 정상적 접속·개발 의존성 다운로드가 필요하다. 마지막 `push`는 모든 검사 성공 후에만 해당 **feature branch**로 커밋하며 main을 수정하거나 PR을 머지하지 않는다. `npm audit fix --force` 절대 사용 금지. 실제 DEMIS/Oracle/Postgres, 기존 컨테이너, 운영 서비스에 접근하지 않는다.
