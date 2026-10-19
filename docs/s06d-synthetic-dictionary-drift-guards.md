@@ -36,7 +36,21 @@ DBA 승인된 `Source/Schema/Account/권한 범위`와 Baseline, 읽기 전용 D
 - 실제 Legacy Analyzer 5개 SKIP 케이스를 미확인 PASS로 간주하지 않는다.
 - LLM 관련 Draft #124는 보류 상태 그대로 유지한다.
 
-## 서버 Acceptance — 미실행
+## 서버 Acceptance — 최종 PASS (2026-10-19)
+
+- 검증 코드 HEAD **`90c17a5`**, detached Worktree `/tmp/dqa-s06d-review`, 기준 `main@f832af0`.
+- `python3 -m venv .venv` + `pip install -e '.[dev]'`: **PASS** (독립 환경).
+- `python -m pytest -q -rs`: **35 tests passed / 0 failed / 0 skipped** (신규 S-06-D 4건과 S-06-C 및 기존 Snapshot Diff/Catalog Candidate 회귀 포함).
+  별도 외부 연결·DB Fixture 실행 없는 합성 Python 회귀.
+- `git diff --check f832af0 HEAD`: **PASS**.
+  `DQA_S06D_REVIEW_PASS` 최종 마커 확인.
+- `StarletteDeprecationWarning` 1건은 비차단.
+- 수용 기록을 더하는 이 후속 커밋은 **문서만 변경**한다.
+  검증된 합성 Test 코드/프로덕션 코드와 의존성은 `90c17a5`에서 변경하지 않는다.
+- 이 검증은 **실 Oracle/DEMIS, Dictionary grant 충분성, 운영 복제 EMR, 독립 DBA Preflight, READY/Activation, G1/G2/G5 또는 운영 배포 증빙이 아니다.**
+  GitHub Actions CI 별도이며 사용자 명시 승인 전 머지 금지.
+
+## 서버 Acceptance — 격리 Worktree 실행 명령
 
 실제 DEMIS/기존 DQA DB·Docker와 무관한 **detached Worktree + DB 미사용 pytest**:
 
@@ -60,8 +74,7 @@ echo DQA_S06D_REVIEW_PASS
 
 DB-backed `db_session`/`db_client` 사용 금지. 해당 Fixture는
 설정에 따라 기존 DQA DB에 `TRUNCATE`를 실행할 수 있다.
-검증 로그에서 실제 PASS/SKIP 수와 최종 수용 마커를 확인할 때까지
-완료를 주장하지 않는다.
+검증 로그에서 전체 35건 PASS와 최종 마커가 확인됐다. 기존 Legacy Inspector의 별도 parity SKIP 5건을 이번 테스트에 포함하지 않았다.
 
 GitHub Actions CI/운영 Docker/실 DEMIS/기관 승인과 서버 합성 pytest는 별개.
 **사용자 별도 명시 승인 전 `main` Merge 또는 운영 배포 금지.**
