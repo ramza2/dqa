@@ -8,6 +8,7 @@ import { SnapshotCatalogContext } from "./SnapshotCatalogContext";
 import { SnapshotReviewGates } from "./SnapshotReviewGates";
 import { isSafeSnapshotReviewPreview } from "../utils/snapshotReviewGates";
 import { isSafeSnapshotReviewEvents } from "../utils/snapshotReviewJournal";
+import { isSafeSnapshotDiffDetail, snapshotDiffCountRows } from "../utils/snapshotDiffOverview";
 import type {
   SnapshotDetail, SnapshotReviewEvent, SnapshotReviewPreview, SnapshotSummary,
 } from "../types/schemaSnapshot";
@@ -118,11 +119,15 @@ export function SchemaSnapshotHistory() {
     if (detailResult.status === "fulfilled") {
       const value = detailResult.value;
       setDetail(
-        value.id === row.id
+        isSafeSnapshotDiffDetail(value)
+        && value.id === row.id
         && value.source_name === expectedSource
         && value.schema_fingerprint === row.schema_fingerprint
+        && value.previous_revision_id === row.previous_revision_id
+        && value.diff_status === row.diff_status
+        && value.total_changes === row.total_changes
           ? ready(value)
-          : failed("Snapshot 상세 정보의 Revision/Source/Fingerprint가 일치하지 않습니다."),
+          : failed("Snapshot 상세 Diff의 Source/Revision 또는 변경 건수 정합성을 확인할 수 없습니다."),
       );
     } else {
       setDetail(failed(errorText(detailResult.reason)));
@@ -265,7 +270,29 @@ export function SchemaSnapshotHistory() {
           {status(detail, "변경 Diff")}
           {detail.status === "ready" && detail.data ? (
             <div data-testid="snapshot-diff">
-              <p className="dd-guidance">상세 Diff: {detail.data.diff_status}, 총 {detail.data.total_changes ?? "기준 없음"}건</p>
+              {detail.data.diff_status === "NO_BASELINE" ? (
+                <p className="dd-guidance" data-testid="snapshot-diff-no-baseline">
+                  최초 Snapshot — 비교할 이전 Snapshot이 없습니다. 변경 0건으로 해석하지 않습니다.
+                </p>
+              ) : (
+                <>
+                  <p className="dd-guidance" data-testid="snapshot-diff-total">
+                    이전 Snapshot #{detail.data.previous_revision_id} 대비 총 {detail.data.total_changes}건 변경
+                    (메타데이터 Diff이며 Catalog READY·DBA 승인 증빙이 아닙니다).
+                  </p>
+                  <div className="qa-result-table-wrap" data-testid="snapshot-diff-overview">
+                    <table className="qa-result-table">
+                      <thead><tr><th>Object type</th><th>Added</th><th>Removed</th><th>Changed</th></tr></thead>
+                      <tbody>{snapshotDiffCountRows(detail.data).map((count) => (
+                        <tr key={count.objectType}>
+                          <td>{count.objectType}</td><td>{count.added}</td>
+                          <td>{count.removed}</td><td>{count.changed}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </>
+              )}
               {detail.data.changes.length === 0 ? (
                 <p className="dd-guidance">표시할 변경 항목이 없습니다.</p>
               ) : (
