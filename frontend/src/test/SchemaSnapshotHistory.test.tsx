@@ -56,6 +56,7 @@ function responses(options: {
   onDetail?: (url: URL) => Promise<Response> | Response;
   previewStatus?: number;
   onPreview?: (url: URL) => Promise<Response> | Response;
+  onReviews?: (url: URL) => Promise<Response> | Response;
 } = {}): Handler[] {
   return [
     (url, init) => {
@@ -74,7 +75,7 @@ function responses(options: {
         );
         return jsonResponse(preview);
       }
-      if (suffix === "/10/reviews") return jsonResponse([event]);
+      if (suffix === "/10/reviews") return options.onReviews?.(url) ?? jsonResponse([event]);
       return jsonResponse({ detail: { code: "NOT_FOUND", message: "not found" } }, 404);
     },
     (url) => url.pathname === "/api/v1/catalog/imports" ? jsonResponse([]) : null,
@@ -109,6 +110,45 @@ describe("S-05-A Snapshot read-only UI", () => {
     expect(await screen.findByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
     expect(screen.queryByRole("button", { name: /activate|approve|READY|capture|import/i })).not.toBeInTheDocument();
     restore();
+  });
+
+  it("shows linked review-event IDs without mistaking ACKNOWLEDGED for DBA approval", async () => {
+    const user = userEvent.setup();
+    const newest = {
+      ...event, id: 12, previous_review_event_id: 11,
+      decision: "ACKNOWLEDGED", reason_code: "REVIEWED_CHANGES",
+    };
+    const restore = installFetchMock(responses({
+      onReviews: () => jsonResponse([newest, event]),
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      const table = await screen.findByTestId("snapshot-reviews");
+      expect(within(table).getAllByRole("row")).toHaveLength(3);
+      expect(table).toHaveTextContent("Previous event");
+      expect(table).toHaveTextContent("ACKNOWLEDGED");
+      expect(table).toHaveTextContent("첫 기록");
+      expect(screen.getByTestId("snapshot-review-journal-note")).toHaveTextContent("독립 DBA Preflight");
+      expect(screen.queryByRole("button", { name: /approve|activate|READY|import/i })).not.toBeInTheDocument();
+    } finally { restore(); }
+  });
+
+  it("fails closed on a broken review journal while preserving independent Diff and Preview", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(responses({
+      onReviews: () => jsonResponse([{ ...event, previous_review_event_id: 999 }]),
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect(await screen.findByTestId("snapshot-preview")).toHaveTextContent("WARNING");
+      expect(await screen.findByRole("alert")).toHaveTextContent("이벤트 연결 관계");
+      expect(screen.queryByTestId("snapshot-reviews")).not.toBeInTheDocument();
+    } finally { restore(); }
   });
 
   it("supports Snapshot-only Source even when there is no active Catalog, and shows no-baseline correctly", async () => {

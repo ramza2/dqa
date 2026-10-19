@@ -7,6 +7,7 @@ import { CatalogApiError } from "../types/catalog";
 import { SnapshotCatalogContext } from "./SnapshotCatalogContext";
 import { SnapshotReviewGates } from "./SnapshotReviewGates";
 import { isSafeSnapshotReviewPreview } from "../utils/snapshotReviewGates";
+import { isSafeSnapshotReviewEvents } from "../utils/snapshotReviewJournal";
 import type {
   SnapshotDetail, SnapshotReviewEvent, SnapshotReviewPreview, SnapshotSummary,
 } from "../types/schemaSnapshot";
@@ -142,11 +143,13 @@ export function SchemaSnapshotHistory() {
     if (reviewsResult.status === "fulfilled") {
       const values = reviewsResult.value;
       setReviews(
-        values.every((value) => value.snapshot_revision_id === row.id
-          && value.source_name === expectedSource
-          && value.schema_fingerprint === row.schema_fingerprint)
+        isSafeSnapshotReviewEvents(values, {
+          sourceName: expectedSource,
+          revisionId: row.id,
+          schemaFingerprint: row.schema_fingerprint,
+        })
           ? ready(values)
-          : failed("변경 검토 이력의 Revision/Source/Fingerprint가 일치하지 않습니다."),
+          : failed("변경 검토 이력의 Source/Revision 또는 이벤트 연결 관계를 확인할 수 없습니다."),
       );
     } else {
       setReviews(failed(errorText(reviewsResult.reason)));
@@ -307,11 +310,20 @@ export function SchemaSnapshotHistory() {
             <p className="dd-guidance">기록된 검토 이벤트가 없습니다.</p>
           ) : null}
           {reviews.status === "ready" && reviews.data && reviews.data.length > 0 ? (
+            <p className="dd-guidance" data-testid="snapshot-review-journal-note">
+              최신순 최대 100건의 변경 검토 기록입니다. Event 연결은 표시된 응답 범위에서만 검사하며,
+              독립 DBA Preflight·Catalog READY·활성화 완료의 증빙이 아닙니다.
+              {reviews.data.length === 100 ? " 이전 기록이 더 있을 수 있습니다." : ""}
+            </p>
+          ) : null}
+          {reviews.status === "ready" && reviews.data && reviews.data.length > 0 ? (
             <div className="qa-result-table-wrap" data-testid="snapshot-reviews">
               <table className="qa-result-table">
-                <thead><tr><th>일시</th><th>Decision</th><th>Reason</th><th>Reviewer</th></tr></thead>
+                <thead><tr><th>Event ID</th><th>Previous event</th><th>일시</th><th>Decision</th><th>Reason</th><th>Reviewer</th></tr></thead>
                 <tbody>{reviews.data.map((event) => (
                   <tr key={event.id}>
+                    <td>{event.id}</td>
+                    <td>{event.previous_review_event_id ?? "— (첫 기록)"}</td>
                     <td>{dateLabel(event.reviewed_at)}</td>
                     <td>{event.decision}</td>
                     <td>{event.reason_code}</td>
