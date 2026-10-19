@@ -35,7 +35,33 @@
 Backend route/DB/DDL/Oracle Adapter/권한·Credential·Query Core/LLM·MCP/FHIR 및 Docker 운영 구성 변경 없음.
 Snapshot Capture/Review POST, Catalog Import/Activate, 외부 Approval, 임상 환자 조회·쓰기 경로를 추가하지 않는다.
 
-## 서버 Acceptance — 미실행
+## 서버 Acceptance — 1차 실패 및 재검증 대기 (2026-10-19)
+
+- 최초 검증 코드 HEAD `ddd0a4e`, 격리된 `/tmp/dqa-s05h-review` Worktree.
+- `npm ci`: **PASS**, 258개 패키지 설치, 259개 감사 기준 **0 vulnerabilities**.
+- `npm run build`의 TypeScript `TS2698` 1건으로 중단 (`SnapshotHistoryList.test.ts:59`): 테스트의 `patch`를 `unknown`으로 선언하고 `...patch`로 전개한 타입 오류.
+- 객체 패치 테스트 배열을 `Record<string, unknown>[]`로 좁혀 실제 payload의 `unknown` 검증 계약은 유지하고 테스트 컴파일 오류만 수정.
+- 기존 Source 불일치 회귀 테스트의 오류 메시지 단언도 새 공통 fail-closed 메시지(`응답 정합성`)와 정합화.
+- Lint, Vitest, Git whitespace 최종 `DQA_S05H_REVIEW_PASS`는 **아직 미확인**. 검증 전 PASS/머지/배포 주장 금지.
+
+## 재검증 명령 — 기존 Worktree 사용
+
+```bash
+cd ~/dqa && git fetch origin && \
+git -C /tmp/dqa-s05h-review switch --detach \
+  origin/feature/s05h-snapshot-list-contract-guards && \
+(
+  cd /tmp/dqa-s05h-review/frontend && \
+  npm run build && npm run lint && npm test -- --run
+) && \
+git -C /tmp/dqa-s05h-review diff --check c6fe161 HEAD && \
+echo DQA_S05H_REVIEW_PASS
+```
+
+변경은 TypeScript 테스트 코드와 문서에만 국한된다. 1차 `npm ci` 완료 이후 의존성 정의/lockfile 변경이 없으므로 재설치 없이 수용 검사를 재실행한다.
+
+## 서버 Acceptance — 원래 명령 (1차 빌드 실패)
+
 
 기존 Frontend 14 files/117 tests에 단위 7건, 화면 통합 3건 추가.
 **예상 15 files/127 tests**. 별도 Detached Worktree에서만 실행:
