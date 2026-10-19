@@ -198,6 +198,18 @@ describe("S-05-A Snapshot read-only UI", () => {
       restore();
     }
   });
+  it("handles null review preview safely while leaving the Diff accessible", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(responses({ onPreview: () => jsonResponse(null) }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect(await screen.findByRole("alert")).toHaveTextContent("Gate 안전 상태");
+      expect(screen.queryByTestId("snapshot-review-gates")).not.toBeInTheDocument();
+    } finally { restore(); }
+  });
   it("fails closed on list Source mismatch without rendering cross-source rows", async () => {
     const user = userEvent.setup();
     const restore = installFetchMock(responses({
