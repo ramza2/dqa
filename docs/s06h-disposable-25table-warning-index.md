@@ -51,7 +51,21 @@
 같은 실 스키마/Model Key의 Parity, BGE-M3 실제 검색품질, 운영 Cutover는
 여전히 **미검증 및 외부 의사결정 대기**. LLM 관련 PR #124 Draft 유지.
 
-## PuTTY 서버 수용 명령 — 미실행
+## PuTTY 서버 수용 결과 — PASS (2026-10-19)
+
+- **검증 코드 및 Runner HEAD:** `930ba8f`, detached Worktree `/tmp/dqa-s06h-review`, 기준 `main@03298c9`.
+- 격리 가상환경 생성 및 `pip install -e '.[dev]'`: **PASS**.
+- `dqa-s06a-disposable` 루프백 PostgreSQL 컨테이너 **Healthy**, 전용 DB 안전 검증 및 Alembic `20261014_ss02`까지 Migration: **PASS**.
+- `pytest -q -rs -s`: 로그의 `.....` + `.....`로 **10개 테스트 PASS / FAIL 0 / SKIP 0** 판정. `-q -s` 로그에 별도 건수 요약은 없으나 성공 마커와 종료 코드 0을 확인했다. 신규 S-06-H 2건 및 기존 S-06-B/F 회귀 포함.
+- S-06-B의 합성 Gold 5개 질의(혈당/간수치/신기능/투약/퇴원요약): 각 `Recall@5=1.0`, `MRR@5=1.0`, `nDCG@5=1.0`, `Precision@5=0.2`; Stub Semantic/Hybrid 각 4건 조회 및 model_key 일치. **실 BGE-M3 또는 임상 검색품질 증빙이 아님**.
+- 일회용 PostgreSQL Container **Stopped/Removed**, 전용 Network **Removed** 후 `DQA_S06B_GOLD_PASS`.
+- `git diff --check 03298c9 HEAD` **PASS** 및 `DQA_S06H_REVIEW_PASS` 최종 마커 확인.
+- `StarletteDeprecationWarning` 1건은 비차단.
+- 후속 결과 기록 커밋은 **문서만 변경**하며, 이 서버에서 검증한 테스트/Runner 및 Production 코드·의존성을 변경하지 않는다.
+- **실 DEMIS·복제 EMR·운영 PostgreSQL·독립 DBA Preflight/READY·G1/G2/G5·실의료 검색품질·GitHub CI·운영 Docker 배포는 검증 범위 밖이다.**
+- LLM 관련 별도 PR #124는 Draft 보류 유지.
+
+## PuTTY 서버 수용 명령 — 검증 당시 실행 내용
 
 기존 `~/dqa`와 운영 DQA Docker·DB를 바꾸지 않으며 별도 worktree/venv를 쓴다.
 
@@ -75,8 +89,8 @@ echo DQA_S06H_REVIEW_PASS
 - `DQA_S06B_GOLD_PASS`: 기존 S-06-B/F + 신규 S-06-H Test 통과,
   전용 Compose Container/Network 정리 **후** 표시.
 - `DQA_S06H_REVIEW_PASS`: Git whitespace 검사까지 통과 후 표시.
-- Pytest PASS/FAIL/SKIP 총량은 사용자 서버 로그 수신 후 확정.
-  **이번 Draft PR 작성만으로 성공을 주장하지 않는다.**
+- 서버 로그에서 **10 PASS / 0 FAIL / 0 SKIP** 및 두 PASS 마커가 확인됐다.
+  이 결과만으로 실제 DBA 또는 군 기관의 승인·운영 수용을 주장하지 않는다.
 
 ## 다음 의사결정 경계
 
