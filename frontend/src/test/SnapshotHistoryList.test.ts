@@ -49,7 +49,7 @@ describe("S-05-H Source-scoped Snapshot list runtime guard", () => {
   });
 
   it("rejects cross-Source revisions and unusable identity or dates", () => {
-    const bad: unknown[] = [
+    const bad: Record<string, unknown>[] = [
       { source_name: "other" }, { id: 0 }, { id: 1.25 }, { id: "10" },
       { schema_fingerprint: "broken" }, { schema_fingerprint: "F".repeat(64) },
       { captured_at: "not-a-date" }, { database_name: null }, { schema_name: "" },
