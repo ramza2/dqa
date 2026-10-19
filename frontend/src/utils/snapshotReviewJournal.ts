@@ -15,6 +15,9 @@ export function isSafeSnapshotReviewEvents(
     const entry: unknown = payload[i];
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
     const event = entry as Partial<SnapshotReviewEvent>;
+    // Backend GET omits these fields. Inspect raw JSON values, not the
+    // compile-time false-only type, so injected approval claims fail closed.
+    const raw = entry as Record<string, unknown>;
     const id = event.id;
     const predecessor = event.previous_review_event_id;
     if (
@@ -36,9 +39,9 @@ export function isSafeSnapshotReviewEvents(
         || (event.decision === "CHANGES_REQUESTED"
           && (event.reason_code === "RECHECK_REQUIRED" || event.reason_code === "SCOPE_UNCLEAR"))
       )
-      || event.independent_preflight_verified === true
-      || event.catalog_ready === true
-      || event.catalog_activated === true
+      || (raw.independent_preflight_verified !== undefined && raw.independent_preflight_verified !== false)
+      || (raw.catalog_ready !== undefined && raw.catalog_ready !== false)
+      || (raw.catalog_activated !== undefined && raw.catalog_activated !== false)
     ) return false;
 
     // The previous link must identify the next returned row. Global ID gaps
