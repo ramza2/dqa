@@ -58,7 +58,8 @@ export interface SnapshotReviewEvent {
   reason_code: "REVIEWED_CHANGES" | "RECHECK_REQUIRED" | "SCOPE_UNCLEAR";
   reviewed_by: string;
   reviewed_at: string;
-  independent_preflight_verified: false;
-  catalog_ready: false;
-  catalog_activated: false;
+  /** Older synthetic fixtures may include these; the live GET route omits them. */
+  independent_preflight_verified?: false;
+  catalog_ready?: false;
+  catalog_activated?: false;
 }
