@@ -72,7 +72,7 @@ export function CatalogImportHistory({ sourceName, active }: Props) {
     return () => { cancelled = true; };
   }, [sourceName]);
 
-  const state = result.source === sourceName ? result : {
+  const state: ImportState = result.source === sourceName ? result : {
     source: sourceName, status: "loading" as const, items: [], message: null,
   };
   const live = active?.source_name === sourceName ? active : null;
