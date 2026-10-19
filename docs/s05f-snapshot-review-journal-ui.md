@@ -26,7 +26,31 @@ S-05-A~E 화면에서 `GET /api/v1/schema-inspector/snapshots/{revision_id}/revi
 
 신규 Backend API, DB/Migration, Inspector Capture, Snapshot Review POST, Catalog Import/Activate, DEMIS/Oracle/임상 데이터, Credential 처리, Docker 배포 설정 변경 없음. 기존 `CATALOG_READ` 권한만 사용.
 
-## 서버 Acceptance — 미실행
+## 서버 Acceptance — 1차 TypeScript 오류, 수정 후 재검증 대기
+
+- 2026-10-19 최초 서버 검증 HEAD `f97b15a`, 별도 `/tmp/dqa-s05f-review`에서 `npm ci` **PASS**, npm audit **0 vulnerabilities** (259 packages).
+- `npm run build` 중 `TS2367` **3건**으로 중단: 타입 `SnapshotReviewEvent`의 승인 표시 optional false 필드를 `=== true`로 비교해 TypeScript가 불가능 조건이라고 경고.
+- 승인 표시를 검사에서 제거하지 않고, `snapshotReviewJournal.ts`에서 **서버 응답 원본 객체를 `Record<string, unknown>`으로 읽어** 필드가 없거나 실제 `false`인 경우만 허용하도록 변경. `true`, `"true"`, `1`, `null` 등 오염된 값은 모두 **fail-closed**.
+- `SnapshotReviewJournal.test.ts` 기존 테스트 내부에 비정상 승인 필드 `"true"/1/null` 사례를 추가. 애플리케이션 API/권한/DB/DEMIS 연결 변경 없음.
+- Lint, Vitest 및 최종 `DQA_S05F_REVIEW_PASS`는 **아직 미실행**. 최종 서버 PASS 전 Draft 유지 및 머지·배포 금지.
+
+## 서버 재검증 — 기존 worktree 재사용
+
+```bash
+cd ~/dqa && git fetch origin && \
+git -C /tmp/dqa-s05f-review switch --detach \
+  origin/feature/s05f-snapshot-review-journal-integrity && \
+(
+  cd /tmp/dqa-s05f-review/frontend && \
+  npm run build && npm run lint && npm test -- --run
+) && \
+git -C /tmp/dqa-s05f-review diff --check 2280f06 HEAD && \
+echo DQA_S05F_REVIEW_PASS
+```
+
+1차 `npm ci` 성공 이후 package manifest/lockfile을 변경하지 않았으므로 설치된 `node_modules` 재사용. 실패 시 test/컴파일 로그를 수집하고 동일 Draft PR에서만 수정 후 재수용.
+
+## 서버 Acceptance — 원래 최초 명령 (빌드에서 중단)
 
 기존 운영 컨테이너/DB와 분리된 worktree에서 Frontend 검증:
 
