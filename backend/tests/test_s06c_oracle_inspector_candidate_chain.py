@@ -31,6 +31,14 @@ def _inspect(kind: str = "rich", *, reversed_rows: bool = False):
     # The original U-02-A dictionary parity fixture tests adapter equivalence;
     # complete TB_VISIT's referenced composite-FK source columns before using
     # it for the strict v2 catalog contract. Never patch production adapters.
+    # The synthetic 2-column FK references a matching composite UNIQUE key,
+    # rather than two unrelated single-column constraints.
+    rows["uks"][0]["ordinal_position"] = 2
+    rows["uks"].append({
+        "schema_name": "DEMIS_OWNER", "table_name": "TB_PATIENT",
+        "constraint_name": "UK_PATIENT_SITE", "column_name": "PATIENT_ID",
+        "ordinal_position": 1,
+    })
     rows["columns"].append({
         "schema_name": "DEMIS_OWNER", "table_name": "TB_VISIT",
         "ordinal_position": 2, "column_name": "SITE_ID",
