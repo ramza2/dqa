@@ -5,6 +5,8 @@ import {
 } from "../api/schemaSnapshot";
 import { CatalogApiError } from "../types/catalog";
 import { SnapshotCatalogContext } from "./SnapshotCatalogContext";
+import { SnapshotReviewGates } from "./SnapshotReviewGates";
+import { isSafeSnapshotReviewPreview } from "../utils/snapshotReviewGates";
 import type {
   SnapshotDetail, SnapshotReviewEvent, SnapshotReviewPreview, SnapshotSummary,
 } from "../types/schemaSnapshot";
@@ -130,8 +132,9 @@ export function SchemaSnapshotHistory() {
         value.revision_id === row.id
         && value.source_name === expectedSource
         && value.schema_fingerprint === row.schema_fingerprint
+        && isSafeSnapshotReviewPreview(value)
           ? ready(value)
-          : failed("검토 미리보기의 Revision/Source/Fingerprint가 일치하지 않습니다."),
+          : failed("검토 미리보기의 Revision/Source/Fingerprint 또는 Gate 안전 상태가 일치하지 않습니다."),
       );
     } else {
       setPreview(failed(errorText(previewResult.reason)));
@@ -294,6 +297,9 @@ export function SchemaSnapshotHistory() {
               <div className="status-item"><span className="label">Latest Revision</span>
                 <span className="value">{preview.data.latest_revision_id}{preview.data.is_latest ? "" : " (선택본 이전)"}</span></div>
             </div>
+          ) : null}
+          {preview.status === "ready" && preview.data ? (
+            <SnapshotReviewGates preview={preview.data} />
           ) : null}
           <h3>변경 검토 이력 (관리자 승인 아님)</h3>
           {status(reviews, "변경 검토 이력")}
