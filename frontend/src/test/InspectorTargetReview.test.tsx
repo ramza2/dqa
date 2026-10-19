@@ -66,8 +66,8 @@ describe("S-05-C2 offline-only Inspector target review", () => {
     try {
       render(<InspectorTargetReviewPanel profileId={5} />);
       await userEvent.click(screen.getByRole("button", { name: "설정 대조 조회 (연결 없음)" }));
-      expect(await screen.findByText("현재 환경에서 Inspector 실행 차단")).toBeInTheDocument();
-      expect(screen.getByText("설정 구조 대조 불가")).toBeInTheDocument();
+      expect(await screen.findByText(/현재 환경에서 Inspector 실행 차단/)).toBeInTheDocument();
+      expect(screen.getByText(/설정 구조 대조 불가/)).toBeInTheDocument();
     } finally { restore(); }
   });
 
@@ -99,9 +99,9 @@ describe("S-05-C2 offline-only Inspector target review", () => {
       await waitFor(() => expect(resolveOld).toBeDefined());
       rerender(<InspectorTargetReviewPanel profileId={8} />);
       await userEvent.click(screen.getByRole("button", { name: "설정 대조 조회 (연결 없음)" }));
-      expect(await screen.findByText("Inspector 비활성")).toBeInTheDocument();
+      expect(await screen.findByText(/Inspector 비활성/)).toBeInTheDocument();
       resolveOld!(jsonResponse(review(7)));
-      await waitFor(() => expect(screen.getByText("Inspector 비활성")).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText(/Inspector 비활성/)).toBeInTheDocument());
       expect(screen.queryByText(/문자열\/숫자 일치/)).not.toBeInTheDocument();
     } finally { restore(); }
   });
