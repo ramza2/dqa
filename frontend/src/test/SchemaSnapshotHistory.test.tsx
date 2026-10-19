@@ -112,6 +112,61 @@ describe("S-05-A Snapshot read-only UI", () => {
     restore();
   });
 
+  it("shows object-type Diff aggregates without deriving Catalog approval", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(responses());
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByTestId("snapshot-diff-total")).toHaveTextContent("총 1건 변경");
+      const overview = screen.getByTestId("snapshot-diff-overview");
+      expect(overview).toHaveTextContent("TABLE");
+      expect(within(overview).getAllByRole("row")).toHaveLength(2);
+      expect(overview).toHaveTextContent("Changed");
+      expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect(screen.getByTestId("snapshot-diff-total")).toHaveTextContent("DBA 승인 증빙이 아닙니다");
+    } finally { restore(); }
+  });
+
+  it("distinguishes NO_BASELINE from a verified comparison with zero changes", async () => {
+    const user = userEvent.setup();
+    const initial = {
+      ...snapshot, previous_revision_id: null,
+      diff_status: "NO_BASELINE" as const, total_changes: null,
+    };
+    const initialDetail: SnapshotDetail = { ...initial, diff_counts: {}, changes: [] };
+    const restore = installFetchMock(responses({
+      items: [initial],
+      onDetail: () => jsonResponse(initialDetail),
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByTestId("snapshot-diff-no-baseline")).toHaveTextContent("변경 0건으로 해석하지 않습니다");
+      expect(screen.queryByTestId("snapshot-diff-overview")).not.toBeInTheDocument();
+    } finally { restore(); }
+  });
+
+  it("fails closed on inconsistent Diff counts without hiding independent Preview and Gate information", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(responses({
+      onDetail: () => jsonResponse({
+        ...detail, diff_counts: { TABLE: { added: 0, removed: 0, changed: 99 } },
+      }),
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("변경 건수 정합성");
+      expect(screen.queryByTestId("snapshot-diff")).not.toBeInTheDocument();
+      expect(await screen.findByTestId("snapshot-preview")).toHaveTextContent("WARNING");
+      expect(await screen.findByTestId("snapshot-review-gates")).toHaveTextContent("INDEPENDENT_PREFLIGHT");
+    } finally { restore(); }
+  });
+
   it("shows linked review-event IDs without mistaking ACKNOWLEDGED for DBA approval", async () => {
     const user = userEvent.setup();
     const newest = {
