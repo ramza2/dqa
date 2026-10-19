@@ -68,13 +68,14 @@ export function isSafeSnapshotDiffDetail(value: unknown): value is SnapshotDetai
   ) return false;
 
   const observed = new Map<ObjectType, DiffCount>();
+  const identities = new Set<string>();
   for (const raw of detail.changes as unknown[]) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
     const change = raw as Record<string, unknown>;
     const type = change.object_type;
     const kind = change.change_type;
     if (typeof type !== "string" || !OBJECT_TYPES.includes(type as ObjectType)
-      || typeof kind !== "string" || !(kind in CHANGE_KIND)
+      || (kind !== "ADDED" && kind !== "REMOVED" && kind !== "CHANGED")
       || !Array.isArray(change.object_key)
       || change.object_key.length !== IDENTITIES[type as ObjectType]
       || !change.object_key.every((v: unknown) => typeof v === "string" && v.length > 0)
@@ -83,6 +84,9 @@ export function isSafeSnapshotDiffDetail(value: unknown): value is SnapshotDetai
       || (kind === "CHANGED") !== (change.changed_fields.length > 0)
     ) return false;
     const itemType = type as ObjectType;
+    const identity = JSON.stringify([itemType, change.object_key]);
+    if (identities.has(identity)) return false;
+    identities.add(identity);
     const count = observed.get(itemType) ?? { added: 0, removed: 0, changed: 0 };
     count[CHANGE_KIND[kind]] += 1;
     observed.set(itemType, count);
