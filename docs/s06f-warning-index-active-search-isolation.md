@@ -57,7 +57,20 @@ S-06-F에서는 새 애플리케이션 엔드포인트·보안 정책을 구현�
 - 본 검증은 사이트 `G1/G2/G5`, 실 복제 EMR DB의 Registry/권한/신뢰 계약,
   PoC cutover 또는 운영 검색·임상 안전성 인증으로 사용하지 않는다.
 
-## 4. PuTTY 서버 Acceptance — 실행 대기
+## 4. PuTTY 서버 Acceptance — PASS (2026-10-19)
+
+- **검증한 테스트/Runner HEAD:** `ff1c641`; detached Worktree `/tmp/dqa-s06f-review`; 기준 `main@b2fcd8a`.
+- `python3 -m venv .venv` 및 `pip install -e '.[dev]'`: **PASS**.
+- S-06-B 기존 disposable PostgreSQL project `dqa-s06a-disposable` 생성 및 healthy 확인, 빈 DB 가드 통과 후 Alembic `20261014_ss02`까지 이행: **PASS**.
+- `python -m pytest -q -rs -s`: 출력 `.....` + `...` → **8 passed / 0 failed / 0 skipped**. 신규 S-06-F 2건 포함. Pytest는 `-q` 방식으로 별도 합계 문자열을 출력하지 않았지만 성공 dot 8개와 exit 0을 확인했다.
+- S-06-B 합성 Gold 5개 질의(`혈당/간수치/신기능/투약/퇴원요약`)는 `Recall@5=1.0`, `MRR@5=1.0`, `nDCG@5=1.0`, `Precision@5=0.2`를 출력했다. Semantic/Hybrid Stub은 각각 4개 결과, model_key 일치. **실 BGE-M3·임상 품질 지표가 아니다.**
+- 테스트용 PostgreSQL 컨테이너 및 Compose 네트워크 **Stopped/Removed** 확인 후 `DQA_S06B_GOLD_PASS` 출력.
+- `git diff --check b2fcd8a HEAD` **PASS** 및 최종 `DQA_S06F_REVIEW_PASS` 확인.
+- `StarletteDeprecationWarning` 1건은 비차단.
+- 본 기록을 추가하는 후속 커밋은 **문서만 변경**하며, 검증한 Test/Runner/운영 코드는 그대로 유지한다.
+- **실 DEMIS/복제 EMR DB, 운영 PostgreSQL, 기관 DBA Preflight·READY 승인, G1/G2/G5, 외부 LLM/Embedding, 실제 임상 검색 품질, GitHub Actions CI 또는 운영 Docker 배포는 이번 수용 대상이 아니다.**
+
+## 5. PuTTY 서버 Acceptance — 격리 Worktree 실행 명령
 
 ```bash
 cd ~/dqa && git fetch origin && \
@@ -75,9 +88,7 @@ git -C /tmp/dqa-s06f-review diff --check b2fcd8a HEAD && \
 echo DQA_S06F_REVIEW_PASS
 ```
 
-수용 표식: `DQA_S06B_GOLD_PASS`는 runner의 pytest/Compose 정리 후에만
-표시되며, `DQA_S06F_REVIEW_PASS`는 최종 git diff 검사 후 표시된다.
-`pytest` 실제 PASS/FAIL/SKIP 건수는 서버 로그 수신 후 기록한다.
+수용 표식 `DQA_S06B_GOLD_PASS`와 `DQA_S06F_REVIEW_PASS`가 모두 서버 로그에서 확인됐다. 검사 완료 사실은 운영 DBA/Gate 승인으로 해석하지 않는다.
 
 **운영/공유 Docker Compose 재배포나 서비스 컨테이너 재시작 명령을 실행하지 않는다.**
 일회용 PostgreSQL은 임시 테스트를 위한 별도 Compose 프로젝트로만 사용된다.
