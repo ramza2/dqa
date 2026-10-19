@@ -313,7 +313,7 @@ describe("S-05-A Snapshot read-only UI", () => {
     }));
     render(<SchemaSnapshotHistory />);
     await enterSource(user);
-    expect(await screen.findByRole("alert")).toHaveTextContent("일치하지 않습니다");
+    expect(await screen.findByRole("alert")).toHaveTextContent("응답 정합성");
     expect(screen.queryByRole("button", { name: "Snapshot 10 상세 보기" })).not.toBeInTheDocument();
     restore();
   });
