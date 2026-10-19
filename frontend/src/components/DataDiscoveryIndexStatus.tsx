@@ -186,7 +186,8 @@ export function DataDiscoveryIndexStatus() {
         code: null,
         httpStatus: null,
       });
-      setStaleWarning(null);
+      // Preserve a revision-mismatch warning across the automatic status refresh.
+      // Only an explicit source switch or a new user action dismisses it.
       try {
         const response = await getDataDiscoveryIndexStatus(sourceName);
         if (seq !== requestSeq.current) {
