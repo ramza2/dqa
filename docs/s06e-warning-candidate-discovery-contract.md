@@ -47,7 +47,22 @@ Active Revision 전환 및 검색 품질 `Recall@k` 측정은 기존 S-06-A/B의
   실 DEMIS 스키마 가시성·복제 EMR DB 권한·현장 품질 평가와 별개다.
 - LLM 관련 별도 Draft PR #124는 계속 보류.
 
-## 서버 검증 — 미실행
+## 서버 검증 — 최종 PASS (2026-10-19)
+
+- 서버가 검증한 코드 HEAD **`4fa8072`**, detached Worktree `/tmp/dqa-s06e-review`, 기준 `main@5086ea2`.
+- `python3 -m venv .venv`, `pip install -e '.[dev]'`: **PASS**, 격리된 의존성 설치.
+- `python -m pytest -q -rs`: **32 passed / 0 failed / 0 skipped**.
+  신규 S-06-E 5건과 S-06-D/C, Catalog Candidate, S-06-B DB 없는 관계 탐색 회귀 포함.
+- `git diff --check 5086ea2 HEAD`: **PASS**, 최종 **`DQA_S06E_REVIEW_PASS`** 출력 확인.
+- `StarletteDeprecationWarning` 1건은 비차단.
+- 결과를 기록하는 이 후속 커밋은 **문서만 수정**한다.
+  32건 PASS를 확인한 테스트 코드, 애플리케이션 코드 및 의존성은 변경하지 않았다.
+- **실 DEMIS/복제 EMR DB, 운영 PostgreSQL 문서 upsert/검색, 독립 DBA Preflight,
+  G1/G2/G5, READY 발급/Activation, GitHub CI 및 운영 Docker 배포는 검증 범위가 아니다.**
+- **ModelOps Token Count P1-12는 참고사항으로만 유지**하며, DQA LLM 사용 여부/폐쇄망 제공자·KMed-AI 인터페이스 확정 전 Adaptive Budgeting 개발을 진행하지 않는다.
+  기존 LLM Draft PR #124는 보류한다.
+
+## 서버 검증 — 실행한 격리 Worktree 명령
 
 기존 `~/dqa` Source/DB/Container 변경 없이 별도 Worktree만 생성.
 `db_session/db_client`는 기존 DB에 `TRUNCATE`를 실행할 수 있으므로
@@ -72,6 +87,5 @@ git -C /tmp/dqa-s06e-review diff --check 5086ea2 HEAD && \
 echo DQA_S06E_REVIEW_PASS
 ```
 
-Python Unit/Integration 출력 실제 PASS/SKIP 수와 최종 마커를 확인하기 전
-수용 완료를 주장하지 않는다. GitHub CI와 실 DEMIS/DBA Preflight 검증,
+서버에서 32건 PASS/0 SKIP 및 최종 수용 마커를 확인했다. 합성 회귀 결과를 운영 승인으로 간주하지 않는다. GitHub CI와 실 DEMIS/DBA Preflight 검증,
 운영 Docker 배포는 별도다. **명시 승인 전 `main` Merge/운영 배포 금지.**
