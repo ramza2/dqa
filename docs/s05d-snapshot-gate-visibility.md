@@ -34,6 +34,7 @@
 - `frontend/src/components/SchemaSnapshotHistory.tsx`: 기존 Preview 영역에 통합
 - `frontend/src/test/SnapshotReviewGates.test.tsx` 및 `SchemaSnapshotHistory.test.tsx`: 정상·stale·malformed·승격 변조/409·Source 격리 회귀
 - `frontend/src/App.css`: 안내 패널 최소 스타일
+- `frontend/src/components/DataDiscoveryIndexStatus.tsx` 및 `frontend/src/test/DataDiscovery.test.tsx`: 전체 Suite 검증 중 드러난 자동 refresh 경고 소실 최소 수정 및 회귀 증명
 
 ## 서버 Acceptance — 1차 Build 오류, 수정 후 재검증 대기
 
@@ -41,6 +42,15 @@
 - 문제: `Number.isSafeInteger(preview.revision_id)` 검사만으로 `Partial<SnapshotReviewPreview>`의 선택적 숫자 필드를 TypeScript가 좁히지 못함.
 - 수정: `frontend/src/utils/snapshotReviewGates.ts`에서 두 Revision ID의 타입을 `typeof ... === "number"`로 명시 검증 후 범위 비교. Invalid/undefined 입력을 계속 fail-closed 처리.
 - 이후 테스트 성공 전 기능 검증 완료 또는 PR Ready를 주장하지 않는다.
+
+## 서버 Acceptance 2차 결과 및 원인 분석 (2026-10-19)
+
+- 재검증 기준 `b7c0d73`: `npm run build` PASS, `npm run lint` PASS, Vitest **91 PASS / 1 FAIL (92건)**. S-05-D 신규/변경 테스트 14건 모두 통과.
+- 실패: 기존 `DataDiscovery.test.tsx`의 `ignores sync response when revision snapshot no longer matches`에서 `index-stale-warning` 검색 실패.
+- 원인: `DataDiscoveryIndexStatus.rejectStaleActionOnCurrentSource`가 revision mismatch 경고를 설정한 뒤 `refreshSources`를 호출하고, 이어지는 `loadStatus`가 `setStaleWarning(null)`으로 경고를 즉시 지우는 상태 갱신 순서. **비동기 타이밍에 따라 경고가 사용자에게 표시되지 않는 기존 UX 결함**으로 확인.
+- 수정: 자동 상태 갱신에서만 경고 제거를 하지 않음. `onSelect` 및 신규 Rebuild/Sync 작업 시작에서는 기존처럼 경고 초기화. `DataDiscovery.test.tsx`는 자동 index status 재조회 후에도 경고가 유지되는지 회귀 검사.
+- 범위 예외: 본 S-05-D 기능과 직접 관계없는 UI 회귀이지만, 전체 Suite를 통과하지 못하게 하는 기존 경고 동작 결함이어서 **두 파일의 최소 변경을 같은 PR에 명시적으로 포함**. Backend/DB/DEMIS 변경 없음.
+- **최종 PASS 대기**. 새 수정 HEAD에서 전체 Vitest 92건과 Build/Lint를 다시 실행하기 전 머지/배포 금지.
 
 ## 서버 재검증 (기존 worktree 재사용)
 
@@ -77,6 +87,6 @@ git -C /tmp/dqa-s05d-review diff --check fb46fa1 HEAD && \
 echo DQA_S05D_REVIEW_PASS
 ```
 
-- 전체 Vitest 10개 파일 86건을 기준으로 신규 Test와 회귀 PASS, ESLint/TypeScript/Vite Build, Diff PASS 필수.
+- S-05-D 변경 전 Frontend 10개 파일 86건을 기준으로 이번 PR 전체 **11개 파일 92건**; 신규 Test와 회귀 PASS, ESLint/TypeScript/Vite Build, Diff PASS 필수.
 - `DQA_S05D_REVIEW_PASS` 출력 전 완료/수용 주장 금지. `npm ci` 취약점 경고가 재출현하면 별도 분석하며 `npm audit fix --force` 금지.
 - 사용자 별도 승인 전 GitHub main Merge/서비스 재배포 금지. 실제 군·DBA DEC-01/02/08/10 및 G1/G5는 여전히 대기.
