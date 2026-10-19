@@ -10,6 +10,7 @@ import { isSafeSnapshotReviewPreview } from "../utils/snapshotReviewGates";
 import { isSafeSnapshotReviewEvents } from "../utils/snapshotReviewJournal";
 import { isSafeSnapshotDiffDetail, snapshotDiffCountRows } from "../utils/snapshotDiffOverview";
 import { isSafeSnapshotHistoryList } from "../utils/snapshotHistoryList";
+import { readSnapshotWithDeadline, SnapshotPanelTimeoutError } from "../utils/snapshotPanelDeadline";
 import type {
   SnapshotDetail, SnapshotReviewEvent, SnapshotReviewPreview, SnapshotSummary,
 } from "../types/schemaSnapshot";
@@ -28,6 +29,7 @@ const SOURCE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$/;
 const PAGE_SIZE = 50;
 
 function errorText(error: unknown): string {
+  if (error instanceof SnapshotPanelTimeoutError) return error.message;
   if (error instanceof CatalogApiError) {
     return "HTTP " + error.status + (error.code ? " · " + error.code : "") + ": " + error.message;
   }
@@ -110,7 +112,7 @@ export function SchemaSnapshotHistory() {
     const isCurrent = () => requestId === detailSeq.current
       && panelId === diffSeq.current && sourceRef.current === expectedSource;
     setDetail(loading());
-    void getSnapshotHistoryDetail(expectedSource, row.id).then((value) => {
+    void readSnapshotWithDeadline((signal) => getSnapshotHistoryDetail(expectedSource, row.id, { signal })).then((value) => {
       if (!isCurrent()) return;
       setDetail(
         isSafeSnapshotDiffDetail(value)
@@ -134,7 +136,7 @@ export function SchemaSnapshotHistory() {
     const isCurrent = () => requestId === detailSeq.current
       && panelId === previewSeq.current && sourceRef.current === expectedSource;
     setPreview(loading());
-    void getSnapshotReviewPreview(expectedSource, row.id).then((value) => {
+    void readSnapshotWithDeadline((signal) => getSnapshotReviewPreview(expectedSource, row.id, { signal })).then((value) => {
       if (!isCurrent()) return;
       setPreview(
         isSafeSnapshotReviewPreview(value)
@@ -155,7 +157,7 @@ export function SchemaSnapshotHistory() {
     const isCurrent = () => requestId === detailSeq.current
       && panelId === reviewsSeq.current && sourceRef.current === expectedSource;
     setReviews(loading());
-    void listSnapshotReviewEvents(expectedSource, row.id).then((values) => {
+    void readSnapshotWithDeadline((signal) => listSnapshotReviewEvents(expectedSource, row.id, { signal })).then((values) => {
       if (!isCurrent()) return;
       setReviews(
         isSafeSnapshotReviewEvents(values, {
