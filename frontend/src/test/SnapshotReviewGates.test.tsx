@@ -50,6 +50,9 @@ describe("S-05-D Snapshot review gates (advisory only)", () => {
       [...SNAPSHOT_REVIEW_REQUIRED_GATES.slice(0, 4), "MANUAL_CHANGE_REVIEW"],
       null, "MANUAL_CHANGE_REVIEW",
     ];
+    expect(isSafeSnapshotReviewPreview(null)).toBe(false);
+    expect(isSafeSnapshotReviewPreview({})).toBe(false);
+    expect(isSafeSnapshotReviewPreview("invalid")).toBe(false);
     for (const gates of samples) {
       const value = { ...base, required_gates: gates } as unknown as SnapshotReviewPreview;
       expect(isSafeSnapshotReviewPreview(value)).toBe(false);
