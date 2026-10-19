@@ -35,7 +35,30 @@
 - `frontend/src/test/SnapshotReviewGates.test.tsx` 및 `SchemaSnapshotHistory.test.tsx`: 정상·stale·malformed·승격 변조/409·Source 격리 회귀
 - `frontend/src/App.css`: 안내 패널 최소 스타일
 
-## 서버 Acceptance — 미실행
+## 서버 Acceptance — 1차 Build 오류, 수정 후 재검증 대기
+
+- 2026-10-19 최초 서버 수용 시 `npm ci` 성공(258 packages, vulnerabilities 0), `npm run build` TypeScript 단계에서 **TS18048 3건**으로 중단. `npm run lint`, Vitest 및 최종 PASS 마커는 **미실행**.
+- 문제: `Number.isSafeInteger(preview.revision_id)` 검사만으로 `Partial<SnapshotReviewPreview>`의 선택적 숫자 필드를 TypeScript가 좁히지 못함.
+- 수정: `frontend/src/utils/snapshotReviewGates.ts`에서 두 Revision ID의 타입을 `typeof ... === "number"`로 명시 검증 후 범위 비교. Invalid/undefined 입력을 계속 fail-closed 처리.
+- 이후 테스트 성공 전 기능 검증 완료 또는 PR Ready를 주장하지 않는다.
+
+## 서버 재검증 (기존 worktree 재사용)
+
+```bash
+cd ~/dqa && git fetch origin && \
+git -C /tmp/dqa-s05d-review switch --detach \
+  origin/feature/s05d-snapshot-gate-visibility && \
+(
+  cd /tmp/dqa-s05d-review/frontend && \
+  npm run build && npm run lint && npm test -- --run
+) && \
+git -C /tmp/dqa-s05d-review diff --check fb46fa1 HEAD && \
+echo DQA_S05D_REVIEW_PASS
+```
+
+최초 검증에서 `npm ci`가 정상 완료되었고 `package.json` / `package-lock.json`은 변경하지 않았으므로 동일 worktree의 설치된 `node_modules`를 재사용한다.
+
+## 원래 검증 (첫 시도, Build 단계에서 중단)
 
 기존 운영 Docker/DB/DEMIS에 영향 없는 별도 worktree에서 Frontend 검증:
 
