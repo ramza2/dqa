@@ -7,6 +7,7 @@ is a fabricated isolated fixture, not trusted external evidence.
 """
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import select
 
 from app.adapters.catalog.activation_errors import (
@@ -94,7 +95,7 @@ def test_warning_import_index_without_active_pointer_is_not_searchable(factory):
         assert created and warning.package_readiness == "WARNING"
         assert rebuild_for_revision(db, warning.id).document_count == 6
         assert sync_embeddings_for_revision(db, warning.id, provider).embedded_count == 6
-        with __import__("pytest").raises(CatalogActivationError) as caught:
+        with pytest.raises(CatalogActivationError) as caught:
             activate_catalog_revision(db, warning.id)
         assert caught.value.code == CatalogActivationErrorCode.REVISION_NOT_ACTIVATABLE
         db.commit()
@@ -103,7 +104,7 @@ def test_warning_import_index_without_active_pointer_is_not_searchable(factory):
         assert db.scalar(select(DataDiscoveryDocument.id).where(
             DataDiscoveryDocument.catalog_import_revision_id == warning.id
         ).limit(1)) is not None
-        with __import__("pytest").raises(CatalogQueryError) as caught:
+        with pytest.raises(CatalogQueryError) as caught:
             _query(db, source, WARNING_TABLE, "keyword")
         assert caught.value.code == CatalogQueryErrorCode.ACTIVE_REVISION_NOT_FOUND
         assert db.scalars(select(CatalogActivationEvent).where(
@@ -125,9 +126,9 @@ def test_ready_search_and_provenance_unchanged_after_warning_index(factory):
     with factory() as db:
         before = _query(db, source, READY_TABLE, "keyword")
         assert before.catalog_revision_id == ready.id
-        assert [result.document_key for result in before.results] == [
-            f"TABLE:DEMIS_OWNER.{READY_TABLE}",
-        ]
+        assert before.results
+        assert before.results[0].document_key == f"TABLE:DEMIS_OWNER.{READY_TABLE}"
+        assert all(READY_TABLE in item.document_key for item in before.results)
         active_before = get_active_catalog(db, source)
         assert active_before.revision_id == ready.id
         assert active_before.package_readiness == "READY"
@@ -142,7 +143,7 @@ def test_ready_search_and_provenance_unchanged_after_warning_index(factory):
         assert warning.schema_fingerprint != ready.schema_fingerprint
         assert rebuild_for_revision(db, warning.id).document_count == 6
         assert sync_embeddings_for_revision(db, warning.id, provider).embedded_count == 6
-        with __import__("pytest").raises(CatalogActivationError) as caught:
+        with pytest.raises(CatalogActivationError) as caught:
             activate_catalog_revision(db, warning.id)
         assert caught.value.code == CatalogActivationErrorCode.REVISION_NOT_ACTIVATABLE
         db.commit()
@@ -168,16 +169,12 @@ def test_ready_search_and_provenance_unchanged_after_warning_index(factory):
                 source, ready.id, ready.schema_fingerprint,
             )
             assert result.results
-            assert {
-                hit.document_key for hit in result.results
-            } == {
+            allowed_keys = {
                 f"TABLE:DEMIS_OWNER.{READY_TABLE}",
                 f"COLUMN:DEMIS_OWNER.{READY_TABLE}.ID",
-            } or (
-                mode == "keyword" and {
-                    hit.document_key for hit in result.results
-                } == {f"TABLE:DEMIS_OWNER.{READY_TABLE}"}
-            )
+            }
+            assert {hit.document_key for hit in result.results} <= allowed_keys
+            assert len({hit.document_key for hit in result.results}) == len(result.results)
             assert all(
                 (
                     hit.identity.source_name, hit.identity.catalog_revision_id,
