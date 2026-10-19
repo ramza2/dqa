@@ -5,6 +5,7 @@ import type {
   CatalogCategoryListResponse,
   CatalogColumnListResponse,
   CatalogIndexListResponse,
+  CatalogImportRevisionSummary,
   CatalogRelationListResponse,
   CatalogTableDetailResponse,
   CatalogTableListResponse,
@@ -24,6 +25,16 @@ export function listCatalogActivations(
   limit = 10,
 ): Promise<CatalogActivationEventSummary[]> {
   return apiGet<CatalogActivationEventSummary[]>("/catalog/activations", {
+    source_name: sourceName, limit, offset: 0,
+  });
+}
+
+/** Read-only Source-scoped immutable import revision list. Never activates. */
+export function listCatalogImports(
+  sourceName: string,
+  limit = 10,
+): Promise<CatalogImportRevisionSummary[]> {
+  return apiGet<CatalogImportRevisionSummary[]>("/catalog/imports", {
     source_name: sourceName, limit, offset: 0,
   });
 }

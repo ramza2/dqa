@@ -43,6 +43,7 @@ afterEach(() => vi.restoreAllMocks());
 function handlers(args: {
   getActive?: (source: string) => Response | Promise<Response>;
   getActivations?: (source: string) => Response | Promise<Response>;
+  getImports?: (source: string) => Response | Promise<Response>;
 } = {}): Handler[] {
   return [(url, init) => {
     const source = url.pathname.startsWith("/api/v1/catalog/active/")
@@ -51,12 +52,17 @@ function handlers(args: {
     if (
       !url.pathname.startsWith("/api/v1/catalog/active/")
       && url.pathname !== "/api/v1/catalog/activations"
+      && url.pathname !== "/api/v1/catalog/imports"
     ) return null;
     expect(init?.method).toBe("GET");
     if (url.pathname.startsWith("/api/v1/catalog/active/")) {
       return args.getActive?.(source) ?? jsonResponse({ ...active, source_name: source });
     }
     expect(url.searchParams.get("limit")).toBe("10");
+    if (url.pathname === "/api/v1/catalog/imports") {
+      expect(url.searchParams.get("offset")).toBe("0");
+      return args.getImports?.(source) ?? jsonResponse([]);
+    }
     return args.getActivations?.(source) ?? jsonResponse([{ ...activation, source_name: source }]);
   }];
 }
@@ -73,9 +79,30 @@ describe("S-05-B independent Snapshot/Catalog read-only context", () => {
     expect(compare).toHaveTextContent("Fingerprint 문자열 일치");
     expect(compare).toHaveTextContent("계보·승인 증빙 아님");
     expect(await screen.findByTestId("snapshot-catalog-activations")).toHaveTextContent("13");
+    expect(await screen.findByTestId("catalog-imports-empty")).toBeInTheDocument();
     expect(screen.getByTestId("snapshot-catalog-context")).toHaveTextContent("번호가 같아도 같은 개체가 아니며");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     restore();
+  });
+
+  it("shows Source-scoped Import revisions as separate from Snapshot and Activation revisions", async () => {
+    const restore = installFetchMock(handlers({
+      getImports: (source) => jsonResponse([{
+        id: 70, source_name: source, package_version: "2.0",
+        package_readiness: "WARNING", activation_eligible: false,
+        schema_fingerprint: FP_B, validation_status: "VALID",
+        imported_at: "2026-10-15T00:00:00Z", table_count: 2, column_count: 3,
+      }]),
+    }));
+    try {
+      render(<SnapshotCatalogContext sourceName={SOURCE} snapshot={sample} />);
+      const imports = await screen.findByTestId("catalog-imports-table");
+      expect(imports).toHaveTextContent("70");
+      expect(imports).toHaveTextContent("WARNING");
+      expect(await screen.findByTestId("snapshot-active-catalog")).toHaveTextContent("42");
+      expect(await screen.findByTestId("snapshot-catalog-activations")).toHaveTextContent("13");
+      expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    } finally { restore(); }
   });
 
   it("never treats mismatching fingerprint as an import/activation decision", async () => {

@@ -11,6 +11,32 @@ export interface CatalogActiveSummary {
   activated_at: string;
 }
 
+/** Immutable Catalog Package import metadata; not a Snapshot or activation event. */
+export interface CatalogImportRevisionSummary {
+  id: number;
+  source_name: string;
+  db_type: string;
+  database_name: string | null;
+  default_schema: string | null;
+  package_format: string;
+  package_version: string;
+  package_readiness: PackageReadiness;
+  activation_eligible: boolean;
+  schema_fingerprint: string;
+  archive_sha256: string;
+  manifest_sha256: string;
+  validation_status: string;
+  generated_at: string;
+  imported_at: string;
+  table_count: number;
+  column_count: number;
+  relation_count: number;
+  index_count: number;
+  category_count: number;
+  category_assignment_count: number;
+  managed_file_count: number;
+}
+
 /** Append-only active Catalog pointer history; NOT Snapshot revision history. */
 export interface CatalogActivationEventSummary {
   source_name: string;

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getActiveCatalog, listCatalogActivations } from "../api/catalog";
 import { CatalogApiError, type CatalogActiveSummary, type CatalogActivationEventSummary } from "../types/catalog";
 import type { SnapshotSummary } from "../types/schemaSnapshot";
+import { CatalogImportHistory } from "./CatalogImportHistory";
 
 type ReadState<T> = {
   status: "loading" | "ready" | "none" | "error";
@@ -120,6 +121,7 @@ export function SnapshotCatalogContext({ sourceName, snapshot }: Props) {
           Snapshot #{snapshot?.id} ↔ Active Catalog Import #{live?.revision_id}: {comparison}
         </p>
       ) : null}
+      <CatalogImportHistory sourceName={sourceName} active={live} />
       <h3>최근 Catalog Activation 이벤트 (읽기 전용)</h3>
       {events.status === "loading" ? <p className="dd-guidance">활성화 이력 조회 중…</p> : null}
       {events.status === "error" ? (
