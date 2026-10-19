@@ -8,7 +8,7 @@
 
 - U-02-A (#82)는 고정 Legacy Inspector와 DQA Inspector의 동일 합성 dictionary 응답에 대한
   메타데이터 동등성 및 Oracle READ ONLY 질의 정책을 검증했다.
-- S-06-A (#110 전후 단계)에서는 DQA의 수제 합성 `SchemaSnapshot`에서
+- S-06-A에서는 DQA의 수제 합성 `SchemaSnapshot`에서
   Diff/내부 v2 `WARNING` 후보 Fingerprint를 검증했다.
 - S-06-B에서는 검색 Gold 질의·FK 관계 조회를 합성 DB/Stub 기반으로 확대했다.
 - **본 범위:** DQA **Oracle Inspector가 만든 실제 DTO**를 수정 없이
