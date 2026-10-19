@@ -26,15 +26,27 @@ S-05-A~E 화면에서 `GET /api/v1/schema-inspector/snapshots/{revision_id}/revi
 
 신규 Backend API, DB/Migration, Inspector Capture, Snapshot Review POST, Catalog Import/Activate, DEMIS/Oracle/임상 데이터, Credential 처리, Docker 배포 설정 변경 없음. 기존 `CATALOG_READ` 권한만 사용.
 
-## 서버 Acceptance — 1차 TypeScript 오류, 수정 후 재검증 대기
+## 서버 Acceptance — 1차 TypeScript 오류 및 해결 이력
 
 - 2026-10-19 최초 서버 검증 HEAD `f97b15a`, 별도 `/tmp/dqa-s05f-review`에서 `npm ci` **PASS**, npm audit **0 vulnerabilities** (259 packages).
 - `npm run build` 중 `TS2367` **3건**으로 중단: 타입 `SnapshotReviewEvent`의 승인 표시 optional false 필드를 `=== true`로 비교해 TypeScript가 불가능 조건이라고 경고.
 - 승인 표시를 검사에서 제거하지 않고, `snapshotReviewJournal.ts`에서 **서버 응답 원본 객체를 `Record<string, unknown>`으로 읽어** 필드가 없거나 실제 `false`인 경우만 허용하도록 변경. `true`, `"true"`, `1`, `null` 등 오염된 값은 모두 **fail-closed**.
 - `SnapshotReviewJournal.test.ts` 기존 테스트 내부에 비정상 승인 필드 `"true"/1/null` 사례를 추가. 애플리케이션 API/권한/DB/DEMIS 연결 변경 없음.
-- Lint, Vitest 및 최종 `DQA_S05F_REVIEW_PASS`는 **아직 미실행**. 최종 서버 PASS 전 Draft 유지 및 머지·배포 금지.
+- 당시 Lint, Vitest 및 최종 `DQA_S05F_REVIEW_PASS`는 **미실행**이었다. 이후 재검증에서 전부 PASS했으며 결과는 다음 절에 기록한다.
 
-## 서버 재검증 — 기존 worktree 재사용
+## 서버 Acceptance — 최종 재검증 PASS (2026-10-19)
+
+- 검증 코드 HEAD **`073872e`**, `/tmp/dqa-s05f-review` detached Worktree. 기준 `main@2280f06`.
+- `npm ci`는 1차 검증에서 **PASS**, 감사 대상 259개 패키지 기준 **취약점 0건**. 2차 검증은 동일 `node_modules` 재사용.
+- `npm run build`: TypeScript + Vite 6.4.3 **PASS**, 63 modules transformed.
+- `npm run lint`: ESLint **PASS**.
+- `npm test -- --run`: **13 Test Files / 108 Tests PASS** — SnapshotReviewJournal 신규 6건, SchemaSnapshotHistory 통합 포함 12건과 전체 Frontend 회귀.
+- `git diff --check 2280f06 HEAD`: **PASS**, 최종 **`DQA_S05F_REVIEW_PASS`** 확인.
+- 본 문서 기록은 검증 코드 HEAD 이후 추가된 문서 전용 commit이며, **검증 대상 Frontend 코드·테스트·의존성은 변경하지 않는다**.
+- GitHub Actions CI는 별도 실행 확인되지 않음. Docker 운영 배포/DEMIS 연결/실제 군·DBA Preflight 승인 및 G1/G5 인수는 테스트 범위에서 제외.
+- 사용자 명시 승인 전에는 GitHub `main` 병합과 운영 배포를 진행하지 않는다.
+
+## 서버 재검증 명령 — 실행 완료 (기존 worktree)
 
 ```bash
 cd ~/dqa && git fetch origin && \
