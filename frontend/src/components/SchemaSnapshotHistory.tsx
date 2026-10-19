@@ -101,24 +101,20 @@ export function SchemaSnapshotHistory() {
     }
   };
 
-  const openSnapshot = async (row: SnapshotSummary) => {
+  const openSnapshot = (row: SnapshotSummary) => {
     if (!source || !history.data || !history.data.some((item) => item.id === row.id)) return;
     const requestId = ++detailSeq.current;
     const expectedSource = source;
+    const isCurrent = () => requestId === detailSeq.current && sourceRef.current === expectedSource;
     setSelection(row);
     setDetail(loading());
     setPreview(loading());
     setReviews(loading());
 
-    // Three GET-only requests. Preview failure must not hide a readable Diff.
-    const [detailResult, previewResult, reviewsResult] = await Promise.allSettled([
-      getSnapshotHistoryDetail(expectedSource, row.id),
-      getSnapshotReviewPreview(expectedSource, row.id),
-      listSnapshotReviewEvents(expectedSource, row.id),
-    ] as const);
-    if (requestId !== detailSeq.current || sourceRef.current !== expectedSource) return;
-    if (detailResult.status === "fulfilled") {
-      const value = detailResult.value;
+    // Each GET settles its own panel. A slow/failed Preview or journal must
+    // not block a valid Diff (and vice versa). Never commit stale responses.
+    void getSnapshotHistoryDetail(expectedSource, row.id).then((value) => {
+      if (!isCurrent()) return;
       setDetail(
         isSafeSnapshotDiffDetail(value)
         && value.id === row.id
@@ -130,11 +126,12 @@ export function SchemaSnapshotHistory() {
           ? ready(value)
           : failed("Snapshot 상세 Diff의 Source/Revision 또는 변경 건수 정합성을 확인할 수 없습니다."),
       );
-    } else {
-      setDetail(failed(errorText(detailResult.reason)));
-    }
-    if (previewResult.status === "fulfilled") {
-      const value = previewResult.value;
+    }).catch((error: unknown) => {
+      if (isCurrent()) setDetail(failed(errorText(error)));
+    });
+
+    void getSnapshotReviewPreview(expectedSource, row.id).then((value) => {
+      if (!isCurrent()) return;
       setPreview(
         isSafeSnapshotReviewPreview(value)
         && value.revision_id === row.id
@@ -143,11 +140,12 @@ export function SchemaSnapshotHistory() {
           ? ready(value)
           : failed("검토 미리보기의 Revision/Source/Fingerprint 또는 Gate 안전 상태가 일치하지 않습니다."),
       );
-    } else {
-      setPreview(failed(errorText(previewResult.reason)));
-    }
-    if (reviewsResult.status === "fulfilled") {
-      const values = reviewsResult.value;
+    }).catch((error: unknown) => {
+      if (isCurrent()) setPreview(failed(errorText(error)));
+    });
+
+    void listSnapshotReviewEvents(expectedSource, row.id).then((values) => {
+      if (!isCurrent()) return;
       setReviews(
         isSafeSnapshotReviewEvents(values, {
           sourceName: expectedSource,
@@ -157,9 +155,9 @@ export function SchemaSnapshotHistory() {
           ? ready(values)
           : failed("변경 검토 이력의 Source/Revision 또는 이벤트 연결 관계를 확인할 수 없습니다."),
       );
-    } else {
-      setReviews(failed(errorText(reviewsResult.reason)));
-    }
+    }).catch((error: unknown) => {
+      if (isCurrent()) setReviews(failed(errorText(error)));
+    });
   };
 
   const status = <T,>(value: DataState<T>, label: string) => {
