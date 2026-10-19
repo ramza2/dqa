@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# S-06-B reusing S-06-A disposable, loopback-only PostgreSQL acceptance.
+# S-06-B plus S-06-F using S-06-A disposable loopback PostgreSQL acceptance.
 # NEVER use an existing DQA database. Own Compose project and tmpfs storage.
 set -euo pipefail
 
@@ -81,7 +81,8 @@ PY
 "${PYTHON}" -m alembic -c alembic.ini upgrade head
 "${PYTHON}" -m pytest -q -rs -s \
   tests/test_s06b_relation_gold.py \
-  tests/test_s06b_disposable_pg_gold_search.py
+  tests/test_s06b_disposable_pg_gold_search.py \
+  tests/test_s06f_disposable_warning_search_isolation.py
 
 # PASS only after this disposable Compose project is stopped/removed.
 cleanup
