@@ -70,6 +70,14 @@ describe("S-05-F read-only Snapshot review journal contract", () => {
     ] as const) {
       expect(isSafeSnapshotReviewEvents([{ ...first, [flag]: true }], scope)).toBe(false);
     }
+    // Runtime payloads are untrusted regardless of false-only TypeScript types.
+    for (const payload of [
+      { independent_preflight_verified: "true" },
+      { catalog_ready: 1 },
+      { catalog_activated: null },
+    ]) {
+      expect(isSafeSnapshotReviewEvents([{ ...first, ...payload }], scope)).toBe(false);
+    }
     expect(isSafeSnapshotReviewEvents([{
       ...first, independent_preflight_verified: false,
       catalog_ready: false, catalog_activated: false,
