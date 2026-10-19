@@ -27,10 +27,16 @@ DQA (single deployable platform)
   │    → Snapshot/review → WARNING candidate [code]
   │    → independent Preflight/READY → import/activate [future gated link]
   ├─ Catalog/Data Discovery / Query Template / MCP & REST
-  ├─ approved read-only DEMIS Adapter            [implemented]
-  └─ controlled clinical Insert Adapter           [planned; disabled]
-       ↓
-  DEMIS Oracle
+  ├─ read-only Adapter [Oracle code implemented; production source NOT approved]
+  └─ controlled clinical Insert [NOT implemented; default blocked]
+
+Read + metadata proposal (DEC-10/01: source, DBMS, account NOT confirmed):
+  DQA Inspector / Read Adapter --[only after explicit approval]--> 
+    replicated EMR read source (DBMS / route / schema scope PENDING)
+
+Separate record-storage proposal (DEC-09/G4: interface NOT confirmed):
+  approved future Write boundary --[only after distinct approval]--> 
+    official operational EMR save API / interface (PENDING)
 ```
 
 SNUH.AI may call an approved DQA MCP boundary directly when negotiated, but
@@ -40,6 +46,17 @@ The **single clinician approval/rejection UI and clinical approval source of
 truth** belong to SNUH.AI or a formally designated military approval system.
 DQA would only validate trusted approval evidence and write execution status,
 never prompt clinicians to re-approve within DQA.
+
+**2026-10-19 design checkpoint:** The original `DEMIS Oracle` direct read/write
+arrows were planning assumptions, **not an authorized deployed topology**.
+The military side has requested consideration of a *replicated EMR read source*,
+but its DBMS, replication service, allowed schema and whether direct DB access
+or an approved mediation API is available remain unresolved. DQA currently
+implements an Oracle read-only adapter and an Oracle metadata Inspector only;
+this does not establish compatibility with an unspecified replica. The
+operational EMR record-write interface is a **different** decision and remains
+blocked. See the [replicated EMR architecture questions](docs/u01-replicated-emr-db-architecture-review.md)
+and [G1 real-source acceptance prerequisites](docs/s06-g1-site-acceptance-handoff.md).
 
 Metadata collection does not itself authorize query execution: only an
 explicitly activated, validated **READY** Catalog revision is authoritative.
@@ -137,8 +154,10 @@ Start here:
 9. [Real DEMIS Onboarding & Acceptance Runbook](docs/real-demis-onboarding.md)
 10. [U-02 Development Verification & Cutover Handoff](docs/u02-integration-acceptance-handoff.md)
 11. [U-02 External Decision / Approval Register](docs/u02-external-decision-register.md)
-12. [Cursor Handoff Guide](docs/cursor-handoff.md)
-13. [Bootstrap Design Review](docs/design-review.md)
+12. [U-01 Replicated EMR Read-Source Architecture (proposal)](docs/u01-replicated-emr-db-architecture-review.md)
+13. [S-06 A–H Synthetic Evidence / G1 Site Acceptance (preparatory)](docs/s06-g1-site-acceptance-handoff.md)
+14. [Cursor Handoff Guide](docs/cursor-handoff.md)
+15. [Bootstrap Design Review](docs/design-review.md)
 
 ## On-prem deployment (foundation)
 
