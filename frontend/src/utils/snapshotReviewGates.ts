@@ -20,7 +20,9 @@ export const SNAPSHOT_REVIEW_GATE_LABELS: Record<(typeof SNAPSHOT_REVIEW_REQUIRE
 
 /** Treat even typed HTTP payloads as untrusted. Fail closed on unexpected gate
  * vocabulary, promoted approval flags, stale revision flags, or malformed lists. */
-export function isSafeSnapshotReviewPreview(preview: SnapshotReviewPreview): boolean {
+export function isSafeSnapshotReviewPreview(value: unknown): value is SnapshotReviewPreview {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const preview = value as Partial<SnapshotReviewPreview>;
   const gates: unknown = preview.required_gates;
   return preview.preflight_status === "NOT_VERIFIED"
     && preview.candidate_package_readiness === "WARNING"
