@@ -9,6 +9,7 @@ import { SnapshotReviewGates } from "./SnapshotReviewGates";
 import { isSafeSnapshotReviewPreview } from "../utils/snapshotReviewGates";
 import { isSafeSnapshotReviewEvents } from "../utils/snapshotReviewJournal";
 import { isSafeSnapshotDiffDetail, snapshotDiffCountRows } from "../utils/snapshotDiffOverview";
+import { isSafeSnapshotHistoryList } from "../utils/snapshotHistoryList";
 import type {
   SnapshotDetail, SnapshotReviewEvent, SnapshotReviewPreview, SnapshotSummary,
 } from "../types/schemaSnapshot";
@@ -88,8 +89,8 @@ export function SchemaSnapshotHistory() {
     try {
       const rows = await listSnapshotHistory(nextSource, nextOffset, PAGE_SIZE);
       if (requestId !== listSeq.current || sourceRef.current !== nextSource) return;
-      if (!rows.every((row) => row.source_name === nextSource)) {
-        setHistory(failed("Snapshot 응답의 Source가 요청과 일치하지 않습니다."));
+      if (!isSafeSnapshotHistoryList(rows, nextSource, PAGE_SIZE)) {
+        setHistory(failed("Snapshot 목록의 Source/Revision 또는 응답 정합성을 확인할 수 없습니다."));
         return;
       }
       setHistory(ready(rows));

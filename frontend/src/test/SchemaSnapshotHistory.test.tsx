@@ -313,9 +313,57 @@ describe("S-05-A Snapshot read-only UI", () => {
     }));
     render(<SchemaSnapshotHistory />);
     await enterSource(user);
-    expect(await screen.findByRole("alert")).toHaveTextContent("일치하지 않습니다");
+    expect(await screen.findByRole("alert")).toHaveTextContent("응답 정합성");
     expect(screen.queryByRole("button", { name: "Snapshot 10 상세 보기" })).not.toBeInTheDocument();
     restore();
+  });
+
+  it("rejects malformed list payloads without rendering Snapshot or Catalog content", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(responses({ onList: () => jsonResponse(null) }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent("응답 정합성");
+      expect(screen.queryByRole("button", { name: "Snapshot 10 상세 보기" })).not.toBeInTheDocument();
+      expect(screen.queryByTestId("snapshot-catalog-context")).not.toBeInTheDocument();
+    } finally { restore(); }
+  });
+
+  it("rejects a source-scoped page with broken predecessor linkage", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(responses({
+      items: [
+        { ...snapshot, id: 10, previous_revision_id: 8 },
+        { ...snapshot, id: 9, previous_revision_id: null,
+          diff_status: "NO_BASELINE", total_changes: null },
+      ],
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent("응답 정합성");
+      expect(screen.queryByRole("button", { name: "Snapshot 10 상세 보기" })).not.toBeInTheDocument();
+      expect(screen.queryByTestId("snapshot-catalog-context")).not.toBeInTheDocument();
+    } finally { restore(); }
+  });
+
+  it("recovers after a malformed list when the operator explicitly retries GET", async () => {
+    const user = userEvent.setup();
+    let requests = 0;
+    const restore = installFetchMock(responses({
+      onList: () => jsonResponse(++requests === 1 ? [null] : [snapshot]),
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent("응답 정합성");
+      await user.click(screen.getByRole("button", { name: "Snapshot 조회" }));
+      expect(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" })).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(await screen.findByTestId("snapshot-catalog-context")).toBeInTheDocument();
+      expect(requests).toBe(2);
+    } finally { restore(); }
   });
 
   it("shows a CATALOG_READ authorization error without Snapshot rows", async () => {
