@@ -81,13 +81,35 @@ Direct backend exposure is for development/integration testing only. The on-prem
 production topology exposes the frontend as the LAN entrypoint and keeps the
 backend and DQA PostgreSQL internal to Compose.
 
-## Tests
+## Tests — server DB safety
+
+**Do not run a bare `pytest` from `~/dqa` or point arbitrary test
+fixtures at an operating DQA database.** Some database fixtures
+(e.g. `db_session`/`db_client`) truncate DQA application tables.
+The regular production database and deployed Docker runtime are **not**
+a test target.
+
+For an **explicitly DB-free** regression, use a detached test worktree with
+its own Python venv; from that worktree's `backend/` directory:
 
 ```bash
-cd backend
-source .venv/bin/activate
-pytest
+.venv/bin/python -m pytest -q -rs \
+  tests/test_s06g_25table_oracle_gold.py \
+  tests/test_s06e_warning_candidate_discovery.py
 ```
+
+For a **PostgreSQL integration** regression, use only the dedicated
+`../scripts/dqa-s06b-disposable-gold-check.sh` runner, after reviewing its
+local Docker context, loopback bind, fixed temporary database/project names,
+fresh empty-DB assertion, opt-in Python environment, and cleanup guards.
+It creates/destroys **its own** disposable Postgres Compose project and never
+targets an existing DQA or DEMIS database. A passing synthetic suite is
+not real-DEMIS authorization or a release gate.
+
+Production read-only Oracle Adapter/Inspector access and the DBMS of the
+proposed replicated EMR source still require DEC-10/01 approval; see
+[Replicated EMR proposal](../docs/u01-replicated-emr-db-architecture-review.md)
+and [G1 prerequisites](../docs/s06-g1-site-acceptance-handoff.md).
 
 ## Health endpoints
 
