@@ -6,6 +6,7 @@ import { SchemaSnapshotHistory } from "../components/SchemaSnapshotHistory";
 import type {
   SnapshotDetail, SnapshotReviewEvent, SnapshotReviewPreview, SnapshotSummary,
 } from "../types/schemaSnapshot";
+import { SNAPSHOT_PANEL_DEADLINE_MS } from "../utils/snapshotPanelDeadline";
 import { defaultCatalogHandlers, installFetchMock, jsonResponse } from "./mocks";
 
 const SRC_A = "oracle_demis_mock";
@@ -47,6 +48,7 @@ const event: SnapshotReviewEvent = {
 type Handler = (url: URL, init?: RequestInit) => Response | null | Promise<Response | null>;
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -424,6 +426,70 @@ describe("S-05-A Snapshot read-only UI", () => {
       expect(screen.queryByTestId("snapshot-detail-panel")).not.toBeInTheDocument();
       expect(screen.queryByTestId("snapshot-diff")).not.toBeInTheDocument();
       expect(detailCalls).toBe(2);
+    } finally { restore(); }
+  });
+
+  it("times out only a hung Diff GET and allows retry without refreshing Preview or Journal", async () => {
+    const user = userEvent.setup();
+    let detailCalls = 0;
+    let previewCalls = 0;
+    let reviewCalls = 0;
+    const pending = new Promise<Response>(() => undefined);
+    const restore = installFetchMock(responses({
+      onDetail: () => ++detailCalls === 1 ? pending : jsonResponse(detail),
+      onPreview: () => { previewCalls += 1; return jsonResponse(preview); },
+      onReviews: () => { reviewCalls += 1; return jsonResponse([event]); },
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      const button = await screen.findByRole("button", { name: "Snapshot 10 상세 보기" });
+      vi.useFakeTimers();
+      fireEvent.click(button);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(SNAPSHOT_PANEL_DEADLINE_MS);
+      });
+      expect(screen.getByRole("alert")).toHaveTextContent("응답 시간이 초과");
+      expect(screen.getByTestId("snapshot-preview")).toHaveTextContent("NOT_VERIFIED");
+      expect(screen.getByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
+      expect(screen.queryByTestId("snapshot-diff")).not.toBeInTheDocument();
+      vi.useRealTimers();
+      await user.click(screen.getByRole("button", { name: "변경 Diff 다시 조회" }));
+      expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect([detailCalls, previewCalls, reviewCalls]).toEqual([2, 1, 1]);
+    } finally { restore(); }
+  });
+
+  it("ignores a late Preview after its deadline and keeps the safe retry result", async () => {
+    const user = userEvent.setup();
+    let releaseOld: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => { releaseOld = resolve; });
+    let previewCalls = 0;
+    const restore = installFetchMock(responses({
+      onPreview: () => ++previewCalls === 1 ? pending : jsonResponse(preview),
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      const button = await screen.findByRole("button", { name: "Snapshot 10 상세 보기" });
+      vi.useFakeTimers();
+      fireEvent.click(button);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(SNAPSHOT_PANEL_DEADLINE_MS);
+      });
+      expect(screen.getByRole("alert")).toHaveTextContent("응답 시간이 초과");
+      expect(screen.getByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect(screen.getByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
+      vi.useRealTimers();
+      await user.click(screen.getByRole("button", { name: "검토 미리보기 다시 조회" }));
+      expect(await screen.findByTestId("snapshot-preview")).toHaveTextContent("WARNING");
+      await act(async () => {
+        releaseOld?.(jsonResponse({ ...preview, activation_eligible: true }));
+      });
+      expect(screen.getByTestId("snapshot-preview")).toHaveTextContent("NOT_VERIFIED");
+      expect(screen.getByTestId("snapshot-review-gates")).toHaveTextContent("INDEPENDENT_PREFLIGHT");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(previewCalls).toBe(2);
     } finally { restore(); }
   });
 
