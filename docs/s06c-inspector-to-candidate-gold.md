@@ -44,7 +44,25 @@
 - Legacy vs DQA 실제 인덱스/문서 검색 동등성이나 실 Oracle permission
   coverage/누락 객체 검사는 여전히 외부 G0/G1 수용 대상이다.
 
-## 서버 Acceptance — 미실행
+## 서버 Acceptance — 최종 PASS (2026-10-19)
+
+- 서버 실제 검증 코드 HEAD **`9847710`**, 별도 detached Worktree `/tmp/dqa-s06c-review`,
+  기준 `main@6ae26e8`.
+- `python3 -m venv .venv` 및 `pip install -e '.[dev]'`: **PASS**.
+- `python -m pytest -q`: **31 passed / 5 skipped / 0 failed**.
+  S-06-C 신규 4건 포함. 5 SKIP은 Legacy 경로 `DQA_U02_LEGACY_ROOT`
+  미제공 시 건너뛰도록 설계된 U-02-A 비교 테스트와 일치하지만,
+  이번 로그는 `-rs` 출력이 없어 개별 SKIP 이유는 별도 확인하지 않았다.
+- `git diff --check 6ae26e8 HEAD`: **PASS**.
+  최종 마커 **`DQA_S06C_REVIEW_PASS`** 확인.
+- 테스트 과정의 `StarletteDeprecationWarning` 1건은 비차단.
+- 수용 기록은 이 **문서만 수정하는 후속 커밋**이다.
+  서버 검증된 합성 Test 코드와 의존성은 변경하지 않는다.
+- **실 Legacy parity 5건의 PASS 및 실 Oracle/DEMIS/G1/DBA Preflight/
+  READY/Activation/운영 전환 승인으로 해석하지 않는다.**
+  GitHub Actions CI 및 Docker 운영 배포도 이번 서버 수용에 포함되지 않는다.
+
+## 서버 Acceptance — 실행 완료한 격리 Worktree 명령
 
 기존 DQA `~/dqa`·Docker·DB·실 DEMIS를 건드리지 않는 detached Worktree의
 **DB 미사용 Pytest**만 실행한다. DB-backed `db_session`/`db_client` fixtures는
@@ -74,5 +92,5 @@ echo DQA_S06C_REVIEW_PASS
 `tests/test_schema_catalog_candidate.py` 및
 `tests/test_schema_snapshot_diff.py`는 순수 오프라인 회귀이다.
 
-테스트 PASS/실패 결과를 받기 전에는 수용 완료로 기록하지 않는다.
+서버 테스트 실행 로그와 최종 PASS 마커를 확인했으며 SKIP 5건은 PASS에 포함하지 않는다.
 사용자 별도 명시 승인 전 Draft→Ready 여부와 관계없이 `main` Merge/운영 배포 금지.
