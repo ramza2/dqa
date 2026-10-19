@@ -260,6 +260,68 @@ describe("S-05-A Snapshot read-only UI", () => {
     restore();
   });
 
+  it("renders a valid Diff and journal without waiting for a slow Review Preview", async () => {
+    const user = userEvent.setup();
+    let releasePreview: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => { releasePreview = resolve; });
+    const restore = installFetchMock(responses({ onPreview: () => pending }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
+      expect(await screen.findByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
+      expect(screen.queryByTestId("snapshot-preview")).not.toBeInTheDocument();
+      expect(screen.getByText("검토 미리보기 조회 중…")).toBeInTheDocument();
+      releasePreview?.(jsonResponse(preview));
+      expect(await screen.findByTestId("snapshot-preview")).toHaveTextContent("WARNING");
+    } finally { restore(); }
+  });
+
+  it("renders Preview and journal while Diff is slow, and isolates a later Diff failure", async () => {
+    const user = userEvent.setup();
+    let releaseDetail: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => { releaseDetail = resolve; });
+    const restore = installFetchMock(responses({ onDetail: () => pending }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      await user.click(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" }));
+      expect(await screen.findByTestId("snapshot-preview")).toHaveTextContent("WARNING");
+      expect(await screen.findByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
+      expect(screen.getByText("변경 Diff 조회 중…")).toBeInTheDocument();
+      expect(screen.queryByTestId("snapshot-diff")).not.toBeInTheDocument();
+      releaseDetail?.(jsonResponse({ detail: { code: "SNAPSHOT_DETAIL_FAILED", message: "synthetic error" } }, 503));
+      expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 503");
+      expect(screen.getByTestId("snapshot-preview")).toHaveTextContent("WARNING");
+      expect(screen.getByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
+    } finally { restore(); }
+  });
+
+  it("ignores late responses from an earlier click on the same Source and Snapshot", async () => {
+    const user = userEvent.setup();
+    let releaseFirst: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => { releaseFirst = resolve; });
+    let previewCalls = 0;
+    const restore = installFetchMock(responses({
+      onPreview: () => (++previewCalls === 1 ? pending : jsonResponse(preview)),
+    }));
+    try {
+      render(<SchemaSnapshotHistory />);
+      await enterSource(user);
+      const button = await screen.findByRole("button", { name: "Snapshot 10 상세 보기" });
+      await user.click(button);
+      await user.click(button);
+      expect(await screen.findByTestId("snapshot-preview")).toHaveTextContent("WARNING");
+      expect(previewCalls).toBe(2);
+      releaseFirst?.(jsonResponse({ ...preview, activation_eligible: true }));
+      await waitFor(() => {
+        expect(screen.getByTestId("snapshot-preview")).toHaveTextContent("NOT_VERIFIED");
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      });
+    } finally { restore(); }
+  });
+
   it("keeps Diff visible if independent review preview returns 409, and shows HTTP errors", async () => {
     const user = userEvent.setup();
     const restore = installFetchMock(responses({ previewStatus: 409 }));
