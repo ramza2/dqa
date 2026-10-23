@@ -4,12 +4,10 @@ Do NOT import/use root db_session or db_client fixtures: they truncate DB tables
 """
 from __future__ import annotations
 
-from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
 
-from app.adapters.demis.errors import DemisAdapterError, DemisAdapterErrorCode, DemisProbeState
 from app.adapters.demis.types import DemisAdapterDiagnostics
 from app.core.config import Settings
 from app.services import oracle_mock_actions as m
@@ -166,3 +164,88 @@ def test_mock_existing_profile_identity_checked_before_return(monkeypatch):
                         pytest.fail("existing profile cannot be overwritten"))
     with pytest.raises(m.OracleMockActionError, match="ORACLE_MOCK_TARGET_MISMATCH"):
         m.create_or_get_oracle_mock_profile(object(), settings(), actor="admin")
+
+def test_http_capability_and_restricted_routes_never_touch_oracle(client, monkeypatch):
+    """Use TestClient with a fake DB dependency, never db_session / migrate."""
+    from app.adapters.db.deps import get_db_session
+    from app.core.config import get_settings
+    from app.api.routes import connection_profiles as routes
+
+    def no_db():
+        yield object()
+
+    client.app.dependency_overrides[get_db_session] = no_db
+    client.app.dependency_overrides[get_settings] = lambda: settings()
+    calls = []
+    def register(_session, _settings, *, actor):
+        calls.append(("register", actor))
+        return profile(id=17)
+    def probe(_session, ident, _settings):
+        calls.append(("probe", ident))
+        return SimpleNamespace(
+            profile_id=ident, source_name=m.MOCK_SOURCE, environment=m.MOCK_ENVIRONMENT,
+            status="SUCCEEDED", live_connection_tested=True,
+            reachable=True, read_only=True, failure_category=None,
+        )
+    def enabled(_session, ident, _settings, *, actor):
+        calls.append(("enable", ident))
+        return profile(id=ident, enabled=True)
+    monkeypatch.setattr(routes, "create_or_get_oracle_mock_profile", register)
+    monkeypatch.setattr(routes, "test_oracle_mock_profile", probe)
+    monkeypatch.setattr(routes, "enable_oracle_mock_profile", enabled)
+    try:
+        capability = client.get("/api/v1/connection-profiles/oracle-mock-capability")
+        assert capability.status_code == 200
+        assert capability.json() == {"enabled": True}
+
+        denied = client.post(
+            "/api/v1/connection-profiles/17/oracle-mock-test",
+            headers={
+                "X-DQA-Dev-Actor": "not-admin",
+                "X-DQA-Dev-Roles": "viewer",
+            },
+        )
+        assert denied.status_code == 403
+        assert calls == []
+
+        registered = client.post("/api/v1/connection-profiles/oracle-mock-profile")
+        assert registered.status_code == 200
+        assert registered.json()["source_name"] == m.MOCK_SOURCE
+        tested = client.post("/api/v1/connection-profiles/17/oracle-mock-test")
+        assert tested.status_code == 200
+        assert tested.json()["read_only"] is True
+        activated = client.post("/api/v1/connection-profiles/17/oracle-mock-enable")
+        assert activated.status_code == 200
+        assert activated.json()["enabled"] is True
+        assert calls == [("register", "test-admin"), ("probe", 17), ("enable", 17)]
+    finally:
+        client.app.dependency_overrides.clear()
+
+
+def test_http_mock_actions_default_off(client, monkeypatch):
+    from app.adapters.db.deps import get_db_session
+    from app.core.config import get_settings
+    from app.api.routes import connection_profiles as routes
+
+    def no_db():
+        yield object()
+
+    client.app.dependency_overrides[get_db_session] = no_db
+    client.app.dependency_overrides[get_settings] = lambda: settings(
+        DQA_DEV_ORACLE_MOCK_ACTIONS_ENABLED=False
+    )
+    monkeypatch.setattr(routes, "create_or_get_oracle_mock_profile", lambda *_a, **_kw:
+                        pytest.fail("service must not be called after gate"))
+    # Route gate is service-level; do not try to infer protection from UI.
+    # In this test use actual service implementation and a repo fail trap.
+    monkeypatch.setattr(routes, "create_or_get_oracle_mock_profile", m.create_or_get_oracle_mock_profile)
+    monkeypatch.setattr(m, "ConnectionProfileRepository", lambda *_a:
+                        pytest.fail("no DB on disabled action"))
+    try:
+        capability = client.get("/api/v1/connection-profiles/oracle-mock-capability")
+        assert capability.json() == {"enabled": False}
+        registered = client.post("/api/v1/connection-profiles/oracle-mock-profile")
+        assert registered.status_code == 403
+        assert registered.json()["detail"]["code"] == "ORACLE_MOCK_ACTIONS_DISABLED"
+    finally:
+        client.app.dependency_overrides.clear()
