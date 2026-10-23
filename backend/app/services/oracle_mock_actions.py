@@ -7,8 +7,6 @@ persistent enabled flag, even when the configured profile is disabled.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from sqlalchemy.orm import Session
 
 from app.adapters.connection_profile.errors import ConnectionProfileError, ConnectionProfileErrorCode
@@ -38,9 +36,10 @@ MOCK_USERNAME = "DEMIS_RO"
 MOCK_CREDENTIAL_REF = "env:DEMIS_SECRET_ORACLE_PASSWORD"
 
 
-@dataclass(frozen=True)
 class OracleMockActionError(Exception):
-    code: str
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
 
 
 def oracle_mock_actions_available(settings: Settings) -> bool:
