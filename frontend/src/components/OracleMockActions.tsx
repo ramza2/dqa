@@ -25,6 +25,7 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const actionSeq = useRef(0);
+  const busyRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -48,7 +49,8 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
   ]);
 
   async function prepare(): Promise<void> {
-    if (busy || !available) return;
+    if (busyRef.current || !available) return;
+    busyRef.current = true;
     const seq = ++actionSeq.current;
     setBusy(true);
     setFeedback(null);
@@ -62,12 +64,14 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
     } catch {
       if (seq === actionSeq.current) setError("Oracle Mock 프로필을 준비할 수 없습니다. 기존 설정과 개발용 기능 허용 상태를 확인하세요.");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
   async function test(): Promise<void> {
-    if (busy || !available || !profile || !isMockCandidate(profile)) return;
+    if (busyRef.current || !available || !profile || !isMockCandidate(profile)) return;
+    busyRef.current = true;
     const seq = ++actionSeq.current;
     const profileId = profile.id;
     setBusy(true);
@@ -96,16 +100,18 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
     } catch {
       if (seq === actionSeq.current) setError("연결 검사 요청에 실패했습니다. 대상 설정 및 개발환경 허용 여부를 확인하세요.");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
   async function enable(): Promise<void> {
-    if (busy || !available || !profile || !isMockCandidate(profile) ||
+    if (busyRef.current || !available || !profile || !isMockCandidate(profile) ||
         profile.enabled || result?.profile_id !== profile.id ||
         result.status !== "SUCCEEDED" || result.live_connection_tested !== true ||
         result.reachable !== true || result.read_only !== true) return;
     if (!window.confirm("Oracle Mock 개발용 프로필을 활성화할까요? 서버에서 읽기 전용 연결을 다시 확인합니다.")) return;
+    busyRef.current = true;
     const seq = ++actionSeq.current;
     setBusy(true);
     setFeedback(null);
@@ -124,6 +130,7 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
     } catch {
       if (seq === actionSeq.current) setError("활성화에 실패했습니다. 서버에서 읽기 전용 연결이 다시 확인되지 않았을 수 있습니다.");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
