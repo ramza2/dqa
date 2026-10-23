@@ -182,7 +182,7 @@ def test_http_capability_and_restricted_routes_never_touch_oracle(client, monkey
     calls = []
     def register(_session, _settings, *, actor):
         calls.append(("register", actor))
-        return profile(id=17)
+        return vars(profile(id=17))
     def probe(_session, ident, _settings):
         calls.append(("probe", ident))
         return SimpleNamespace(
@@ -192,7 +192,7 @@ def test_http_capability_and_restricted_routes_never_touch_oracle(client, monkey
         )
     def enabled(_session, ident, _settings, *, actor):
         calls.append(("enable", ident))
-        return profile(id=ident, enabled=True)
+        return vars(profile(id=ident, enabled=True))
     monkeypatch.setattr(routes, "create_or_get_oracle_mock_profile", register)
     monkeypatch.setattr(routes, "test_oracle_mock_profile", probe)
     monkeypatch.setattr(routes, "enable_oracle_mock_profile", enabled)
