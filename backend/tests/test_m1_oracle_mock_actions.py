@@ -4,6 +4,7 @@ Do NOT import/use root db_session or db_client fixtures: they truncate DB tables
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -36,6 +37,8 @@ def profile(**override):
         username=m.MOCK_USERNAME,
         credential_secret_ref=m.MOCK_CREDENTIAL_REF,
         enabled=False,
+        created_at=datetime(2026, 10, 23, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 10, 23, tzinfo=timezone.utc),
     )
     data.update(override)
     return SimpleNamespace(**data)
