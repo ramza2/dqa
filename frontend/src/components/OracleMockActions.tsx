@@ -62,7 +62,7 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
     } catch {
       if (seq === actionSeq.current) setError("Oracle Mock 프로필을 준비할 수 없습니다. 기존 설정과 개발용 기능 허용 상태를 확인하세요.");
     } finally {
-      if (seq === actionSeq.current) setBusy(false);
+      setBusy(false);
     }
   }
 
@@ -94,7 +94,7 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
     } catch {
       if (seq === actionSeq.current) setError("연결 검사 요청에 실패했습니다. 대상 설정 및 개발환경 허용 여부를 확인하세요.");
     } finally {
-      if (seq === actionSeq.current) setBusy(false);
+      setBusy(false);
     }
   }
 
@@ -122,7 +122,7 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
     } catch {
       if (seq === actionSeq.current) setError("활성화에 실패했습니다. 서버에서 읽기 전용 연결이 다시 확인되지 않았을 수 있습니다.");
     } finally {
-      if (seq === actionSeq.current) setBusy(false);
+      setBusy(false);
     }
   }
 
