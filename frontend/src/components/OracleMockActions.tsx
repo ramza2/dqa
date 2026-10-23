@@ -88,7 +88,9 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
         tested.status === "SUCCEEDED" &&
         tested.live_connection_tested === true &&
         tested.reachable === true && tested.read_only === true
-          ? "Oracle Mock 읽기 전용 연결 검사 성공 · 아직 프로필 활성화 전입니다."
+          ? (profile.enabled
+              ? "Oracle Mock 읽기 전용 연결 검사 성공 · 프로필 활성 상태입니다."
+              : "Oracle Mock 읽기 전용 연결 검사 성공 · 아직 프로필 활성화 전입니다.")
           : "Oracle Mock 연결 검사 실패. 관리자에게 DB/네트워크/계정 설정 확인을 요청하세요.",
       );
     } catch {
