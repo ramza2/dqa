@@ -52,3 +52,19 @@ export interface ConnectionProfileCreate {
 export type ConnectionProfileUpdate = Partial<
   Omit<ConnectionProfileCreate, "source_name" | "environment">
 >;
+
+/** Returned only by development-only Oracle Mock capability endpoint. */
+export interface OracleMockCapability {
+  enabled: boolean;
+}
+
+export interface OracleMockConnectionTest {
+  profile_id: number;
+  source_name: string;
+  environment: string;
+  status: "SUCCEEDED" | "FAILED";
+  live_connection_tested: boolean;
+  reachable: boolean | null;
+  read_only: boolean | null;
+  failure_category: string | null;
+}

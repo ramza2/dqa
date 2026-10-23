@@ -4,7 +4,7 @@ import type {
   ConnectionProfileCreate,
   ConnectionProfileDiagnostics,
   ConnectionProfileList,
-  ConnectionProfileUpdate,
+  ConnectionProfileUpdate, OracleMockCapability, OracleMockConnectionTest,
 } from "../types/connectionProfile";
 
 const ROOT = "/connection-profiles";
@@ -41,4 +41,20 @@ export function disableConnectionProfile(id: number): Promise<ConnectionProfile>
   return apiPost<null, ConnectionProfile>(`${ROOT}/${id}/disable`, null);
 }
 
-// Deliberately no /enable and no /test-connection callers in S-05-C1.
+// M1: Only the backend-pinned synthetic Mock endpoints are exposed by the UI.
+// The unrestricted /enable and /test-connection routes remain uncalled.
+export function getOracleMockCapability(): Promise<OracleMockCapability> {
+  return apiGet<OracleMockCapability>(`${ROOT}/oracle-mock-capability`);
+}
+
+export function ensureOracleMockProfile(): Promise<ConnectionProfile> {
+  return apiPost<null, ConnectionProfile>(`${ROOT}/oracle-mock-profile`, null);
+}
+
+export function testOracleMockProfile(id: number): Promise<OracleMockConnectionTest> {
+  return apiPost<null, OracleMockConnectionTest>(`${ROOT}/${id}/oracle-mock-test`, null);
+}
+
+export function enableOracleMockProfile(id: number): Promise<ConnectionProfile> {
+  return apiPost<null, ConnectionProfile>(`${ROOT}/${id}/oracle-mock-enable`, null);
+}

@@ -32,6 +32,8 @@ services:
     environment:
       APP_ENV: development
       DQA_AUTH_PROVIDER: dev_headers
+      # Opt-in only on an isolated Oracle Mock development stack.
+      DQA_DEV_ORACLE_MOCK_ACTIONS_ENABLED: ${DQA_DEV_ORACLE_MOCK_ACTIONS_ENABLED:-false}
       LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST: ${LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST:-false}
       LLM_PARAMETER_EXTRACTION_RAW_REQUEST_EGRESS_APPROVED: ${LLM_PARAMETER_EXTRACTION_RAW_REQUEST_EGRESS_APPROVED:-false}
 
@@ -42,7 +44,8 @@ services:
     environment:
       VITE_DEV_PROXY_TARGET: http://backend:8000
       VITE_DQA_DEV_ACTOR: dqa-dev-operator
-      VITE_DQA_DEV_ROLES: query_operator
+      # Default stays query_operator. Set administrator only in isolated M1 dev stack.
+      VITE_DQA_DEV_ROLES: ${DQA_DEV_FRONTEND_ROLES:-query_operator}
     # Vite DEV healthcheck (node:22-alpine has no wget; use built-in fetch).
     healthcheck:
       test:

@@ -69,6 +69,12 @@ class Settings(BaseSettings):
         alias="DQA_DEMIS_CREDENTIAL_ENV_PREFIX",
     )
 
+    # Explicit opt-in for a single pinned synthetic Oracle Mock profile only.
+    # Never permits production DEMIS / replica connection actions.
+    dqa_dev_oracle_mock_actions_enabled: bool = Field(
+        default=False, alias="DQA_DEV_ORACLE_MOCK_ACTIONS_ENABLED"
+    )
+
     # S-01/S-02 metadata-only Inspector. Off by default; development/test only
     # until site-approved production inspection credentials + IdP are available.
     # Never reuse DQA's read-query Connection Profile or DEMIS_SECRET_ prefix.

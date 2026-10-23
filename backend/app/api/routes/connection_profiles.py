@@ -39,6 +39,14 @@ from app.services.connection_profile import (
     update_connection_profile,
 )
 
+from app.services.oracle_mock_actions import (
+    OracleMockActionError,
+    create_or_get_oracle_mock_profile,
+    enable_oracle_mock_profile,
+    oracle_mock_actions_available,
+    test_oracle_mock_profile,
+)
+
 router = APIRouter(prefix="/api/v1/connection-profiles", tags=["connection-profiles"])
 
 _PROFILE_PUBLIC_ERRORS = {
@@ -88,6 +96,88 @@ def list_profiles(
         environment=environment,
         limit=limit,
         offset=offset,
+    )
+
+
+# Static routes MUST precede /{profile_id}. These endpoints do not expose
+# general-purpose connection testing: the server validates the pinned mock
+# identity and explicit development-only gate before credential resolution.
+@router.get("/oracle-mock-capability")
+def oracle_mock_capability(
+    settings: Settings = Depends(get_settings),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+) -> dict[str, bool]:
+    return {"enabled": oracle_mock_actions_available(settings)}
+
+
+@router.post("/oracle-mock-profile", response_model=ConnectionProfileView)
+def bootstrap_oracle_mock_profile(
+    session: Session = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+) -> ConnectionProfileView:
+    try:
+        return create_or_get_oracle_mock_profile(
+            session, settings, actor=actor.actor_id
+        )
+    except OracleMockActionError as exc:
+        raise _oracle_mock_http_error(exc) from None
+    except ConnectionProfileError as exc:
+        raise _profile_http_error(exc) from None
+
+
+@router.post(
+    "/{profile_id}/oracle-mock-test",
+    response_model=ConnectionProfileTestConnectionResponse,
+)
+def oracle_mock_test(
+    profile_id: int,
+    session: Session = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+) -> ConnectionProfileTestConnectionResponse:
+    try:
+        return test_oracle_mock_profile(session, profile_id, settings)
+    except OracleMockActionError as exc:
+        raise _oracle_mock_http_error(exc) from None
+    except ConnectionProfileError as exc:
+        raise _profile_http_error(exc) from None
+
+
+@router.post("/{profile_id}/oracle-mock-enable", response_model=ConnectionProfileView)
+def oracle_mock_enable(
+    profile_id: int,
+    session: Session = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+) -> ConnectionProfileView:
+    try:
+        return enable_oracle_mock_profile(
+            session, profile_id, settings, actor=actor.actor_id
+        )
+    except OracleMockActionError as exc:
+        raise _oracle_mock_http_error(exc) from None
+    except ConnectionProfileError as exc:
+        raise _profile_http_error(exc) from None
+
+
+def _oracle_mock_http_error(exc: OracleMockActionError) -> HTTPException:
+    status_code = (
+        status.HTTP_403_FORBIDDEN
+        if exc.code == "ORACLE_MOCK_ACTIONS_DISABLED"
+        else status.HTTP_409_CONFLICT
+    )
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": exc.code, "message": "Oracle mock action is not allowed"},
     )
 
 

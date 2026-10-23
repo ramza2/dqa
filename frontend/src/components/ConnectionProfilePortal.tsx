@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CatalogApiError } from "../types/catalog";
 import { InspectorTargetReviewPanel } from "./InspectorTargetReviewPanel";
+import { OracleMockActions } from "./OracleMockActions";
 import type {
   ConnectionProfile, ConnectionProfileCreate, ConnectionProfileDiagnostics,
   ConnectionProfileList, ConnectionProfileUpdate,
@@ -269,8 +270,15 @@ export function ConnectionProfilePortal() {
       <p className="banner banner-warn">
         설정 진단은 연결·승인 상태를 증명하지 않습니다. 운영 EMR 직접 접속은 허용되지 않으며,
         군·DBA 승인 전 실제 복제 DB 연결·활성화를 진행하지 마세요.
-        이 화면은 연결 테스트, 활성화, 자격증명 입력을 제공하지 않습니다.
+        일반 프로필은 연결 테스트·활성화·자격증명 입력을 제공하지 않습니다.
+        Oracle Mock 전용 작업은 격리 개발환경에서 별도 허용된 경우에만 표시됩니다.
       </p>
+
+      <OracleMockActions
+        profile={detail && detail.id === selectedId ? detail : null}
+        onSelectProfile={selectProfile}
+        onRefresh={() => setRefresh((value) => value + 1)}
+      />
 
       <form className="cp-filters dd-form-row" onSubmit={applyFilters}>
         <label className="dd-field">
