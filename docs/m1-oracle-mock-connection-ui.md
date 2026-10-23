@@ -1,6 +1,6 @@
 # M1 — Oracle Mock DB Target 등록·읽기 전용 연결 검사·활성화 UI
 
-> Status: Draft PR / code and offline tests **not yet executed on user's server**.  
+> Status: Draft PR / **isolated code tests PASS**, live Oracle Mock UI acceptance **not executed**.  
 > Baseline: `main@6e3f135`. **Synthetic Oracle Mock only**, not DEMIS Oracle 19c acceptance.
 
 ## Goal
@@ -24,6 +24,23 @@ DQA Connection Profiles portal에서 개발용 `demis-oracle-test:1521/FREEPDB1`
 - No credential/password displayed in UI or written to source code; host/username are existing non-secret metadata. Frontend masks the reference already returned in existing profile API.
 - Probe/read-only success is **not** clinical data access authorization, DBA security confirmation, official replica-source acceptance, or Oracle 19c parity. No schema analysis, clinical Insert, migration, production deployment in this step.
 - Current Oracle Mock image `container-registry.oracle.com/database/free:latest-lite` is not evidence of Oracle 19c. DEMIS core DB 19c is a separate externally reported fact.
+
+## 2026-10-23 executed code checks (user terminal evidence)
+
+`/tmp/dqa-m1-134-review` was created as a detached worktree at `9e157b0`. User reported:
+
+| Command / evidence | Result |
+| --- | --- |
+| `~/dqa/.venv/bin/python -m pytest -q tests/test_m1_oracle_mock_actions.py` | **18 passed** (Starlette/TestClient deprecation warning, not failure) |
+| `npm ci` | Dependencies installed; audit **1 high-severity vulnerability** (needs `npm audit` dependency identification prior to deployment) |
+| `npm run build` | **PASS** (TypeScript `tsc -b` + Vite) |
+| `npm run lint` | **PASS** |
+| `npm test -- --run src/test/OracleMockActions.test.tsx src/test/ConnectionProfiles.test.tsx` | **12 passed** (6 + 6) |
+| Final marker | `M1_CODE_REVIEW_PASS` |
+
+These results establish only targeted application code checks, not current running Docker revision, actual Oracle Mock connectivity, profile persistence, or acceptance of future Oracle 19c. No CI run status should be inferred.
+
+**Model-optional direction:** This M1 code does **not** need LLM/Embedding. For M2–M6, see [CPU-first / no-LLM architecture decision](https://github.com/ramza2/dqa/blob/docs/u01r2-oracle-mock-e2e-plan/docs/dqa-cpu-first-model-optional-architecture.md): keyword/manual baseline, approved CPU embeddings optional, generative SQL creation deferred. This does not change M1 PR scope.
 
 ## Existing service reuse
 
