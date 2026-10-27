@@ -24,6 +24,22 @@ Oracle `ALL_*` dictionary visibility as DEMIS_INSPECT_RO; proves business
 row SELECT denied using `WHERE 1=0` (no rows fetched). It performs no SQL
 CREATE, GRANT, REVOKE, Catalog import/activation or Snapshot capture.
 
+## First actual server result and fail-closed correction
+
+On 2026-10-27, user ran the first version at HEAD `ea78a8e`:
+- isolated Bash syntax PASS; offline tests **4/4 PASS**;
+- Oracle Mock connected, Inspector dictionary visibility **0 tables / 0 columns / 0 FKs / 0 indexes**;
+- `M2_1C_BUSINESS_ROW_SELECT_DENIED` observed;
+- **`M2_1C_DBA_BASELINE_PASS` missing**, despite the first `docker exec`
+  reporting exit 0. This is **not accepted** as a verified DBA preflight.
+
+The subsequent branch revision enables SQL*Plus `SERVEROUTPUT` **after**
+switching to FREEPDB1 and explicitly requires a separate DBA marker plus
+row-denial and metadata result markers. A missing marker causes
+`M2_1C_BLOCKED`, even if SQL*Plus returns 0. A new **fake-Docker offline
+regression** covers silent success and a missing row-denial proof. These
+corrections require server retest; do not claim new PASS before evidence.
+
 With CREATE SESSION only, `M2_1C_METADATA_INCOMPLETE` is expected.
 `M2_1C_READ_ONLY_DIAGNOSTIC_COMPLETED` means diagnostics completed,
 **not** that the Inspector is authorized or metadata is complete.
