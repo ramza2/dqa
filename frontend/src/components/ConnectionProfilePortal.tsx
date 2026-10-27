@@ -439,8 +439,8 @@ export function ConnectionProfilePortal() {
               </p>
               <OracleMockActions profile={detail}
                 onRefresh={() => setRefresh((value) => value + 1)} />
-              <MockInspectorPanel key={detail.id} profile={detail} />
-              <InspectorTargetReviewPanel key={detail.id} profileId={detail.id} />
+              <MockInspectorPanel key={`mock-inspector-${detail.id}`} profile={detail} />
+              <InspectorTargetReviewPanel key={`inspector-review-${detail.id}`} profileId={detail.id} />
               <div className="dd-action-row">
                 <button type="button" className="dd-secondary-btn"
                   disabled={saving || detail.enabled} onClick={openEdit}>
