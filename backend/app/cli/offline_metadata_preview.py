@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import stat
 import sys
@@ -36,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--input", required=True, help="locally supplied metadata JSON path")
     parser.add_argument("--claim", help="optional untrusted provenance sidecar JSON")
     parser.add_argument("--review-draft", help="optional untrusted manual-review draft; requires --claim")
+    parser.add_argument("--summary-json", action="store_true", help="emit local metadata-only status JSON")
     args = parser.parse_args(argv)
     claim = None
     draft = None
@@ -64,6 +66,25 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, TypeError):
         print("M2_1D_BLOCKED=UNREADABLE_OR_INVALID_INPUT", file=sys.stderr)
         return 1
+
+    if args.summary_json:
+        print(json.dumps({
+            "format": "dqa-offline-metadata-summary-v1",
+            "source_name": result.source_name,
+            "schema_fingerprint": result.fingerprint,
+            "table_count": len(result.snapshot.tables),
+            "column_count": len(result.snapshot.columns),
+            "claim_binding": claim.claim_binding if claim is not None else "ABSENT",
+            "review_draft_status": draft.draft_status if draft is not None else "ABSENT",
+            "issuer_authenticated": False,
+            "review_actor_authenticated": False,
+            "independent_preflight_verified": False,
+            "site_approval_verified": False,
+            "catalog_package_readiness": "WARNING",
+            "catalog_ready": False,
+            "activation_eligible": False,
+        }, sort_keys=True, ensure_ascii=False, separators=(",", ":")))
+        return 0
 
     print("M2_1D_OFFLINE_SHAPE_PASS")
     print("SOURCE=oracle_demis_mock")

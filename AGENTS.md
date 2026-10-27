@@ -455,3 +455,13 @@ from equal hashes, self-asserted issuers, or a review draft. Return only
 sanitized summary and require a fresh separate gate for future operations.
 No new endpoints, migrations or writes. See
 \`docs/m2-1g-offline-snapshot-link-preview.md\`.
+
+## 23. M2-1H local-only offline summary UI (NOT authoritative)
+
+The M2-1D/E/F CLI can emit a fixed, sanitized 2KB JSON status report
+using --summary-json. Snapshot History may locally paste and compare its
+UNTRUSTED claimed fingerprint/count to an already authorized GET snapshot
+preview. No raw metadata upload or new API endpoints. Local UI comparison
+cannot invoke M2-1G server-side DB structure verification or confer signed
+provenance, independent preflight, DBA/site approval, Catalog READY or
+activation. Keep synthetic Mock scope. See docs/m2-1h-local-summary-ui.md.
