@@ -408,3 +408,12 @@ new guarded endpoints. Re-evaluate gates server-side on every POST. Production,
 real DEMIS, generic profiles, arbitrary SQL and automatic Catalog activation
 remain blocked. No real-Oracle grants are presumed from names; see
 `docs/m2-1b-mock-inspector-flow.md`.
+
+## 18. M2-1C Oracle Mock Inspector privilege diagnostic
+
+Use `bash scripts/dqa-m2-1c-inspector-privilege-check.sh` only as a
+separate process for pinned development Oracle Free Mock. Diagnostic has
+no schema/user/privilege writes and does not fetch business rows.
+`M2_1C_METADATA_INCOMPLETE` is expected with CREATE SESSION only.
+Never treat REFERENCES/SELECT ANY DICTIONARY as automatic safe rights;
+see `docs/m2-1c-inspector-privilege-probe.md`.
