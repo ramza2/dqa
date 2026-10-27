@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { CatalogApiError } from "../types/catalog";
 import { InspectorTargetReviewPanel } from "./InspectorTargetReviewPanel";
 import { OracleMockActions } from "./OracleMockActions";
+import { MockInspectorPanel } from "./MockInspectorPanel";
 import type {
   ConnectionProfile, ConnectionProfileCreate, ConnectionProfileDiagnostics,
   ConnectionProfileList, ConnectionProfileUpdate,
@@ -438,6 +439,7 @@ export function ConnectionProfilePortal() {
               </p>
               <OracleMockActions profile={detail}
                 onRefresh={() => setRefresh((value) => value + 1)} />
+              <MockInspectorPanel key={detail.id} profile={detail} />
               <InspectorTargetReviewPanel key={detail.id} profileId={detail.id} />
               <div className="dd-action-row">
                 <button type="button" className="dd-secondary-btn"

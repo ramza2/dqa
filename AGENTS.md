@@ -398,3 +398,13 @@ selects the development-only pinned fixture, reviews all fields and saves.
 Backend verifies every field and injects a secret reference server-side only;
 no generic target validation is relaxed. Keep Inspector credentials and
 Profile read-query credentials independent. See docs/m2-1a-explicit-target.md.
+
+## 17. M2-1B selected Mock Inspector guard
+
+Mock Profile selection never supplies Oracle target, SQL, schema or credentials.
+Only a pinned active synthetic Mock with a separately configured Inspector
+identity may run explicitly requested metadata scans/captures through the
+new guarded endpoints. Re-evaluate gates server-side on every POST. Production,
+real DEMIS, generic profiles, arbitrary SQL and automatic Catalog activation
+remain blocked. No real-Oracle grants are presumed from names; see
+`docs/m2-1b-mock-inspector-flow.md`.
