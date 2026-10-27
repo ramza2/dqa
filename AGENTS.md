@@ -465,3 +465,12 @@ preview. No raw metadata upload or new API endpoints. Local UI comparison
 cannot invoke M2-1G server-side DB structure verification or confer signed
 provenance, independent preflight, DBA/site approval, Catalog READY or
 activation. Keep synthetic Mock scope. See docs/m2-1h-local-summary-ui.md.
+
+## 24. M2-1I offline integrated checks remain development-only
+
+Use \`scripts/dqa-m2-1i-offline-integration-check.sh\` only in an isolated
+worktree. Existing M2-1A..H tests and frontend build/lint do not authorize a
+real DEMIS source, metadata rights, preflight approval, Catalog READY,
+clinical read/write, or ODS/DR connections. The previously discussed
+11 clinical-information groups are not confirmed without approved mapping.
+See \`docs/m2-1i-integration-readiness.md\` and the DEC decision register.
