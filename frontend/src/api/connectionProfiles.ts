@@ -47,8 +47,8 @@ export function getOracleMockCapability(): Promise<OracleMockCapability> {
   return apiGet<OracleMockCapability>(`${ROOT}/oracle-mock-capability`);
 }
 
-export function ensureOracleMockProfile(): Promise<ConnectionProfile> {
-  return apiPost<null, ConnectionProfile>(`${ROOT}/oracle-mock-profile`, null);
+export function registerOracleMockTarget(body: ConnectionProfileCreate): Promise<ConnectionProfile> {
+  return apiPost<ConnectionProfileCreate, ConnectionProfile>(`${ROOT}/oracle-mock-register`, body);
 }
 
 export function testOracleMockProfile(id: number): Promise<OracleMockConnectionTest> {

@@ -97,6 +97,22 @@ def create_or_get_oracle_mock_profile(
     )
 
 
+def register_explicit_oracle_mock_target(
+    session: Session, settings: Settings, request: ConnectionProfileCreateRequest, *,
+    actor: str,
+) -> ConnectionProfileView:
+    """No implicit existing-profile selection or client-controlled Mock target."""
+    require_mock_actions(settings)
+    if request.credential_secret_ref is not None:
+        raise OracleMockActionError("ORACLE_MOCK_TARGET_MISMATCH")
+    # Check every target field, independently of UI; inject only server-side ref.
+    safe_request = request.model_copy(update={
+        "credential_secret_ref": MOCK_CREDENTIAL_REF,
+    })
+    _check_mock_target(safe_request)
+    return create_connection_profile(session, safe_request, actor=actor)
+
+
 def _locked_mock_profile(session: Session, profile_id: int):
     profile = ConnectionProfileRepository(session).get_by_id_for_update(profile_id)
     if profile is None:

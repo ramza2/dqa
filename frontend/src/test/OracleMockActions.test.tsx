@@ -33,7 +33,7 @@ describe("M1 Oracle Mock development-only controls", () => {
     }]);
     try {
       const { container } = render(<OracleMockActions
-        profile={profile()} onSelectProfile={vi.fn()} onRefresh={vi.fn()} />);
+        profile={profile()} onRefresh={vi.fn()} />);
       await waitFor(() => expect(calls.length).toBeGreaterThan(0));
       expect(container.querySelector("button")).toBeNull();
       expect(calls.every((x) => x.startsWith("GET "))).toBe(true);
@@ -50,31 +50,11 @@ describe("M1 Oracle Mock development-only controls", () => {
     try {
       render(<OracleMockActions
         profile={profile({ source_name: "real_demis" })}
-        onSelectProfile={vi.fn()} onRefresh={vi.fn()} />);
-      expect(await screen.findByRole("button", { name: "Oracle Mock 대상 준비" })).toBeInTheDocument();
+        onRefresh={vi.fn()} />);
+      expect(screen.queryByRole("button", { name: "Oracle Mock 대상 준비" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "읽기 전용 연결 검사" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "연결 검사 후 활성화" })).not.toBeInTheDocument();
       expect(calls.every((x) => x.startsWith("GET "))).toBe(true);
-    } finally { restore(); }
-  });
-
-  it("prepares an allowlisted mock then selects the exact profile", async () => {
-    const calls: string[] = [], onSelectProfile = vi.fn(), onRefresh = vi.fn();
-    const restore = installFetchMock([(url, init) => {
-      const method = init?.method || "GET";
-      calls.push(`${method} ${url.pathname}`);
-      if (url.pathname.endsWith("/oracle-mock-capability")) return jsonResponse({ enabled: true });
-      if (url.pathname.endsWith("/oracle-mock-profile") && method === "POST") return jsonResponse(profile());
-      return null;
-    }]);
-    try {
-      render(<OracleMockActions profile={null}
-        onSelectProfile={onSelectProfile} onRefresh={onRefresh} />);
-      await userEvent.click(await screen.findByRole("button", { name: "Oracle Mock 대상 준비" }));
-      await waitFor(() => expect(onSelectProfile).toHaveBeenCalledWith(21));
-      expect(onRefresh).toHaveBeenCalled();
-      expect(calls).toContain("POST /api/v1/connection-profiles/oracle-mock-profile");
-      expect(screen.queryByText(REF)).not.toBeInTheDocument();
     } finally { restore(); }
   });
 
@@ -95,7 +75,7 @@ describe("M1 Oracle Mock development-only controls", () => {
     }]);
     try {
       render(<OracleMockActions profile={profile()}
-        onSelectProfile={vi.fn()} onRefresh={onRefresh} />);
+        onRefresh={onRefresh} />);
       const activate = await screen.findByRole("button", { name: "연결 검사 후 활성화" });
       expect(activate).toBeDisabled();
       await userEvent.click(screen.getByRole("button", { name: "읽기 전용 연결 검사" }));
@@ -128,7 +108,7 @@ describe("M1 Oracle Mock development-only controls", () => {
     }]);
     try {
       render(<OracleMockActions profile={profile()}
-        onSelectProfile={vi.fn()} onRefresh={vi.fn()} />);
+        onRefresh={vi.fn()} />);
       await userEvent.click(await screen.findByRole("button", { name: "읽기 전용 연결 검사" }));
       expect(await screen.findByText(/연결 검사 실패/)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "연결 검사 후 활성화" })).toBeDisabled();
@@ -148,11 +128,11 @@ describe("M1 Oracle Mock development-only controls", () => {
     }]);
     try {
       const { rerender } = render(<OracleMockActions profile={profile()}
-        onSelectProfile={vi.fn()} onRefresh={vi.fn()} />);
+        onRefresh={vi.fn()} />);
       await userEvent.click(await screen.findByRole("button", { name: "읽기 전용 연결 검사" }));
       await waitFor(() => expect(typeof finish).toBe("function"));
       rerender(<OracleMockActions profile={profile({ id: 22 })}
-        onSelectProfile={vi.fn()} onRefresh={vi.fn()} />);
+        onRefresh={vi.fn()} />);
       finish(jsonResponse({
         profile_id: 21, source_name: "oracle_demis_mock", environment: "development",
         status: "SUCCEEDED", live_connection_tested: true, reachable: true, read_only: true,
