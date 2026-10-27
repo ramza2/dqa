@@ -427,3 +427,12 @@ in-memory Catalog v2 WARNING candidate, never READY/activation, do not
 authenticate DBA provenance or signal site approval. Reject patient rows,
 arbitrary SQL/default expressions/extra fields; do not broaden Oracle grants.
 See `docs/m2-1d-offline-metadata-ingress.md`.
+
+## 20. M2-1E untrusted offline provenance claims
+
+Only a separate optional, bounded JSON sidecar is checked for structural
+binding to the exact M2-1D synthetic metadata file and canonical fingerprint.
+Never treat self-declared issuer/reference/timestamp, matching SHA-256, or
+six-category coverage as independent DBA identity, site authorization or
+preflight. Keep review NOT_REVIEWED, package WARNING and activation false.
+No network/Oracle/PG/HTTP writes; see docs/m2-1e-offline-provenance-claim.md.
