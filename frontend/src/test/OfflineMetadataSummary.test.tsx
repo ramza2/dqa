@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { OfflineMetadataSummaryPanel } from "../components/OfflineMetadataSummaryPanel";
 import { compareOfflineSummary, parseOfflineMetadataSummary } from "../utils/offlineMetadataSummary";
@@ -68,7 +68,7 @@ describe("M2-1H local offline summary", () => {
     vi.stubGlobal("fetch", fetchSpy);
     const user = userEvent.setup();
     render(<OfflineMetadataSummaryPanel snapshot={row} preview={preview} />);
-    await user.type(screen.getByRole("textbox", { name: "오프라인 검증 요약 JSON" }), JSON.stringify(valid));
+    fireEvent.change(screen.getByRole("textbox", { name: "오프라인 검증 요약 JSON" }), { target: { value: JSON.stringify(valid) } });
     await user.click(screen.getByRole("button", { name: "요약 로컬 대조" }));
     const result = await screen.findByTestId("offline-summary-result");
     expect(result).toHaveTextContent("FINGERPRINT_MATCH_UNTRUSTED");
@@ -82,7 +82,7 @@ describe("M2-1H local offline summary", () => {
   it("rejects hostile input without echoing it", async () => {
     const user = userEvent.setup();
     render(<OfflineMetadataSummaryPanel snapshot={row} preview={preview} />);
-    await user.type(screen.getByRole("textbox", { name: "오프라인 검증 요약 JSON" }), '{"patient":"PRIVATE_NAME"}');
+    fireEvent.change(screen.getByRole("textbox", { name: "오프라인 검증 요약 JSON" }), { target: { value: '{"patient":"PRIVATE_NAME"}' } });
     await user.click(screen.getByRole("button", { name: "요약 로컬 대조" }));
     expect(await screen.findByTestId("offline-summary-invalid")).toHaveTextContent("원문은 표시하지 않습니다");
     expect(screen.queryByTestId("offline-summary-result")).not.toBeInTheDocument();
