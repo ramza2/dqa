@@ -95,6 +95,13 @@ export function InspectorTargetReviewPanel({ profileId }: { profileId: number })
             <p><strong>불일치 항목:</strong> {review.mismatch_fields
               .map((field) => MISMATCH_LABELS[field] ?? "기타 항목").join(", ")}</p>
           ) : null}
+          {review.mismatch_fields.includes("username") ? (
+            <p className="dd-guidance">
+              메타데이터 검사 계정과 조회 계정은 달라야 하므로 Username 불일치는
+              예상되는 결과입니다. 실제 분석 가능 여부는 별도의 「Inspector 연계 조건 확인」으로
+              판단하며, 이 설정 대조는 승인이나 접근 허가가 아닙니다.
+            </p>
+          ) : null}
           <p className="dd-guidance">
             Profile 사용 상태: {review.profile_enabled ? "활성" : "비활성"} ·
             Inspector와 Profile 자동 바인딩 없음 · 실제 연결 미실행 · 연결 승인 없음
