@@ -417,3 +417,13 @@ no schema/user/privilege writes and does not fetch business rows.
 `M2_1C_METADATA_INCOMPLETE` is expected with CREATE SESSION only.
 Never treat REFERENCES/SELECT ANY DICTIONARY as automatic safe rights;
 see `docs/m2-1c-inspector-privilege-probe.md`.
+
+## 19. M2-1D offline metadata ingress: untrusted shape-only
+
+`app.services.dba_metadata_offline` and `app.cli.offline_metadata_preview`
+accept only synthetic `oracle_demis_mock` FREEPDB1/DEMIS_OWNER structural
+JSON, bounded 4MB, no Oracle/PG/network/REST writes. They generate an
+in-memory Catalog v2 WARNING candidate, never READY/activation, do not
+authenticate DBA provenance or signal site approval. Reject patient rows,
+arbitrary SQL/default expressions/extra fields; do not broaden Oracle grants.
+See `docs/m2-1d-offline-metadata-ingress.md`.
