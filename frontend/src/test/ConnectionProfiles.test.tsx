@@ -85,7 +85,7 @@ describe("S-05-C1 Connection Profile metadata UI", () => {
     const mock = mockProfiles([profile()]);
     try {
       render(<App />);
-      await userEvent.click(screen.getByRole("tab", { name: "Connection Profiles" }));
+      await userEvent.click(screen.getByRole("tab", { name: "DB 연결 관리" }));
       expect(await screen.findByTestId("connection-profile-portal")).toBeInTheDocument();
       await userEvent.click(await screen.findByRole("button", { name: "상세: Mock profile 1" }));
       const panel = await screen.findByRole("region", { name: "Connection Profile 상세" });

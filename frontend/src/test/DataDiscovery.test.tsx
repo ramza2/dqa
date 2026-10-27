@@ -191,20 +191,21 @@ function discoveryHandlers(options?: {
 }
 
 describe("App navigation Data Discovery", () => {
-  it("keeps Query Assistant and exposes Data Discovery instead of Catalog Explorer", async () => {
+  it("starts with workflow and keeps discovery and query test accessible", async () => {
     const user = userEvent.setup();
     const restore = installFetchMock(discoveryHandlers());
     render(<App />);
 
-    expect(screen.getByTestId("query-assistant")).toBeInTheDocument();
+    expect(screen.getByTestId("workflow-dashboard")).toBeInTheDocument();
+    expect(screen.queryByTestId("query-assistant")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Catalog Explorer" })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Data Discovery" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "스키마·Catalog" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Data Discovery" }));
+    await user.click(screen.getByRole("tab", { name: "스키마·Catalog" }));
     expect(await screen.findByTestId("data-discovery-portal")).toBeInTheDocument();
     expect(screen.getByTestId("schema-search")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Query Assistant" }));
+    await user.click(screen.getByRole("tab", { name: "조회 시험" }));
     expect(await screen.findByTestId("query-assistant")).toBeInTheDocument();
     restore();
   });

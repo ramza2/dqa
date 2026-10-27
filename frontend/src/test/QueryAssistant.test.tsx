@@ -329,20 +329,21 @@ async function recommendHappyPath(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("App navigation", () => {
-  it("defaults to Query Assistant and can switch to Data Discovery", async () => {
+  it("starts with workflow dashboard and navigates to catalog and query test", async () => {
     const user = userEvent.setup();
     const restore = installFetchMock(defaultCatalogHandlers());
     render(<App />);
 
-    expect(screen.getByTestId("query-assistant")).toBeInTheDocument();
+    expect(screen.getByTestId("workflow-dashboard")).toBeInTheDocument();
+    expect(screen.queryByTestId("query-assistant")).not.toBeInTheDocument();
     expect(screen.queryByTestId("data-discovery-portal")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Catalog Explorer" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Data Discovery" }));
+    await user.click(screen.getByRole("tab", { name: "스키마·Catalog" }));
     expect(await screen.findByTestId("data-discovery-portal")).toBeInTheDocument();
     expect(screen.queryByTestId("query-assistant")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: "Query Assistant" }));
+    await user.click(screen.getByRole("tab", { name: "조회 시험" }));
     expect(await screen.findByTestId("query-assistant")).toBeInTheDocument();
     restore();
   });
