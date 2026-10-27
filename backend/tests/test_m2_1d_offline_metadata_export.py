@@ -1,9 +1,9 @@
 """M2-1D pure offline export validation: NO Oracle, PG, network or files."""
 from __future__ import annotations
 import json
-from dataclasses import replace
 
 import pytest
+from app.cli.offline_metadata_preview import main
 from app.services.dba_metadata_offline import (
     FORMAT, SOURCE, OfflineMetadataError, validate_offline_metadata_export,
 )
@@ -107,3 +107,29 @@ def test_stable_fingerprint_under_record_reordering():
     reordered = validate_offline_metadata_export(encode(envelope(snap)))
     assert original.fingerprint == reordered.fingerprint
     assert original.candidate_readiness == reordered.candidate_readiness == "WARNING"
+
+
+def test_cli_reads_explicit_local_file_without_writing_database(tmp_path, capsys):
+    input_file = tmp_path / "synthetic-offline-metadata.json"
+    input_file.write_bytes(encode(envelope()))
+    before = set(tmp_path.iterdir())
+    assert main(["--input", str(input_file)]) == 0
+    captured = capsys.readouterr()
+    assert "M2_1D_OFFLINE_SHAPE_PASS" in captured.out
+    assert "CATALOG_PACKAGE_READINESS=WARNING" in captured.out
+    assert "INDEPENDENT_DBA_PREFLIGHT=NOT_VERIFIED" in captured.out
+    assert "CATALOG_ACTIVATED=false" in captured.out
+    assert set(tmp_path.iterdir()) == before
+
+
+def test_cli_fails_closed_for_missing_file_and_row_payload(tmp_path, capsys):
+    assert main(["--input", str(tmp_path / "missing.json")]) == 1
+    assert "M2_1D_BLOCKED=" in capsys.readouterr().err
+    dirty = envelope()
+    dirty["patient_rows"] = [{"full_name": "NEVER_SHOW_THIS"}]
+    path = tmp_path / "unexpected-rows.json"
+    path.write_bytes(encode(dirty))
+    assert main(["--input", str(path)]) == 1
+    output = capsys.readouterr()
+    assert "M2_1D_BLOCKED=INVALID_EXPORT_FIELDS" in output.err
+    assert "NEVER_SHOW_THIS" not in output.err + output.out
