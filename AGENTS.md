@@ -436,3 +436,12 @@ Never treat self-declared issuer/reference/timestamp, matching SHA-256, or
 six-category coverage as independent DBA identity, site authorization or
 preflight. Keep review NOT_REVIEWED, package WARNING and activation false.
 No network/Oracle/PG/HTTP writes; see docs/m2-1e-offline-provenance-claim.md.
+
+## 21. M2-1F offline manual-review draft is NEVER official approval
+
+Optional \`--review-draft\` requires the untrusted M2-1E \`--claim\`, and
+checks binding to exact raw metadata and claim bytes plus canonical fingerprint.
+Even \`ACKNOWLEDGED_UNVERIFIED\` cannot authenticate a reviewer, pass independent
+preflight, complete the existing DB-backed Snapshot review journal, or confer
+Catalog READY/import/activation. No Oracle/PG/HTTP writes. See
+\`docs/m2-1f-offline-review-draft.md\`.
