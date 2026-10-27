@@ -44,7 +44,7 @@ describe("M2-1B Mock Inspector explicit flow", () => {
       render(<MockInspectorPanel profile={profile()} />);
       expect(calls).toHaveLength(0);
       await userEvent.click(screen.getByRole("button", { name: "Inspector 연계 조건 확인 (접속 없음)" }));
-      expect(await screen.findByText(/별도 Inspector 계정\/스키마 설정 필요/)).toBeInTheDocument();
+      expect(await screen.findByText(/Inspector 메타데이터 전용 계정\/스키마 설정 필요/)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "스키마 메타데이터 분석" })).not.toBeInTheDocument();
       expect(calls).toEqual([`GET ${root}/readiness`]);
     } finally { restore(); }
