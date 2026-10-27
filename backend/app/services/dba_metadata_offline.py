@@ -12,7 +12,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.adapters.schema_inspector.base import SchemaSnapshot
+from app.adapters.catalog.errors import CatalogPackageValidationError
 from app.services.schema_catalog_candidate import _fingerprint, _physical_payload, build_catalog_v2_candidate
+from app.services.catalog_package_validation import validate_catalog_package_bytes
 from app.services.schema_snapshot_diff import compare_schema_snapshots
 from app.services.schema_snapshot_history import _snapshot_from_payload
 
@@ -227,9 +229,12 @@ def validate_offline_metadata_export(raw: bytes) -> OfflinePreview:
         if fingerprint != data["claimed_fingerprint"]:
             raise OfflineMetadataError("FINGERPRINT_MISMATCH")
         candidate_zip = build_catalog_v2_candidate(snapshot, source_name=SOURCE)
+        candidate = validate_catalog_package_bytes(candidate_zip)
+        if candidate.package_readiness != "WARNING" or candidate.activation_eligible:
+            raise OfflineMetadataError("UNSAFE_CANDIDATE_STATUS")
     except OfflineMetadataError:
         raise
-    except (KeyError, ValueError, TypeError, AttributeError):
+    except (KeyError, ValueError, TypeError, AttributeError, CatalogPackageValidationError):
         raise OfflineMetadataError("INVALID_METADATA_STRUCTURE") from None
 
     return OfflinePreview(snapshot=snapshot, fingerprint=fingerprint, candidate_zip=candidate_zip)
