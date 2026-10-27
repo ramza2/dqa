@@ -125,18 +125,14 @@ unset pw
 if ! grep -Fxq 'M2_1C_BUSINESS_ROW_SELECT_DENIED' <<< "$inspector_output"; then
  die "business row SELECT denial proof missing"
 fi
-if ! grep -Eq '^M2_1C_METADATA_(READY|INCOMPLETE)
- <<< "$inspector_output"; then
+if ! grep -Eq '^M2_1C_METADATA_(READY|INCOMPLETE)$' <<< "$inspector_output"; then
  die "metadata result marker missing"
 fi
-if grep -q '^M2_1C_METADATA_READY
- <<< "$inspector_output" &&
-   grep -q '^M2_1C_METADATA_INCOMPLETE
- <<< "$inspector_output"; then
+if grep -Fxq 'M2_1C_METADATA_READY' <<< "$inspector_output" &&
+   grep -Fxq 'M2_1C_METADATA_INCOMPLETE' <<< "$inspector_output"; then
  die "contradictory metadata results"
 fi
 # Whitelist only non-sensitive counters and result tokens for console output.
-grep -E '^(VISIBLE_(TABLES|COLUMNS|FKS|INDEXES)=[0-9]+|M2_1C_BUSINESS_ROW_SELECT_DENIED|M2_1C_METADATA_(READY|INCOMPLETE))
- <<< "$inspector_output"
+grep -E '^(VISIBLE_(TABLES|COLUMNS|FKS|INDEXES)=[0-9]+|M2_1C_BUSINESS_ROW_SELECT_DENIED|M2_1C_METADATA_(READY|INCOMPLETE))$' <<< "$inspector_output"
 unset inspector_output
 echo "M2_1C_READ_ONLY_DIAGNOSTIC_COMPLETED"
