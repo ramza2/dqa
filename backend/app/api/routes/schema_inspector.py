@@ -18,6 +18,9 @@ from app.schemas.schema_snapshot_history import (
 from app.services.schema_snapshot_capture import capture_configured_schema
 from app.services.schema_snapshot_history import SnapshotHistoryError
 from app.services.schema_inspection import SchemaInspectionError, inspect_configured_schema
+from app.services.mock_inspector_binding import (
+    MockInspectorBindingError, require_mock_inspector_binding,
+)
 
 router = APIRouter(prefix="/api/v1/schema-inspector", tags=["schema-inspector"])
 
@@ -40,6 +43,27 @@ _PUBLIC_ERRORS = {
     ),
 }
 
+
+_MOCK_BINDING_ERRORS = {
+    "MOCK_INSPECTOR_DISABLED": PublicErrorSpec(
+        status.HTTP_403_FORBIDDEN, "mock Inspector integration is disabled",
+    ),
+    "MOCK_PROFILE_NOT_FOUND": PublicErrorSpec(
+        status.HTTP_404_NOT_FOUND, "connection profile not found",
+    ),
+    "MOCK_PROFILE_MISMATCH": PublicErrorSpec(
+        status.HTTP_409_CONFLICT, "profile is not the pinned development mock",
+    ),
+    "MOCK_PROFILE_INACTIVE": PublicErrorSpec(
+        status.HTTP_409_CONFLICT, "mock profile is not active",
+    ),
+    "MOCK_INSPECTOR_TARGET_MISMATCH": PublicErrorSpec(
+        status.HTTP_409_CONFLICT, "mock Inspector target does not match selected profile",
+    ),
+    "MOCK_INSPECTOR_ACCOUNT_NOT_SEPARATE": PublicErrorSpec(
+        status.HTTP_409_CONFLICT, "Inspector requires a distinct metadata account",
+    ),
+}
 
 _CAPTURE_ERRORS = {
     **_PUBLIC_ERRORS,
@@ -146,3 +170,124 @@ def capture_snapshot(
                 "message": "schema Snapshot capture failed",
             },
         ) from None
+
+
+# M2-1B: explicit Mock-only selector. Legacy configured-only routes remain
+# available under their original independent gates for compatibility.
+def _mock_binding_http_error(exc: MockInspectorBindingError) -> HTTPException:
+    return build_public_http_error(
+        error_code=exc.code,
+        contracts={**_PUBLIC_ERRORS, **_MOCK_BINDING_ERRORS},
+        fallback_code="MOCK_INSPECTOR_BLOCKED",
+        fallback_status_code=status.HTTP_409_CONFLICT,
+        fallback_message="selected Mock cannot be inspected",
+    )
+
+
+@router.get("/mock-targets/{profile_id}/readiness")
+def mock_inspector_readiness(
+    profile_id: int,
+    session: Session = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    _catalog_actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CATALOG_MANAGE)
+    ),
+    _profile_actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+) -> dict:
+    """Configuration-only, sanitized readiness, NOT a live connection or approval."""
+    try:
+        require_mock_inspector_binding(session, profile_id, settings)
+    except MockInspectorBindingError as exc:
+        return {
+            "profile_id": profile_id, "ready": False, "reason_code": exc.code,
+            "schema_name": None, "live_connection_tested": False,
+            "site_approved": False, "catalog_activated": False,
+        }
+    return {
+        "profile_id": profile_id, "ready": True, "reason_code": "READY_FOR_DEV_INSPECTION",
+        "schema_name": settings.schema_inspector_schema_name,
+        "live_connection_tested": False,
+        "site_approved": False, "catalog_activated": False,
+    }
+
+
+@router.post(
+    "/mock-targets/{profile_id}/inspect", response_model=SchemaInspectionSummary,
+)
+def inspect_selected_mock(
+    profile_id: int,
+    _body: SchemaInspectionRequest,
+    session: Session = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    _catalog_actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CATALOG_MANAGE)
+    ),
+    _profile_actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+) -> SchemaInspectionSummary:
+    """Explicit metadata-only scan; caller NEVER supplies target, schema or SQL."""
+    try:
+        require_mock_inspector_binding(session, profile_id, settings)
+        return inspect_configured_schema(settings)
+    except MockInspectorBindingError as exc:
+        raise _mock_binding_http_error(exc) from None
+    except SchemaInspectionError as exc:
+        raise build_public_http_error(
+            error_code=exc.code, contracts=_PUBLIC_ERRORS,
+            fallback_code="INSPECTOR_INTERNAL_ERROR",
+            fallback_status_code=500, fallback_message="schema inspection failed",
+        ) from None
+    except Exception:
+        raise HTTPException(status_code=500, detail={
+            "code": "INSPECTOR_INTERNAL_ERROR", "message": "schema inspection failed",
+        }) from None
+
+
+@router.post(
+    "/mock-targets/{profile_id}/snapshots/capture",
+    response_model=SchemaSnapshotCaptureResponse,
+)
+def capture_selected_mock(
+    profile_id: int,
+    body: SchemaSnapshotCaptureRequest,
+    session: Session = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_MANAGE)),
+    _profile_actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+) -> SchemaSnapshotCaptureResponse:
+    """Selected Mock metadata Snapshot only; append-only; never Catalog activation."""
+    try:
+        require_mock_inspector_binding(session, profile_id, settings)
+        saved = capture_configured_schema(
+            settings, session, captured_by=actor.actor_id,
+            capture_request_id=body.capture_request_id,
+            expected_previous_revision_id=body.expected_previous_revision_id,
+        )
+        row = saved.revision
+        diff = row.diff_summary_json
+        return SchemaSnapshotCaptureResponse(
+            id=row.id, source_name=row.source_name, db_type=row.db_type,
+            database_name=row.database_name, schema_name=row.schema_name,
+            schema_fingerprint=row.schema_fingerprint,
+            previous_revision_id=row.previous_revision_id,
+            captured_by=row.captured_by, captured_at=row.captured_at,
+            counts=row.counts_json, diff_status=diff["status"],
+            total_changes=diff.get("total_changes"), created=saved.created,
+        )
+    except MockInspectorBindingError as exc:
+        raise _mock_binding_http_error(exc) from None
+    except (SchemaInspectionError, SnapshotHistoryError) as exc:
+        raise build_public_http_error(
+            error_code=exc.code, contracts=_CAPTURE_ERRORS,
+            fallback_code="SNAPSHOT_CAPTURE_FAILED",
+            fallback_status_code=500, fallback_message="schema Snapshot capture failed",
+        ) from None
+    except Exception:
+        raise HTTPException(status_code=500, detail={
+            "code": "SNAPSHOT_CAPTURE_FAILED", "message": "schema Snapshot capture failed",
+        }) from None
