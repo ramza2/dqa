@@ -6,6 +6,7 @@ import {
 import { CatalogApiError } from "../types/catalog";
 import { SnapshotCatalogContext } from "./SnapshotCatalogContext";
 import { SnapshotReviewGates } from "./SnapshotReviewGates";
+import { OfflineMetadataSummaryPanel } from "./OfflineMetadataSummaryPanel";
 import { isSafeSnapshotReviewPreview } from "../utils/snapshotReviewGates";
 import { isSafeSnapshotReviewEvents } from "../utils/snapshotReviewJournal";
 import { isSafeSnapshotDiffDetail, snapshotDiffCountRows } from "../utils/snapshotDiffOverview";
@@ -369,6 +370,11 @@ export function SchemaSnapshotHistory() {
           {preview.status === "ready" && preview.data ? (
             <SnapshotReviewGates preview={preview.data} />
           ) : null}
+          <OfflineMetadataSummaryPanel
+            key={selection.source_name + ":" + selection.id + ":" + selection.schema_fingerprint}
+            snapshot={selection}
+            preview={preview.status === "ready" ? preview.data : null}
+          />
           <h3>변경 검토 이력 (관리자 승인 아님)</h3>
           {status(reviews, "변경 검토 이력")}
           {reviews.status === "error" && source ? (
