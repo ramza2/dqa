@@ -42,6 +42,7 @@ from app.services.connection_profile import (
 from app.services.oracle_mock_actions import (
     OracleMockActionError,
     create_or_get_oracle_mock_profile,
+    register_explicit_oracle_mock_target,
     enable_oracle_mock_profile,
     oracle_mock_actions_available,
     test_oracle_mock_profile,
@@ -112,6 +113,28 @@ def oracle_mock_capability(
     return {"enabled": oracle_mock_actions_available(settings)}
 
 
+@router.post("/oracle-mock-register", response_model=ConnectionProfileView,
+             status_code=status.HTTP_201_CREATED)
+def register_oracle_mock_target(
+    body: ConnectionProfileCreateRequest,
+    session: Session = Depends(get_db_session),
+    settings: Settings = Depends(get_settings),
+    actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+) -> ConnectionProfileView:
+    """Manual, development-only registration, no live probe or Inspector."""
+    try:
+        return register_explicit_oracle_mock_target(
+            session, settings, body, actor=actor.actor_id
+        )
+    except OracleMockActionError as exc:
+        raise _oracle_mock_http_error(exc) from None
+    except ConnectionProfileError as exc:
+        raise _profile_http_error(exc) from None
+
+
+# Deprecated M1 quick-prepare endpoint: retained for legacy regression only.
 @router.post("/oracle-mock-profile", response_model=ConnectionProfileView)
 def bootstrap_oracle_mock_profile(
     session: Session = Depends(get_db_session),

@@ -390,3 +390,11 @@ pretending a live DEMIS connection or approved read source exists. Oracle Mock
 is a separate, allowlisted development fixture; the current quick-prepare
 endpoint is temporary and must not become an implicit production default.
 See `docs/m2-0-operator-workflow.md`. Preserve every existing safety gate.
+
+## 16. M2-1A explicit fixture registration
+
+Normal UI never auto-creates/selects a Mock. Operator opens DB Target form,
+selects the development-only pinned fixture, reviews all fields and saves.
+Backend verifies every field and injects a secret reference server-side only;
+no generic target validation is relaxed. Keep Inspector credentials and
+Profile read-query credentials independent. See docs/m2-1a-explicit-target.md.

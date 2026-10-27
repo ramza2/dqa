@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   enableOracleMockProfile,
-  ensureOracleMockProfile,
   getOracleMockCapability,
   testOracleMockProfile,
 } from "../api/connectionProfiles";
@@ -9,7 +8,6 @@ import type { ConnectionProfile, OracleMockConnectionTest } from "../types/conne
 
 interface Props {
   profile: ConnectionProfile | null;
-  onSelectProfile: (id: number) => void;
   onRefresh: () => void;
 }
 
@@ -18,7 +16,7 @@ function isMockCandidate(profile: ConnectionProfile | null): boolean {
     profile.environment === "development";
 }
 
-export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props) {
+export function OracleMockActions({ profile, onRefresh }: Props) {
   const [available, setAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<OracleMockConnectionTest | null>(null);
@@ -47,27 +45,6 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
     profile?.dbms_type, profile?.username,
     profile?.credential_secret_ref,
   ]);
-
-  async function prepare(): Promise<void> {
-    if (busyRef.current || !available) return;
-    busyRef.current = true;
-    const seq = ++actionSeq.current;
-    setBusy(true);
-    setFeedback(null);
-    setError(null);
-    try {
-      const saved = await ensureOracleMockProfile();
-      if (seq !== actionSeq.current) return;
-      onSelectProfile(saved.id);
-      onRefresh();
-      setFeedback("개발용 Oracle Mock 프로필을 준비했습니다. 연결 검사를 실행하세요.");
-    } catch {
-      if (seq === actionSeq.current) setError("Oracle Mock 프로필을 준비할 수 없습니다. 기존 설정과 개발용 기능 허용 상태를 확인하세요.");
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
-  }
 
   async function test(): Promise<void> {
     if (busyRef.current || !available || !profile || !isMockCandidate(profile)) return;
@@ -135,24 +112,20 @@ export function OracleMockActions({ profile, onSelectProfile, onRefresh }: Props
     }
   }
 
-  if (!available) return null;
   const selectedMock = isMockCandidate(profile);
+  if (!available || !selectedMock) return null;
   const successful = result?.profile_id === profile?.id &&
     result?.status === "SUCCEEDED" && result.live_connection_tested === true &&
     result.reachable === true && result.read_only === true;
 
   return (
     <section className="cp-editor" aria-label="Oracle Mock 개발용 연결">
-      <h3>Oracle Mock 연결 · 개발환경 전용</h3>
+      <h4>선택한 개발용 Oracle Mock 연결 검사</h4>
       <p className="dd-guidance">
         허용된 샘플 DB만 등록·검사할 수 있습니다. 실제 DEMIS 및 운영 복제 DB에는 연결하지 않습니다.
         연결 검사와 프로필 활성화는 별개이며 자격증명 값은 표시하지 않습니다.
       </p>
       <div className="dd-action-row">
-        <button type="button" className="dd-secondary-btn"
-          disabled={busy} onClick={() => { void prepare(); }}>
-          {busy ? "처리 중…" : "Oracle Mock 대상 준비"}
-        </button>
         {selectedMock ? (
           <button type="button" className="dd-secondary-btn"
             disabled={busy} onClick={() => { void test(); }}>

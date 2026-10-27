@@ -8,7 +8,8 @@ import type {
 } from "../types/connectionProfile";
 import {
   createConnectionProfile, disableConnectionProfile, getConnectionProfile,
-  getConnectionProfileDiagnostics, listConnectionProfiles, updateConnectionProfile,
+  getConnectionProfileDiagnostics, getOracleMockCapability, listConnectionProfiles,
+  registerOracleMockTarget, updateConnectionProfile,
 } from "../api/connectionProfiles";
 
 type Mode = "view" | "create" | "edit";
@@ -22,6 +23,11 @@ const EMPTY: ProfileForm = {
   host: "", port: "", database_name: "", username: "",
 };
 const PAGE_SIZE = 20;
+const MOCK_FORM: ProfileForm = {
+  name: "DEMIS Oracle Mock - Development", source_name: "oracle_demis_mock",
+  environment: "development", dbms_type: "oracle", host: "demis-oracle-test",
+  port: "1521", database_name: "FREEPDB1", username: "DEMIS_RO",
+};
 
 function friendlyError(error: unknown): string {
   if (error instanceof CatalogApiError) {
@@ -110,6 +116,15 @@ export function ConnectionProfilePortal() {
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [mockAvailable, setMockAvailable] = useState(false);
+  const [mockSelected, setMockSelected] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void getOracleMockCapability()
+      .then((result) => { if (active) setMockAvailable(result.enabled === true); })
+      .catch(() => { if (active) setMockAvailable(false); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -167,6 +182,7 @@ export function ConnectionProfilePortal() {
   function selectProfile(id: number): void {
     if (saving) return;
     setSelectedId(id);
+    setMockSelected(false);
     setMode("view");
     setActionError(null);
     setMessage(null);
@@ -186,6 +202,7 @@ export function ConnectionProfilePortal() {
   function openCreate(): void {
     setSelectedId(null);
     setMode("create");
+    setMockSelected(false);
     setForm({ ...EMPTY, source_name: filters.source_name, environment: filters.environment });
     setActionError(null);
     setMessage(null);
@@ -194,6 +211,7 @@ export function ConnectionProfilePortal() {
   function openEdit(): void {
     if (!detail || detail.enabled) return;
     setForm(formFromProfile(detail));
+    setMockSelected(false);
     setMode("edit");
     setActionError(null);
     setMessage(null);
@@ -201,6 +219,7 @@ export function ConnectionProfilePortal() {
 
   function cancelForm(): void {
     setMode("view");
+    setMockSelected(false);
     setActionError(null);
   }
 
@@ -225,13 +244,20 @@ export function ConnectionProfilePortal() {
     try {
       let result: ConnectionProfile;
       if (mode === "create") {
-        result = await createConnectionProfile(create);
+        result = mockSelected ? await registerOracleMockTarget(create)
+          : await createConnectionProfile(create);
+        if (mockSelected &&
+          (result.source_name !== MOCK_FORM.source_name ||
+            result.environment !== MOCK_FORM.environment || result.enabled)) {
+          throw new Error("Unexpected Oracle Mock registration response");
+        }
       } else if (detail) {
         result = await updateConnectionProfile(detail.id, changes);
       } else {
         return;
       }
       setMode("view");
+      setMockSelected(false);
       setSelectedId(result.id);
       setMessage(mode === "create" ? "비활성 프로필을 등록했습니다." : "프로필 정보를 수정했습니다.");
       setRefresh((value) => value + 1);
@@ -264,7 +290,7 @@ export function ConnectionProfilePortal() {
   return (
     <main className="dd-panel cp-portal" data-testid="connection-profile-portal">
       <header className="dd-panel-header">
-        <h2>Connection Profiles</h2>
+        <h2>DB Target / 연결 관리</h2>
         <span className="dd-guidance">관리자 설정 정보 · DEMIS 실접속 없음</span>
       </header>
       <p className="banner banner-warn">
@@ -273,12 +299,6 @@ export function ConnectionProfilePortal() {
         일반 프로필은 연결 테스트·활성화·자격증명 입력을 제공하지 않습니다.
         Oracle Mock 전용 작업은 격리 개발환경에서 별도 허용된 경우에만 표시됩니다.
       </p>
-
-      <OracleMockActions
-        profile={detail && detail.id === selectedId ? detail : null}
-        onSelectProfile={selectProfile}
-        onRefresh={() => setRefresh((value) => value + 1)}
-      />
 
       <form className="cp-filters dd-form-row" onSubmit={applyFilters}>
         <label className="dd-field">
@@ -337,7 +357,25 @@ export function ConnectionProfilePortal() {
 
       {mode === "create" || mode === "edit" ? (
         <section className="cp-editor" aria-label={mode === "create" ? "프로필 등록" : "프로필 수정"}>
-          <h3>{mode === "create" ? "비활성 프로필 등록" : "프로필 정보 수정"}</h3>
+          <h3>{mode === "create" ? "DB Target 등록 (비활성)" : "프로필 정보 수정"}</h3>
+          {mode === "create" && mockAvailable ? (
+            <div className="dd-action-row">
+              <button type="button" className="dd-secondary-btn" disabled={saving}
+                onClick={() => { setMockSelected(true); setForm({ ...MOCK_FORM }); }}>
+                개발용 Oracle Mock 선택
+              </button>
+              {mockSelected ? (
+                <button type="button" className="dd-secondary-btn" disabled={saving}
+                  onClick={() => { setMockSelected(false); setForm({ ...EMPTY }); }}>
+                  일반 Target 입력
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {mockSelected ? <p className="dd-guidance">
+            샘플 DB 연결정보가 입력됐습니다. 저장 전 확인하세요.
+            저장은 등록만 수행하며, 실제 연결·분석·활성화는 별도 작업입니다.
+          </p> : null}
           <p className="dd-guidance">
             Source/Environment는 등록 후 변경할 수 없습니다. 자격증명 참조는 보안 절차에 따라 별도로 관리하세요.
           </p>
@@ -354,7 +392,8 @@ export function ConnectionProfilePortal() {
                   value={form[key]}
                   maxLength={key === "port" ? 5 : key === "environment" || key === "dbms_type" ? 64 : 255}
                   required={key === "name" || key === "source_name" || key === "environment"}
-                  disabled={saving || (mode === "edit" && (key === "source_name" || key === "environment"))}
+                  disabled={saving || (mockSelected && key !== "name") ||
+                    (mode === "edit" && (key === "source_name" || key === "environment"))}
                   onChange={(e) => setForm((old) => ({ ...old, [key]: e.target.value }))}
                 />
               </label>
@@ -393,7 +432,12 @@ export function ConnectionProfilePortal() {
               {diagnostics.issues.length ? (
                 <ul>{diagnostics.issues.map((issue, i) => <li key={`${issue.code}-${i}`}>{issueLabel(issue.code)}</li>)}</ul>
               ) : null}
-              <p className="dd-guidance">실제 DB 접속 검사: 미실행 · 연결 가능 여부 및 승인 여부는 확인되지 않았습니다.</p>
+              <p className="dd-guidance">
+                일반 설정 진단은 연결 검사 이력을 보관하지 않습니다. 개발용 Mock은 별도
+                읽기 전용 검사를 사용할 수 있으며 운영 DEMIS 승인은 아닙니다.
+              </p>
+              <OracleMockActions profile={detail}
+                onRefresh={() => setRefresh((value) => value + 1)} />
               <InspectorTargetReviewPanel key={detail.id} profileId={detail.id} />
               <div className="dd-action-row">
                 <button type="button" className="dd-secondary-btn"
