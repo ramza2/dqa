@@ -116,10 +116,13 @@ def check_offline_review_draft(
     ):
         raise OfflineReviewDraftError("INVALID_REVIEW_FIELDS")
 
+    decision, reason_code = data["decision"], data["reason_code"]
     if (
-        data["decision"] not in _DECISIONS
-        or data["reason_code"] not in _DECISIONS[data["decision"]]
-    ) if isinstance(data["decision"], str) else True:
+        not isinstance(decision, str)
+        or decision not in _DECISIONS
+        or not isinstance(reason_code, str)
+        or reason_code not in _DECISIONS[decision]
+    ):
         raise OfflineReviewDraftError("INVALID_REVIEW_DECISION")
 
     expected = (
