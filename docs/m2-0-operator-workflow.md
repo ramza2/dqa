@@ -9,7 +9,7 @@ describes the intended sequence:
 1. Register an explicit Target/Profile.
 2. Inspect schema metadata with a separately permitted Inspector identity.
 3. Review and activate an eligible Catalog revision; search the active Catalog.
-4. Confirm 11 clinical-information groups with DEMIS functional owners.
+4. Confirm the in-scope clinical-information groups and table/field mapping with DEMIS functional owners; 11 groups is not a finalized scope.
 5. Review and approve constrained Query Templates.
 6. Expose approved template operations using authorized MCP/internal REST clients.
 
@@ -28,7 +28,7 @@ explicitly a **test surface**, not the first administrative workflow.
   package -> review/READY-only explicit Catalog activation. Keep old revision
   on every error; no WARNING automatic promotion.
 - **M2-3:** lexical retrieval first; CPU embedding optional and site-approved.
-  11 clinical groups need reviewed medical/table mappings (not embedding guesses).
+  Clinical-information scope and table mappings need DEMIS owner review (not an assumed 11 groups or embedding guesses).
 - **M3-M5:** structured Oracle SELECT preview, independently approved query
   template with explicit parameters, bounded read/MCP execution and audit.
 - Future generative model: optional, separately approved, SQL draft only;
