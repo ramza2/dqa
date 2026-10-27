@@ -445,3 +445,13 @@ Even \`ACKNOWLEDGED_UNVERIFIED\` cannot authenticate a reviewer, pass independen
 preflight, complete the existing DB-backed Snapshot review journal, or confer
 Catalog READY/import/activation. No Oracle/PG/HTTP writes. See
 \`docs/m2-1f-offline-review-draft.md\`.
+
+## 22. M2-1G read-only offline Snapshot comparison preview
+
+Only the synthetic M2-1D/E/F bundle may be matched/diffed against a verified
+source-scoped, latest existing Snapshot via an already-authorized Session.
+Never create an ingestion, review, preflight, READY or activation authority
+from equal hashes, self-asserted issuers, or a review draft. Return only
+sanitized summary and require a fresh separate gate for future operations.
+No new endpoints, migrations or writes. See
+\`docs/m2-1g-offline-snapshot-link-preview.md\`.
