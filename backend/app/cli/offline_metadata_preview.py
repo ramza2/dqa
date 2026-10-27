@@ -10,6 +10,9 @@ from app.services.dba_metadata_offline import (
     MAX_EXPORT_BYTES, OfflineMetadataError, validate_offline_metadata_export,
 )
 from app.services.catalog_package_validation import validate_catalog_package_bytes
+from app.services.offline_metadata_review_draft import (
+    MAX_REVIEW_DRAFT_BYTES, OfflineReviewDraftError, check_offline_review_draft,
+)
 from app.services.offline_metadata_provenance import (
     MAX_CLAIM_BYTES, ProvenanceClaimError, check_offline_provenance_claim,
 )
@@ -32,8 +35,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate synthetic Oracle metadata export offline")
     parser.add_argument("--input", required=True, help="locally supplied metadata JSON path")
     parser.add_argument("--claim", help="optional untrusted provenance sidecar JSON")
+    parser.add_argument("--review-draft", help="optional untrusted manual-review draft; requires --claim")
     args = parser.parse_args(argv)
     claim = None
+    draft = None
+    if args.review_draft is not None and args.claim is None:
+        print("M2_1F_BLOCKED=REVIEW_CLAIM_REQUIRED", file=sys.stderr)
+        return 1
     try:
         raw = _read_bounded_regular_file(args.input, MAX_EXPORT_BYTES)
         result = validate_offline_metadata_export(raw)
@@ -41,6 +49,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.claim is not None:
             claim_raw = _read_bounded_regular_file(args.claim, MAX_CLAIM_BYTES)
             claim = check_offline_provenance_claim(raw, result, claim_raw)
+        if args.review_draft is not None:
+            review_raw = _read_bounded_regular_file(args.review_draft, MAX_REVIEW_DRAFT_BYTES)
+            draft = check_offline_review_draft(raw, result, claim_raw, claim, review_raw)
+    except OfflineReviewDraftError as exc:
+        print(f"M2_1F_BLOCKED={str(exc)}", file=sys.stderr)
+        return 1
     except ProvenanceClaimError as exc:
         print(f"M2_1E_BLOCKED={str(exc)}", file=sys.stderr)
         return 1
@@ -64,6 +78,10 @@ def main(argv: list[str] | None = None) -> int:
     print("PROVENANCE_ISSUER_AUTHENTICATED=false")
     print("METADATA_REVIEW_STATUS=NOT_REVIEWED")
     print("PROVENANCE_APPROVAL_VERIFIED=false")
+    print(f"REVIEW_DRAFT_STATUS={draft.draft_status if draft is not None else 'ABSENT'}")
+    print("REVIEW_DRAFT_ACTOR_AUTHENTICATED=false")
+    print("DBA_SITE_APPROVAL_VERIFIED=false")
+    print("CATALOG_READY=false")
     return 0
 
 
