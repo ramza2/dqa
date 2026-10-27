@@ -23,11 +23,16 @@ unset secret
 echo "M2_1C_MOCK_VERIFIED"
 
 echo "===== MOCK ACCOUNT AND GRANT BASELINE ====="
-if ! docker exec -i "$container" bash -lc 'sqlplus -s / as sysdba' <<'SQL'
+if ! baseline_output="$(docker exec -i "$container" bash -lc 'sqlplus -s / as sysdba' <<'SQL'
 WHENEVER SQLERROR EXIT FAILURE
 WHENEVER OSERROR EXIT FAILURE
-SET FEEDBACK OFF ECHO OFF VERIFY OFF HEADING OFF SERVEROUTPUT ON
+SET FEEDBACK OFF
+SET ECHO OFF
+SET VERIFY OFF
+SET HEADING OFF
 ALTER SESSION SET CONTAINER=FREEPDB1;
+-- Switching PDB can reset DBMS_OUTPUT; enable AFTER ALTER SESSION.
+SET SERVEROUTPUT ON
 DECLARE
  t NUMBER; c NUMBER; g NUMBER; u NUMBER; s NUMBER; x NUMBER; r NUMBER; o NUMBER;
 BEGIN
@@ -57,14 +62,25 @@ END;
 /
 EXIT;
 SQL
-then die "Mock identity/schema/privileges failed"; fi
+)"; then
+ die "Mock identity/schema/privileges failed"
+fi
+if ! grep -Fxq 'M2_1C_DBA_BASELINE_PASS' <<< "$baseline_output"; then
+  die "DBA baseline success marker missing (DBMS_OUTPUT suppressed or block not executed)"
+fi
+printf '%s\n' 'M2_1C_DBA_BASELINE_PASS'
+unset baseline_output
 
 echo "===== INSPECTOR READ-ONLY METADATA ====="
-if ! docker exec -i "$container" bash -lc 'sqlplus -s -L /nolog' <<SQL
+if ! inspector_output="$(docker exec -i "$container" bash -lc 'sqlplus -s -L /nolog' <<SQL
 WHENEVER SQLERROR EXIT FAILURE
 WHENEVER OSERROR EXIT FAILURE
-SET FEEDBACK OFF ECHO OFF VERIFY OFF HEADING OFF SERVEROUTPUT ON
+SET FEEDBACK OFF
+SET ECHO OFF
+SET VERIFY OFF
+SET HEADING OFF
 CONNECT DEMIS_INSPECT_RO/"$pw"@//127.0.0.1:1521/FREEPDB1
+SET SERVEROUTPUT ON
 SET TRANSACTION READ ONLY;
 DECLARE
  t NUMBER; c NUMBER; f NUMBER; i NUMBER; unused_count NUMBER;
@@ -101,9 +117,26 @@ END;
 /
 EXIT;
 SQL
-then
+)"; then
  unset pw
  die "Inspector login/metadata/row-denial verification failed"
 fi
 unset pw
+if ! grep -Fxq 'M2_1C_BUSINESS_ROW_SELECT_DENIED' <<< "$inspector_output"; then
+ die "business row SELECT denial proof missing"
+fi
+if ! grep -Eq '^M2_1C_METADATA_(READY|INCOMPLETE)
+ <<< "$inspector_output"; then
+ die "metadata result marker missing"
+fi
+if grep -q '^M2_1C_METADATA_READY
+ <<< "$inspector_output" &&
+   grep -q '^M2_1C_METADATA_INCOMPLETE
+ <<< "$inspector_output"; then
+ die "contradictory metadata results"
+fi
+# Whitelist only non-sensitive counters and result tokens for console output.
+grep -E '^(VISIBLE_(TABLES|COLUMNS|FKS|INDEXES)=[0-9]+|M2_1C_BUSINESS_ROW_SELECT_DENIED|M2_1C_METADATA_(READY|INCOMPLETE))
+ <<< "$inspector_output"
+unset inspector_output
 echo "M2_1C_READ_ONLY_DIAGNOSTIC_COMPLETED"
