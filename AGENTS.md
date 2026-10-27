@@ -378,3 +378,15 @@ Historical implementation order:
 13. deployment and operational hardening
 
 Do not jump directly to arbitrary LLM-generated SQL execution.
+
+## 15. M2 operator workflow UI (2026-10-27)
+
+The normal landing page is an operator workflow Dashboard, not Query Assistant.
+Use explicit Target registration -> gated Inspector metadata-only analysis ->
+Snapshot/READY-only Catalog revision -> reviewed 11 clinical group mapping ->
+approved bounded Query Template -> internal MCP/REST read operations.
+Until those gates are implemented, mark downstream steps as pending instead of
+pretending a live DEMIS connection or approved read source exists. Oracle Mock
+is a separate, allowlisted development fixture; the current quick-prepare
+endpoint is temporary and must not become an implicit production default.
+See `docs/m2-0-operator-workflow.md`. Preserve every existing safety gate.

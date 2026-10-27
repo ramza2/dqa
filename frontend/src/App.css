@@ -790,3 +790,69 @@
   display: grid;
   gap: 0.35rem;
 }
+
+/* M2-0: operator workflow landing page. Availability is not runtime readiness. */
+.workflow-home {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 1.7rem 1.25rem 2.5rem;
+  display: grid;
+  gap: 1.2rem;
+}
+.workflow-hero, .workflow-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.3rem;
+}
+.workflow-eyebrow {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+.workflow-hero h1 { font-size: 1.45rem; margin: 0.55rem 0; }
+.workflow-hero p, .workflow-section p { line-height: 1.55; }
+.workflow-notice {
+  padding: 0.7rem 0.8rem;
+  background: var(--warn-bg);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+.workflow-section h2 { margin: 0 0 1rem; font-size: 1.06rem; }
+.workflow-steps { padding: 0; margin: 0; display: grid; gap: 0.65rem; list-style: none; }
+.workflow-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 0.95rem;
+}
+.workflow-step-number {
+  display: grid;
+  place-items: center;
+  min-width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 8px;
+  font-weight: 700;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.workflow-step-body { flex: 1; min-width: 0; }
+.workflow-step-title { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; }
+.workflow-step-title h3 { margin: 0; font-size: 1rem; }
+.workflow-step-body p { margin: 0.35rem 0 0.65rem; font-size: 0.88rem; color: var(--muted); }
+.workflow-status {
+  padding: 0.13rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.workflow-status-available { color: var(--ready); background: var(--ready-bg); }
+.workflow-status-pending { color: var(--muted); background: #eef1f4; }
+.workflow-legacy p { margin-top: 0; }
+@media (max-width: 640px) {
+  .workflow-home { padding: 0.85rem; }
+  .workflow-hero, .workflow-section { padding: 0.9rem; }
+  .workflow-step { gap: 0.6rem; }
+}
