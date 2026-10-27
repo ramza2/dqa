@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OracleMockActions } from "../components/OracleMockActions";
@@ -51,6 +51,8 @@ describe("M1 Oracle Mock development-only controls", () => {
       render(<OracleMockActions
         profile={profile({ source_name: "real_demis" })}
         onRefresh={vi.fn()} />);
+      // Flush the async capability response before the negative UI assertions.
+      await act(async () => { await Promise.resolve(); });
       expect(screen.queryByRole("button", { name: "Oracle Mock 대상 준비" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "읽기 전용 연결 검사" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "연결 검사 후 활성화" })).not.toBeInTheDocument();
