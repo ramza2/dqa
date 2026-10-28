@@ -215,7 +215,15 @@ export function useQueryAssistant() {
         data.catalog_revision_id !== active.revision_id ||
         data.schema_fingerprint !== active.schema_fingerprint
       ) {
-        throw new Error("Catalog revision changed. Re-select the source and retry.");
+        // This is an expected catalog-consistency rejection, not a network
+        // exception. Show an explicit, safe operator-facing error instead of
+        // passing a generic Error through formatAssistantError().
+        setManualState("error");
+        setManualError({
+          code: "CATALOG_MISMATCH",
+          message: "Catalog가 변경되었습니다. 소스를 다시 선택하고 목록을 갱신하세요.",
+        });
+        return;
       }
       setManualCatalog(data);
       setManualState("idle");
@@ -231,7 +239,7 @@ export function useQueryAssistant() {
     manualState, selectedSource, sources,
   ]);
 
-    const loadFormForCandidate = useCallback(
+  const loadFormForCandidate = useCallback(
     async (candidate: RecommendedTemplate, sourceName: string, generation?: number) => {
       const opGeneration = generation ?? bumpGeneration();
       setSelectedCandidate(candidate);
