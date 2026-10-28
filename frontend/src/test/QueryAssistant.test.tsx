@@ -887,3 +887,132 @@ describe("egress helper", () => {
     );
   });
 });
+
+describe("M3-A model-free manual selection", () => {
+  const manualResponse = {
+    source_name: activeSource.source_name,
+    catalog_revision_id: activeSource.revision_id,
+    schema_fingerprint: activeSource.schema_fingerprint,
+    total: 1,
+    limit: 100,
+    offset: 0,
+    items: [recommendation.ranked_candidates[0]],
+  };
+
+  it("loads an approved template and parameter form without LLM calls", async () => {
+    const user = userEvent.setup();
+    let recommendationCalls = 0;
+    let extractionCalls = 0;
+    let formCalls = 0;
+    const handlers = assistantHandlers();
+    handlers.unshift((url) => {
+      if (url.pathname.endsWith("/query-recommendations")) {
+        recommendationCalls += 1;
+      }
+      if (url.pathname.endsWith("/query-parameters/extract")) {
+        extractionCalls += 1;
+      }
+      if (url.pathname.endsWith("/query-executions/form")) {
+        formCalls += 1;
+      }
+      if (url.pathname.endsWith("/query-executions/manual-templates")) {
+        return jsonResponse(manualResponse);
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await screen.findByLabelText("Active Catalog source");
+      const loadButton = screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" });
+      await waitFor(() => expect(loadButton).toBeEnabled());
+      await user.click(loadButton);
+      const select = await screen.findByLabelText("승인 템플릿 직접 선택");
+      await user.selectOptions(select, "10:20");
+      expect(await screen.findByLabelText(/병동 코드/)).toBeInTheDocument();
+      expect(formCalls).toBe(1);
+      expect(recommendationCalls).toBe(0);
+      expect(extractionCalls).toBe(0);
+      expect(screen.getByRole("button", { name: "조회 실행" })).toBeDisabled();
+    } finally {
+      restore();
+    }
+  });
+
+  it("clears source-scoped manual choices when the source changes", async () => {
+    const user = userEvent.setup();
+    const pending = { resolve: null as ((value: Response) => void) | null };
+    const handlers = assistantHandlers({ actives: [activeSource, secondSource] });
+    handlers.unshift((url) => {
+      if (url.pathname.endsWith("/query-executions/manual-templates")) {
+        return new Promise<Response>((resolve) => { pending.resolve = resolve; });
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await screen.findByLabelText("Active Catalog source");
+      await user.selectOptions(screen.getByLabelText("Active Catalog source"), activeSource.source_name);
+      const loadButton = screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" });
+      await waitFor(() => expect(loadButton).toBeEnabled());
+      await user.click(loadButton);
+      await waitFor(() => expect(pending.resolve).not.toBeNull());
+      await user.selectOptions(screen.getByLabelText("Active Catalog source"), secondSource.source_name);
+      pending.resolve?.(jsonResponse(manualResponse));
+      await waitFor(() =>
+        expect(screen.queryByLabelText("승인 템플릿 직접 선택")).not.toBeInTheDocument()
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it("rejects Catalog identity mismatches without showing a selectable template", async () => {
+    const user = userEvent.setup();
+    const handlers = assistantHandlers();
+    handlers.unshift((url) => (
+      url.pathname.endsWith("/query-executions/manual-templates")
+        ? jsonResponse({ ...manualResponse, catalog_revision_id: 999 })
+        : null
+    ));
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await screen.findByLabelText("Active Catalog source");
+      const loadButton = screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" });
+      await waitFor(() => expect(loadButton).toBeEnabled());
+      await user.click(loadButton);
+      const error = await screen.findByRole("alert");
+      expect(error).toHaveTextContent("CATALOG_MISMATCH");
+      expect(error).toHaveTextContent("Catalog가 변경되었습니다");
+      expect(error).toHaveTextContent("소스를 다시 선택하고 목록을 갱신하세요");
+      expect(screen.queryByLabelText("승인 템플릿 직접 선택")).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+  it("rejects a changed fingerprint even when revision number is the same", async () => {
+    const user = userEvent.setup();
+    const handlers = assistantHandlers();
+    handlers.unshift((url) => (
+      url.pathname.endsWith("/query-executions/manual-templates")
+        ? jsonResponse({ ...manualResponse, schema_fingerprint: "changed-fingerprint" })
+        : null
+    ));
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await screen.findByLabelText("Active Catalog source");
+      const loadButton = screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" });
+      await waitFor(() => expect(loadButton).toBeEnabled());
+      await user.click(loadButton);
+      const error = await screen.findByRole("alert");
+      expect(error).toHaveTextContent("CATALOG_MISMATCH");
+      expect(error).toHaveTextContent("Catalog가 변경되었습니다");
+      expect(screen.queryByLabelText("승인 템플릿 직접 선택")).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+});

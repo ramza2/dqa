@@ -17,12 +17,14 @@ from app.api.public_errors import PublicErrorSpec, build_public_http_error
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
 from app.schemas.execution_form import ExecutionFormResponse
+from app.schemas.manual_template_catalog import ManualTemplateListResponse
 from app.schemas.execution_preview import (
     ExecutionPreviewRequest,
     ExecutionPreviewResponse,
 )
 from app.schemas.query_execution import QueryExecutionRequest, QueryExecutionResponse
 from app.services.execution_form import get_execution_form_metadata
+from app.services.manual_template_catalog import list_manual_template_catalog
 from app.services.execution_preview import preview_query_execution
 from app.services.query_execution import execute_query
 
@@ -150,6 +152,28 @@ def execution_form_metadata(
             source_name=source_name,
             template_id=template_id,
             version_id=version_id,
+        )
+    except ExecutionPreviewError as exc:
+        raise _eligibility_http_error(exc) from None
+
+
+@router.get("/manual-templates", response_model=ManualTemplateListResponse)
+def manual_template_catalog(
+    response: Response,
+    source_name: str = Query(min_length=1, max_length=255),
+    limit: int = Query(default=100, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.QUERY_OPERATE)
+    ),
+) -> ManualTemplateListResponse:
+    """List approved + enabled Catalog-compatible templates, without LLM/SQL."""
+    response.headers["Cache-Control"] = "no-store, private"
+    response.headers["Pragma"] = "no-cache"
+    try:
+        return list_manual_template_catalog(
+            session, source_name=source_name, limit=limit, offset=offset
         )
     except ExecutionPreviewError as exc:
         raise _eligibility_http_error(exc) from None

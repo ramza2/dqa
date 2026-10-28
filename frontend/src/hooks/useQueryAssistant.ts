@@ -4,12 +4,14 @@ import {
   executeQuery,
   extractParameters,
   getExecutionForm,
+  listManualTemplates,
   previewExecution,
   recommendTemplates,
 } from "../api/queryAssistant";
 import type { CatalogActiveSummary } from "../types/catalog";
 import type {
   ExecutionFormResponse,
+  ManualTemplateListResponse,
   ExecutionPreviewResponse,
   QueryExecutionResponse,
   RecommendedTemplate,
@@ -39,6 +41,10 @@ export function useQueryAssistant() {
   const [sourcesState, setSourcesState] = useState<LoadState>("idle");
   const [sourcesError, setSourcesError] = useState<AssistantErrorState | null>(null);
   const [selectedSource, setSelectedSource] = useState<string>("");
+
+  const [manualCatalog, setManualCatalog] = useState<ManualTemplateListResponse | null>(null);
+  const [manualState, setManualState] = useState<LoadState>("idle");
+  const [manualError, setManualError] = useState<AssistantErrorState | null>(null);
 
   const [requestText, setRequestTextState] = useState("");
   const [recommendation, setRecommendation] =
@@ -178,10 +184,60 @@ export function useQueryAssistant() {
   const selectSource = useCallback(
     (sourceName: string) => {
       setSelectedSource(sourceName);
+      setManualCatalog(null);
+      setManualState("idle");
+      setManualError(null);
       clearDownstreamFromSource();
     },
     [clearDownstreamFromSource],
   );
+
+  const loadManualTemplates = useCallback(async () => {
+    if (!selectedSource || manualState === "loading") {
+      return;
+    }
+    // A manual selection starts a new workflow, invalidating any LLM/preview
+    // response that was initiated before this action.
+    const generation = bumpGeneration();
+    clearDownstreamWorkflow();
+    setManualCatalog(null);
+    setManualState("loading");
+    setManualError(null);
+    try {
+      const data = await listManualTemplates(selectedSource);
+      if (!isCurrentGeneration(generation)) {
+        return;
+      }
+      const active = sources.find((item) => item.source_name === selectedSource);
+      if (
+        data.source_name !== selectedSource ||
+        !active ||
+        data.catalog_revision_id !== active.revision_id ||
+        data.schema_fingerprint !== active.schema_fingerprint
+      ) {
+        // This is an expected catalog-consistency rejection, not a network
+        // exception. Show an explicit, safe operator-facing error instead of
+        // passing a generic Error through formatAssistantError().
+        setManualState("error");
+        setManualError({
+          code: "CATALOG_MISMATCH",
+          message: "Catalog가 변경되었습니다. 소스를 다시 선택하고 목록을 갱신하세요.",
+        });
+        return;
+      }
+      setManualCatalog(data);
+      setManualState("idle");
+    } catch (error) {
+      if (!isCurrentGeneration(generation)) {
+        return;
+      }
+      setManualState("error");
+      setManualError(formatAssistantError(error));
+    }
+  }, [
+    bumpGeneration, clearDownstreamWorkflow, isCurrentGeneration,
+    manualState, selectedSource, sources,
+  ]);
 
   const loadFormForCandidate = useCallback(
     async (candidate: RecommendedTemplate, sourceName: string, generation?: number) => {
@@ -286,7 +342,21 @@ export function useQueryAssistant() {
     [formState, loadFormForCandidate, selectedSource],
   );
 
-  const setParameterValue = useCallback(
+  const selectManualTemplate = useCallback(async (candidate: RecommendedTemplate) => {
+    if (!selectedSource || !manualCatalog || formState === "loading" ||
+        !manualCatalog.items.some((item) =>
+          item.template_id === candidate.template_id && item.version_id === candidate.version_id
+        )) {
+      return;
+    }
+    setRecommendation(null);
+    setRecommendState("idle");
+    setRecommendError(null);
+    setRequestTextState("");
+    await loadFormForCandidate(candidate, selectedSource);
+  }, [formState, loadFormForCandidate, manualCatalog, selectedSource]);
+
+    const setParameterValue = useCallback(
     (name: string, value: unknown) => {
       // Parameter edits supersede extraction/preview/execute operations that
       // were started with the previous parameter state.
@@ -530,6 +600,11 @@ export function useQueryAssistant() {
     reloadSources: loadSources,
     requestText,
     setRequestText,
+    manualCatalog,
+    manualState,
+    manualError,
+    loadManualTemplates,
+    selectManualTemplate,
     recommendation,
     selectedCandidate,
     recommendState,

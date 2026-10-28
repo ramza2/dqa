@@ -224,6 +224,63 @@ export function QueryAssistant() {
       </header>
 
       <div className="qa-layout">
+        <section className="qa-panel" aria-labelledby="manual-template-heading">
+          <h2 id="manual-template-heading">승인 템플릿 직접 선택 (AI 불필요)</h2>
+          <p className="muted">
+            승인·활성화된 조회 템플릿을 직접 선택한 뒤 조건을 입력합니다.
+            이 목록은 SQL을 생성하거나 DEMIS 데이터를 조회하지 않습니다.
+          </p>
+          <div className="qa-actions">
+            <button
+              type="button"
+              onClick={() => void qa.loadManualTemplates()}
+              disabled={!qa.selectedSource || qa.manualState === "loading"}
+            >
+              {qa.manualState === "loading" ? "목록 불러오는 중…" : "승인 템플릿 목록 불러오기"}
+            </button>
+          </div>
+          <ErrorBanner error={qa.manualError} />
+          {qa.manualCatalog ? (
+            <>
+              <label className="param-field">
+                <span className="param-label">승인 템플릿 직접 선택</span>
+                <select
+                  aria-label="승인 템플릿 직접 선택"
+                  value={
+                    qa.manualCatalog.items.some((item) =>
+                      item.template_id === qa.selectedCandidate?.template_id &&
+                      item.version_id === qa.selectedCandidate?.version_id
+                    )
+                      ? `${qa.selectedCandidate?.template_id}:${qa.selectedCandidate?.version_id}`
+                      : ""
+                  }
+                  disabled={qa.formState === "loading"}
+                  onChange={(event) => {
+                    const candidate = qa.manualCatalog?.items.find(
+                      (item) => `${item.template_id}:${item.version_id}` === event.target.value,
+                    );
+                    if (candidate) void qa.selectManualTemplate(candidate);
+                  }}
+                >
+                  <option value="">템플릿 선택</option>
+                  {qa.manualCatalog.items.map((item) => (
+                    <option
+                      key={`${item.template_id}:${item.version_id}`}
+                      value={`${item.template_id}:${item.version_id}`}
+                    >
+                      {item.name} (v{item.version})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {qa.manualCatalog.total === 0 ? (
+                <p className="muted">현재 Catalog에 사용 가능한 승인 템플릿이 없습니다.</p>
+              ) : qa.manualCatalog.total > qa.manualCatalog.items.length ? (
+                <p className="muted">처음 {qa.manualCatalog.items.length}개만 표시합니다. (총 {qa.manualCatalog.total}개)</p>
+              ) : null}
+            </>
+          ) : null}
+        </section>
         <section className="qa-panel" aria-labelledby="qa-request-heading">
           <h2 id="qa-request-heading">자연어 요청</h2>
           <textarea
