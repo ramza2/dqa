@@ -41,7 +41,7 @@ describe("M2-2C Snapshot DOCX export UI", () => {
     const originalRevoke = URL.revokeObjectURL;
     Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:test-report") });
     Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () { saved.push(this.download); });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { saved.push(this.download); });
     const restore = installFetchMock([(url, init) => {
       if (url.pathname.endsWith("/10/erd")) return jsonResponse({
         ...focus, focus_schema: url.searchParams.get("focus_schema"),
