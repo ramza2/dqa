@@ -462,12 +462,16 @@ class QueryTemplateNoteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     note: str | None = Field(default=None, max_length=MAX_NOTE_LENGTH)
+    expected_version_id: int | None = Field(default=None, gt=0)
+    expected_updated_at: datetime | None = None
 
 
 class QueryTemplateRejectRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     note: str = Field(min_length=1, max_length=MAX_NOTE_LENGTH)
+    expected_version_id: int | None = Field(default=None, gt=0)
+    expected_updated_at: datetime | None = None
 
     @field_validator("note")
     @classmethod
