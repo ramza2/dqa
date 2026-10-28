@@ -227,6 +227,7 @@ def submit_query_template_for_review(
     *,
     note: str | None = None,
     actor: str | None = None,
+    expected_version_id: int | None = None,
 ) -> QueryTemplateDetail:
     return _transition_current_version(
         session,
@@ -234,6 +235,7 @@ def submit_query_template_for_review(
         to_status=APPROVAL_IN_REVIEW,
         note=note,
         actor=actor,
+        expected_version_id=expected_version_id,
     )
 
 
@@ -243,6 +245,7 @@ def approve_query_template(
     *,
     note: str | None = None,
     actor: str | None = None,
+    expected_version_id: int | None = None,
 ) -> QueryTemplateDetail:
     return _transition_current_version(
         session,
@@ -250,6 +253,7 @@ def approve_query_template(
         to_status=APPROVAL_APPROVED,
         note=note,
         actor=actor,
+        expected_version_id=expected_version_id,
     )
 
 
@@ -259,6 +263,7 @@ def reject_query_template(
     *,
     note: str,
     actor: str | None = None,
+    expected_version_id: int | None = None,
 ) -> QueryTemplateDetail:
     return _transition_current_version(
         session,
@@ -266,6 +271,7 @@ def reject_query_template(
         to_status=APPROVAL_REJECTED,
         note=note,
         actor=actor,
+        expected_version_id=expected_version_id,
     )
 
 
@@ -452,6 +458,7 @@ def _transition_current_version(
     to_status: str,
     note: str | None,
     actor: str | None,
+    expected_version_id: int | None = None,
 ) -> QueryTemplateDetail:
     repo = QueryTemplateRepository(session)
     template = repo.get_by_id_for_update(template_id)
@@ -467,12 +474,37 @@ def _transition_current_version(
             "query template current version not found",
         )
 
+    # Revision/version optimistic guard inside the row-locked transition.
+    if expected_version_id is not None and version.id != expected_version_id:
+        raise QueryTemplateError(
+            QueryTemplateErrorCode.STALE_VERSION,
+            "template version changed; reload before submitting the action",
+        )
+
     from_status = version.approval_status
     if (from_status, to_status) not in _ALLOWED_TRANSITIONS:
         raise QueryTemplateError(
             QueryTemplateErrorCode.INVALID_TRANSITION,
             f"transition {from_status} -> {to_status} is not allowed",
         )
+
+    if to_status == APPROVAL_APPROVED:
+        # Server authority: UI preflight cannot be trusted or prevent TOCTOU.
+        # The existing runtime also validates SQL before actual execution.
+        compatibility = _compatibility_view(
+            session, source_name=template.source_name, version=version
+        )
+        if not compatibility.compatible:
+            raise QueryTemplateError(
+                QueryTemplateErrorCode.INCOMPATIBLE_CATALOG,
+                "active Catalog differs from pinned template revision",
+            )
+        safety = validate_sql_safety(version.sql_text, version.parameter_schema)
+        if not safety.safe:
+            raise QueryTemplateError(
+                QueryTemplateErrorCode.SQL_UNSAFE,
+                "SQL safety validation failed for current template version",
+            )
 
     now = datetime.now(timezone.utc)
     version.approval_status = to_status
