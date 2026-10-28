@@ -1,4 +1,4 @@
-import { apiGet } from "./client";
+import { apiGet, apiGetDocx } from "./client";
 import type {
   SnapshotDetail,
   SnapshotErdResponse,
@@ -59,5 +59,18 @@ export function getSnapshotErd(
       focus_schema: options.focusSchema,
       focus_table: options.focusTable,
     }, init,
+  );
+}
+
+
+/** Privileged, bounded table report for one stored (NOT VERIFIED) Snapshot. */
+export function getSnapshotTableReportDocx(
+  sourceName: string, revisionId: number,
+  schemaName: string, tableName: string, init?: RequestInit,
+): Promise<Blob> {
+  return apiGetDocx(
+    base + "/" + revisionId + "/report.docx",
+    { source_name: sourceName, schema_name: schemaName, table_name: tableName },
+    init,
   );
 }

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.adapters.db.deps import get_db_session
@@ -23,6 +23,7 @@ from app.services.schema_snapshot_history import (
     list_snapshot_revisions,
 )
 from app.services.schema_snapshot_erd import SnapshotErdError, build_snapshot_erd
+from app.services.schema_snapshot_report import SnapshotReportError, build_snapshot_table_docx
 from app.services.schema_snapshot_review import (
     SnapshotReviewError, preview_snapshot_review,
 )
@@ -223,6 +224,61 @@ def post_change_review_event(
             },
         ) from None
     return _review_event_response(result.event, result.created)
+
+
+_DOCX_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+)
+
+
+@router.get("/{revision_id}/report.docx")
+def download_snapshot_table_report(
+    revision_id: int,
+    source_name: str = Query(
+        min_length=1, max_length=255,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$",
+    ),
+    schema_name: str = Query(min_length=1, max_length=255),
+    table_name: str = Query(min_length=1, max_length=255),
+    session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_MANAGE)),
+) -> Response:
+    """Privileged metadata export; no source SQL, no Oracle and no activation."""
+    row = get_snapshot_revision(session, revision_id, source_name=source_name)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "SNAPSHOT_REVISION_NOT_FOUND", "message": "snapshot not found"},
+        )
+    try:
+        content = build_snapshot_table_docx(
+            row, schema_name=schema_name, table_name=table_name,
+        )
+    except SnapshotReportError as exc:
+        if exc.code == "SNAPSHOT_REPORT_TABLE_NOT_FOUND":
+            code, http_status = exc.code, 404
+        elif exc.code == "SNAPSHOT_REPORT_SCOPE_TOO_LARGE":
+            code, http_status = exc.code, 413
+        elif exc.code == "SNAPSHOT_REPORT_UNVERIFIABLE":
+            code, http_status = exc.code, 409
+        else:
+            code, http_status = "SNAPSHOT_REPORT_RENDER_FAILED", 500
+        raise HTTPException(
+            status_code=http_status,
+            detail={"code": code, "message": "snapshot report unavailable"},
+        ) from None
+    return Response(
+        content=content,
+        media_type=_DOCX_CONTENT_TYPE,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="dqa-snapshot-{revision_id}-table-analysis.docx"'
+            ),
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/{revision_id}/erd", response_model=SnapshotErdResponse)
