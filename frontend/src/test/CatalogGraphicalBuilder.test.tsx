@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CatalogGraphicalBuilder } from "../components/CatalogGraphicalBuilder";
 import {
-  activeSource, secondSource, columnsResponse, defaultCatalogHandlers,
+  activeSource, secondSource, defaultCatalogHandlers,
   installFetchMock, jsonResponse, tablesResponse,
 } from "./mocks";
 import type { CatalogPreviewResponse } from "../types/queryBuilder";
