@@ -57,6 +57,9 @@ export function SnapshotErdPanel({ snapshot }: { snapshot: SnapshotSummary }) {
     const id = ++sequence.current;
     setStatus("loading");
     setData(null);
+    // Invalidate any earlier report download state when the selected table changes.
+    setReportStatus("idle");
+    setBatchStatus("idle");
     try {
       const result = await readSnapshotWithDeadline(signal => getSnapshotErd(
         snapshot.source_name, snapshot.id,
