@@ -887,3 +887,9 @@
 .qb-review-list { list-style: none; padding: 0; }
 .qb-review-list li { border-bottom: 1px solid var(--border); padding: 0.55rem 0; }
 .qb-review-list button { margin-right: 0.4rem; }
+
+.template-author-form {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}

@@ -41,9 +41,9 @@ const STEPS: Step[] = [
   {
     number: "05",
     title: "Query Template 생성·승인",
-    description: "템플릿 승인 상태·Catalog 호환성·SQL 안전성 조회 화면이 있습니다. 생성·승인 UI는 후속 개발입니다.",
-    availability: "integration-pending",
-    actionLabel: "템플릿 검토 현황 보기 (읽기 전용)",
+    description: "DRAFT 작성·수정, 검토 제출, 승인·반려, 이력 조회, 정책에 따른 활성/비활성 화면입니다. 서버 권한·SQL Safety·Catalog 검증이 최종 기준입니다.",
+    availability: "available",
+    actionLabel: "템플릿 작성·검토 열기",
     destination: "template-review",
   },
   {

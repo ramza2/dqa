@@ -1,4 +1,4 @@
-/** Read-only projections of existing Query Template review APIs. */
+/** Projections of existing Query Template review / authoring APIs. */
 export type TemplateApprovalStatus = "DRAFT" | "IN_REVIEW" | "APPROVED" | "REJECTED";
 
 export interface TemplateCompatibility {
@@ -8,6 +8,22 @@ export interface TemplateCompatibility {
   pinned_schema_fingerprint: string;
   current_revision_id: number | null;
   current_schema_fingerprint: string | null;
+}
+
+export interface TemplateParameterSchema {
+  name: string;
+  type: string;
+  required: boolean;
+  sensitive: boolean;
+  label?: string | null;
+  description?: string | null;
+  default?: unknown;
+  allowed_values?: unknown[] | null;
+  pattern?: string | null;
+  min?: number | null;
+  max?: number | null;
+  min_items?: number | null;
+  max_items?: number | null;
 }
 
 export interface ReviewTemplateSummary {
@@ -38,7 +54,7 @@ export interface ReviewTemplateDetail extends ReviewTemplateSummary {
     id: number;
     version: number;
     sql_text: string;
-    parameter_schema: { name: string; type: string; required: boolean; sensitive: boolean }[];
+    parameter_schema: TemplateParameterSchema[];
     row_limit: number;
     timeout_seconds: number;
     approval_status: TemplateApprovalStatus;
@@ -60,4 +76,48 @@ export interface TemplateSqlSafetyReview {
   referenced_parameters: string[];
   declared_parameters: string[];
   issues: { code: string; message: string }[];
+}
+
+export interface TemplateReviewEvent {
+  id: number;
+  template_id: number;
+  version_id: number;
+  from_status: TemplateApprovalStatus;
+  to_status: TemplateApprovalStatus;
+  actor: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface TemplateReviewEventList {
+  items: TemplateReviewEvent[];
+}
+
+export interface TemplateCreateRequest {
+  stable_key: string;
+  name: string;
+  description?: string | null;
+  source_name: string;
+  target_schemas: string[];
+  sql_text: string;
+  parameter_schema: TemplateParameterSchema[];
+  row_limit: number;
+  timeout_seconds: number;
+}
+
+export interface TemplateUpdateRequest {
+  name?: string;
+  description?: string | null;
+  target_schemas?: string[];
+  sql_text?: string;
+  parameter_schema?: TemplateParameterSchema[];
+  row_limit?: number;
+  timeout_seconds?: number;
+}
+
+export interface TemplateNewVersionRequest {
+  sql_text?: string;
+  parameter_schema?: TemplateParameterSchema[];
+  row_limit?: number;
+  timeout_seconds?: number;
 }

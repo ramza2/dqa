@@ -559,3 +559,84 @@ def test_new_version_persists_created_by_actor(
     version = db_session.get(QueryTemplateVersion, detail.version.id)
     assert version is not None
     assert version.created_by == "operator-a"
+
+
+def test_approve_blocked_when_sql_unsafe(
+    db_session: Session, db_client: TestClient
+) -> None:
+    created = _create_template(
+        db_session,
+        db_client,
+        stable_key="approve_sql_unsafe",
+        fingerprint="fp-appr-unsafe",
+        sql_text="DELETE FROM DEMIS_OWNER.T1",
+        parameter_schema=[],
+    )
+    template_id = created["id"]
+    assert (
+        db_client.post(f"/api/v1/query-templates/{template_id}/submit-review").status_code
+        == 200
+    )
+    approved = db_client.post(f"/api/v1/query-templates/{template_id}/approve", json={})
+    assert approved.status_code == 409
+    assert approved.json()["detail"]["code"] == QueryTemplateErrorCode.SQL_UNSAFE
+    current = db_client.get(f"/api/v1/query-templates/{template_id}")
+    assert current.status_code == 200
+    assert current.json()["approval_status"] == "IN_REVIEW"
+    assert current.json()["enabled"] is False
+
+
+def test_approve_blocked_when_catalog_incompatible(
+    db_session: Session, db_client: TestClient
+) -> None:
+    first = _import_and_activate(db_session, fingerprint="fp-appr-old")
+    db_session.commit()
+    created = db_client.post(
+        "/api/v1/query-templates",
+        json=_create_body(stable_key="approve_catalog_drift"),
+    )
+    assert created.status_code == 201
+    template_id = created.json()["id"]
+    assert created.json()["version"]["compatibility"]["pinned_revision_id"] == first.id
+    assert (
+        db_client.post(f"/api/v1/query-templates/{template_id}/submit-review").status_code
+        == 200
+    )
+
+    _import_and_activate(db_session, fingerprint="fp-appr-new")
+    db_session.commit()
+
+    approved = db_client.post(f"/api/v1/query-templates/{template_id}/approve", json={})
+    assert approved.status_code == 409
+    assert approved.json()["detail"]["code"] == QueryTemplateErrorCode.INCOMPATIBLE_CATALOG
+    current = db_client.get(f"/api/v1/query-templates/{template_id}")
+    assert current.json()["approval_status"] == "IN_REVIEW"
+
+
+def test_enable_blocked_when_sql_becomes_unsafe(
+    db_session: Session, db_client: TestClient
+) -> None:
+    created = _create_template(
+        db_session, db_client, stable_key="enable_sql_unsafe", fingerprint="fp-en-unsafe"
+    )
+    template_id = created["id"]
+    assert (
+        db_client.post(f"/api/v1/query-templates/{template_id}/submit-review").status_code
+        == 200
+    )
+    assert (
+        db_client.post(f"/api/v1/query-templates/{template_id}/approve", json={}).status_code
+        == 200
+    )
+
+    version = db_session.get(QueryTemplateVersion, created["current_version_id"])
+    assert version is not None
+    version.sql_text = "DELETE FROM DEMIS_OWNER.T1"
+    db_session.flush()
+    db_session.commit()
+
+    enabled = db_client.post(f"/api/v1/query-templates/{template_id}/enable")
+    assert enabled.status_code == 409
+    assert enabled.json()["detail"]["code"] == QueryTemplateErrorCode.SQL_UNSAFE
+    current = db_client.get(f"/api/v1/query-templates/{template_id}")
+    assert current.json()["enabled"] is False

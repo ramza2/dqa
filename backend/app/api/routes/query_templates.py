@@ -78,6 +78,10 @@ _TEMPLATE_PUBLIC_ERRORS = {
         status.HTTP_409_CONFLICT,
         "query template is incompatible with the active catalog",
     ),
+    QueryTemplateErrorCode.SQL_UNSAFE: PublicErrorSpec(
+        status.HTTP_409_CONFLICT,
+        "query template SQL safety validation failed",
+    ),
     QueryTemplateErrorCode.INVALID_PARAMETER_SCHEMA: PublicErrorSpec(
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "query template parameter schema is invalid",
