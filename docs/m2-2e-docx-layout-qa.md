@@ -21,8 +21,8 @@ M2-2C(선택 테이블 DOCX)와 M2-2D(스키마 ZIP 분할 다운로드)는
 
 ## 실행 방법
 
-Backend 디렉터리에서 아래 Python 명령으로 파일 생성:
-    ~/dqa/.venv/bin/python scripts/m2_2e_docx_layout_qa.py --out-dir artifacts/m2-2e-docx-qa
+Backend 디렉터리에서 아래 Python 모듈 명령으로 파일 생성(직접 경로 실행도 지원):
+    ~/dqa/.venv/bin/python -m scripts.m2_2e_docx_layout_qa --out-dir artifacts/m2-2e-docx-qa
 
 개발 장비에 LibreOffice가 있다면 다음 선택 스크립트로 PDF/PNG 렌더:
     PYTHON=~/dqa/.venv/bin/python bash scripts/m2_2e_render_docx_qa.sh artifacts/m2-2e-docx-qa
