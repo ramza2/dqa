@@ -983,7 +983,33 @@ describe("M3-A model-free manual selection", () => {
       const loadButton = screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" });
       await waitFor(() => expect(loadButton).toBeEnabled());
       await user.click(loadButton);
-      expect(await screen.findByRole("alert")).toHaveTextContent("Catalog revision changed");
+      const error = await screen.findByRole("alert");
+      expect(error).toHaveTextContent("CATALOG_MISMATCH");
+      expect(error).toHaveTextContent("Catalog가 변경되었습니다");
+      expect(error).toHaveTextContent("소스를 다시 선택하고 목록을 갱신하세요");
+      expect(screen.queryByLabelText("승인 템플릿 직접 선택")).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+  it("rejects a changed fingerprint even when revision number is the same", async () => {
+    const user = userEvent.setup();
+    const handlers = assistantHandlers();
+    handlers.unshift((url) => (
+      url.pathname.endsWith("/query-executions/manual-templates")
+        ? jsonResponse({ ...manualResponse, schema_fingerprint: "changed-fingerprint" })
+        : null
+    ));
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await screen.findByLabelText("Active Catalog source");
+      const loadButton = screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" });
+      await waitFor(() => expect(loadButton).toBeEnabled());
+      await user.click(loadButton);
+      const error = await screen.findByRole("alert");
+      expect(error).toHaveTextContent("CATALOG_MISMATCH");
+      expect(error).toHaveTextContent("Catalog가 변경되었습니다");
       expect(screen.queryByLabelText("승인 템플릿 직접 선택")).not.toBeInTheDocument();
     } finally {
       restore();
