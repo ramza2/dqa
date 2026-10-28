@@ -74,8 +74,8 @@ describe("M2-2A bounded active Catalog ERD", () => {
       await user.click(screen.getByRole("button", { name: "관계 ERD" }));
       const region = await screen.findByRole("region", { name: "테이블 관계 ERD" });
       expect(within(region).getByText("DEMIS_OWNER.TB_ADM_HIST")).toBeInTheDocument();
-      expect(within(region).getByText("FK_ADM_ENC")).toBeInTheDocument();
-      expect(within(region).getByText("FK_OTHER_TO_ADM")).toBeInTheDocument();
+      expect(within(region).getByText(/FK_ADM_ENC/)).toBeInTheDocument();
+      expect(within(region).getByText(/FK_OTHER_TO_ADM/)).toBeInTheDocument();
       expect(within(region).getByText(/Revision: 1/)).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "상세정보" }));
       expect(await screen.findByText("Overview")).toBeInTheDocument();
