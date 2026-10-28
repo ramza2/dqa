@@ -559,3 +559,105 @@ def test_new_version_persists_created_by_actor(
     version = db_session.get(QueryTemplateVersion, detail.version.id)
     assert version is not None
     assert version.created_by == "operator-a"
+
+
+# M3-C2A — server-side approval gates. These execute only against a disposable
+# PostgreSQL fixture; review/approval never opens the DEMIS adapter.
+def test_m3c2a_transition_rejects_stale_version_and_updated_at(
+    db_session: Session, db_client: TestClient,
+) -> None:
+    created = _create_template(db_session, db_client, stable_key="m3c2a_stale")
+    tid = created["id"]
+    endpoint = f"/api/v1/query-templates/{tid}/submit-review"
+
+    wrong_id = db_client.post(endpoint, json={
+        "expected_version_id": created["version"]["id"] + 100,
+        "expected_updated_at": created["updated_at"],
+    })
+    assert wrong_id.status_code == 409
+    assert wrong_id.json()["detail"]["code"] == QueryTemplateErrorCode.STALE_VERSION
+
+    wrong_time = db_client.post(endpoint, json={
+        "expected_version_id": created["version"]["id"],
+        "expected_updated_at": "2020-01-01T00:00:00+00:00",
+    })
+    assert wrong_time.status_code == 409
+    assert wrong_time.json()["detail"]["code"] == QueryTemplateErrorCode.STALE_VERSION
+    detail = db_client.get(f"/api/v1/query-templates/{tid}")
+    assert detail.json()["approval_status"] == "DRAFT"
+
+    valid = db_client.post(endpoint, json={
+        "expected_version_id": created["version"]["id"],
+        "expected_updated_at": created["updated_at"],
+    })
+    assert valid.status_code == 200, valid.text
+    assert valid.json()["approval_status"] == "IN_REVIEW"
+
+
+def test_m3c2a_approve_rejects_unsafe_sql_at_locked_transition(
+    db_session: Session, db_client: TestClient,
+) -> None:
+    created = _create_template(
+        db_session, db_client, stable_key="m3c2a_unsafe",
+        sql_text="DELETE FROM DEMIS_OWNER.T1",
+        parameter_schema=[],
+    )
+    tid = created["id"]
+    submitted = db_client.post(
+        f"/api/v1/query-templates/{tid}/submit-review", json={}
+    )
+    assert submitted.status_code == 200, submitted.text
+
+    denied = db_client.post(f"/api/v1/query-templates/{tid}/approve", json={
+        "expected_version_id": submitted.json()["version"]["id"],
+        "expected_updated_at": submitted.json()["updated_at"],
+    })
+    assert denied.status_code == 422, denied.text
+    assert denied.json()["detail"]["code"] == QueryTemplateErrorCode.SQL_UNSAFE
+    detail = db_client.get(f"/api/v1/query-templates/{tid}").json()
+    assert detail["approval_status"] == "IN_REVIEW"
+    assert detail["enabled"] is False
+
+
+def test_m3c2a_approve_rejects_catalog_drift_without_mutating_review(
+    db_session: Session, db_client: TestClient,
+) -> None:
+    created = _create_template(db_session, db_client, stable_key="m3c2a_drift")
+    tid = created["id"]
+    submitted = db_client.post(f"/api/v1/query-templates/{tid}/submit-review", json={})
+    assert submitted.status_code == 200
+    _import_and_activate(db_session, fingerprint="fp-m3c2a-changed")
+    db_session.commit()
+
+    denied = db_client.post(f"/api/v1/query-templates/{tid}/approve", json={
+        "expected_version_id": submitted.json()["version"]["id"],
+        "expected_updated_at": submitted.json()["updated_at"],
+    })
+    assert denied.status_code == 409, denied.text
+    assert denied.json()["detail"]["code"] == QueryTemplateErrorCode.INCOMPATIBLE_CATALOG
+    detail = db_client.get(f"/api/v1/query-templates/{tid}").json()
+    assert detail["approval_status"] == "IN_REVIEW"
+    assert detail["enabled"] is False
+
+
+def test_m3c2a_reject_with_expected_version_and_required_note(
+    db_session: Session, db_client: TestClient,
+) -> None:
+    created = _create_template(db_session, db_client, stable_key="m3c2a_reject")
+    tid = created["id"]
+    submitted = db_client.post(
+        f"/api/v1/query-templates/{tid}/submit-review", json={
+            "expected_version_id": created["version"]["id"],
+            "expected_updated_at": created["updated_at"],
+        }
+    )
+    assert submitted.status_code == 200, submitted.text
+    payload = {
+        "note": "합성 테스트 반려 사유",
+        "expected_version_id": submitted.json()["version"]["id"],
+        "expected_updated_at": submitted.json()["updated_at"],
+    }
+    declined = db_client.post(f"/api/v1/query-templates/{tid}/reject", json=payload)
+    assert declined.status_code == 200, declined.text
+    assert declined.json()["approval_status"] == "REJECTED"
+    assert declined.json()["enabled"] is False
