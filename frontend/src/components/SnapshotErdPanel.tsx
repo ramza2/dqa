@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getSnapshotErd } from "../api/schemaSnapshot";
+import { getSnapshotErd, getSnapshotTableReportDocx } from "../api/schemaSnapshot";
 import type { SnapshotErdResponse, SnapshotSummary } from "../types/schemaSnapshot";
 import { readSnapshotWithDeadline } from "../utils/snapshotPanelDeadline";
 
@@ -43,6 +43,7 @@ export function SnapshotErdPanel({ snapshot }: { snapshot: SnapshotSummary }) {
   const [data, setData] = useState<SnapshotErdResponse | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const sequence = useRef(0);
+  const [reportStatus, setReportStatus] = useState<"idle" | "loading" | "error">("idle");
 
   // Parent uses Source/Revision/Fingerprint as the component key.
   useEffect(() => () => { sequence.current += 1; }, []);
@@ -69,6 +70,31 @@ export function SnapshotErdPanel({ snapshot }: { snapshot: SnapshotSummary }) {
       setStatus("ready");
     } catch {
       if (sequence.current === id) setStatus("error");
+    }
+  };
+
+  const downloadReport = async (schema: string, table: string) => {
+    const current = sequence.current;
+    setReportStatus("loading");
+    try {
+      const blob = await getSnapshotTableReportDocx(
+        snapshot.source_name, snapshot.id, schema, table,
+      );
+      if (sequence.current !== current) return;
+      const url = URL.createObjectURL(blob);
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "dqa-snapshot-" + snapshot.id + "-table-analysis.docx";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      setReportStatus("idle");
+    } catch {
+      if (sequence.current === current) setReportStatus("error");
     }
   };
 
@@ -130,6 +156,20 @@ export function SnapshotErdPanel({ snapshot }: { snapshot: SnapshotSummary }) {
           {data.focus_schema && data.focus_table ? (
             <section className="section" aria-label="Snapshot FK 관계">
               <h4>{data.focus_schema}.{data.focus_table} — 1단계 FK {data.total_edges}건</h4>
+              <div className="dd-action-row">
+                <button type="button" className="dd-secondary-btn"
+                  disabled={reportStatus === "loading"}
+                  onClick={() => void downloadReport(data.focus_schema!, data.focus_table!)}>
+                  선택 테이블 DB 분석서 DOCX (관리자)
+                </button>
+                <span className="muted">선택 테이블 1개만 · 미승인 메타데이터 · 외부 공유 주의</span>
+              </div>
+              {reportStatus === "error" ? (
+                <p className="banner banner-error" role="alert">
+                  분석서 다운로드 실패: 관리자 권한 또는 Snapshot 상태를 확인하세요.
+                </p>
+              ) : null}
+              {reportStatus === "loading" ? <p role="status">분석서 생성 중…</p> : null}
               {data.edges_truncated ? (
                 <p role="status" className="banner banner-warn">
                   최대 40개 FK만 표시하므로 전체 관계가 아닐 수 있습니다.

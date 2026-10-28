@@ -139,6 +139,29 @@ export async function apiGet<T>(
   return (await response.json()) as T;
 }
 
+/** Authenticated binary GET using the same request/error boundary as apiGet. */
+export async function apiGetDocx(
+  path: string,
+  query?: Record<string, string | number | boolean | undefined | null>,
+  init?: RequestInit,
+): Promise<Blob> {
+  const response = await fetch(buildUrl(path, query), {
+    ...init,
+    method: "GET",
+    headers: mergeRequestHeaders(init),
+  });
+  if (!response.ok) throw await parseError(response);
+  const media = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
+  if (media !== "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    throw new Error("Unexpected report content type");
+  }
+  const body = await response.blob();
+  if (body.size < 4 || body.size > 3_000_000) {
+    throw new Error("Invalid report size");
+  }
+  return body;
+}
+
 export async function apiPost<TRequest, TResponse>(
   path: string,
   body: TRequest,
