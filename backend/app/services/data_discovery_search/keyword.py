@@ -40,8 +40,9 @@ def keyword_search(
     Candidates are gathered in tiers so exact/original matches are not crowded
     out by expanded-term-only hits under a candidate limit:
     1) exact physical identifier
-    2) original query terms
-    3) terminology-expanded terms
+    2) all original query terms (2 to 6 bounded terms)
+    3) any original query term
+    4) terminology-expanded terms
     """
     if candidate_limit is None:
         candidate_limit = max(
@@ -71,6 +72,23 @@ def keyword_search(
         selected[doc.id] = doc
         if len(selected) >= candidate_limit:
             break
+
+    # For multi-term searches, first reserve candidate slots for documents
+    # matching *every* original term, regardless of lexical document_key order.
+    # Limit AND predicates to six terms to keep SQL complexity bounded.
+    # This does not change result scoring or introduce any embedding dependency.
+    if len(selected) < candidate_limit and 2 <= len(original_list) <= 6:
+        remaining = candidate_limit - len(selected)
+        for doc in _fetch_term_candidates(
+            session,
+            catalog_import_revision_id=catalog_import_revision_id,
+            object_type=object_type,
+            terms=original_list,
+            exclude_ids=set(selected),
+            limit=remaining,
+            require_all=True,
+        ):
+            selected[doc.id] = doc
 
     if len(selected) < candidate_limit and original_list:
         remaining = candidate_limit - len(selected)
@@ -178,22 +196,25 @@ def _fetch_term_candidates(
     terms: list[str],
     exclude_ids: set[int],
     limit: int,
+    require_all: bool = False,
 ) -> list[DataDiscoveryDocument]:
     if not terms or limit <= 0:
         return []
 
-    conditions: list[ColumnElement[bool]] = []
+    # Each term may occur in *any* identifier or searchable metadata field.
+    # For the multi-term tier, require an AND of those independent OR groups.
+    # SQLAlchemy binds and ILIKE escapes terms; never interpolate into SQL.
+    groups: list[ColumnElement[bool]] = []
     for term in terms:
         pattern = f"%{_escape_like(term)}%"
-        conditions.extend(
-            [
-                DataDiscoveryDocument.document_key.ilike(pattern, escape=_ILIKE_ESCAPE),
-                DataDiscoveryDocument.schema_name.ilike(pattern, escape=_ILIKE_ESCAPE),
-                DataDiscoveryDocument.table_name.ilike(pattern, escape=_ILIKE_ESCAPE),
-                DataDiscoveryDocument.column_name.ilike(pattern, escape=_ILIKE_ESCAPE),
-                DataDiscoveryDocument.searchable_text.ilike(pattern, escape=_ILIKE_ESCAPE),
-            ]
-        )
+        groups.append(or_(
+            DataDiscoveryDocument.document_key.ilike(pattern, escape=_ILIKE_ESCAPE),
+            DataDiscoveryDocument.schema_name.ilike(pattern, escape=_ILIKE_ESCAPE),
+            DataDiscoveryDocument.table_name.ilike(pattern, escape=_ILIKE_ESCAPE),
+            DataDiscoveryDocument.column_name.ilike(pattern, escape=_ILIKE_ESCAPE),
+            DataDiscoveryDocument.searchable_text.ilike(pattern, escape=_ILIKE_ESCAPE),
+        ))
+    conditions = [and_(*groups)] if require_all else groups
     return _execute_candidate_query(
         session,
         catalog_import_revision_id=catalog_import_revision_id,
