@@ -856,3 +856,20 @@
   .workflow-hero, .workflow-section { padding: 0.9rem; }
   .workflow-step { gap: 0.6rem; }
 }
+
+
+/* M2-2A: bounded, read-only, table-centered Catalog relationship graph */
+.erd-switch { display: flex; gap: .45rem; margin-top: .25rem; flex-wrap: wrap; }
+.erd-switch button { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; padding: .4rem .8rem; }
+.erd-switch button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 650; }
+.erd-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(175px,.9fr) minmax(0,1fr); align-items: center; gap: 1rem; margin: 1rem 0; }
+.erd-center { border: 2px solid var(--accent); border-radius: 10px; background: var(--accent-soft); padding: 1.1rem .8rem; display: grid; gap: .55rem; text-align: center; overflow-wrap: anywhere; }
+.erd-side { min-width: 0; }
+.erd-side h4 { margin: 0 0 .6rem; font-size: .85rem; }
+.erd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .55rem; max-height: 460px; overflow-y: auto; }
+.erd-edge { border: 1px solid var(--border); border-radius: 8px; background: #fbfcfd; padding: .65rem; overflow-wrap: anywhere; }
+.erd-edge-title { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; font-size: .82rem; font-weight: 600; }
+.erd-edge-meta { color: var(--muted); margin-top: .25rem; font-size: .76rem; }
+.erd-arrow { color: var(--accent); display: block; margin: .45rem 0; font-size: .78rem; }
+.erd-empty { color: var(--muted); font-size: .8rem; }
+@media (max-width: 850px) { .erd-layout { grid-template-columns: minmax(0,1fr); } .erd-center { order: -1; } }
