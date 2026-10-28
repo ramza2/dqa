@@ -1,6 +1,5 @@
 """M2-2B safe Snapshot ERD projection; only synthetic in-memory objects."""
 from copy import deepcopy
-from dataclasses import replace
 
 import pytest
 
@@ -17,7 +16,7 @@ def _stored():
             source_table="TB_MOCK", target_schema="OTHER_SCHEMA",
             target_table="TB_EXTERNAL",
             columns=(
-                InspectedForeignKeyColumn(2, "SITE", "SITE"),
+                InspectedForeignKeyColumn(2, "CODE", "SITE"),
                 InspectedForeignKeyColumn(1, "ID", "REF_ID"),
             ),
         ),
@@ -39,7 +38,7 @@ def test_snapshot_erd_preserves_composite_mapping_external_boundary_and_no_activ
     assert result["edges"][0]["referenced_only"] is True
     assert result["edges"][0]["column_mapping"] == [
         {"source": "ID", "target": "REF_ID"},
-        {"source": "SITE", "target": "SITE"},
+        {"source": "CODE", "target": "SITE"},
     ]
     assert result["preflight_status"] == "NOT_VERIFIED"
     assert result["activation_eligible"] is False
