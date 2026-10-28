@@ -1,6 +1,7 @@
 import { apiGet } from "./client";
 import type {
   SnapshotDetail,
+  SnapshotErdResponse,
   SnapshotReviewEvent,
   SnapshotReviewPreview,
   SnapshotSummary,
@@ -35,5 +36,28 @@ export function listSnapshotReviewEvents(
 ): Promise<SnapshotReviewEvent[]> {
   return apiGet<SnapshotReviewEvent[]>(
     `${base}/${revisionId}/reviews`, { source_name: sourceName }, init,
+  );
+}
+
+
+export function getSnapshotErd(
+  sourceName: string,
+  revisionId: number,
+  options: {
+    q?: string; offset?: number; limit?: number;
+    focusSchema?: string; focusTable?: string;
+  } = {},
+  init?: RequestInit,
+): Promise<SnapshotErdResponse> {
+  return apiGet<SnapshotErdResponse>(
+    base + "/" + revisionId + "/erd",
+    {
+      source_name: sourceName,
+      q: options.q,
+      offset: options.offset ?? 0,
+      limit: options.limit ?? 30,
+      focus_schema: options.focusSchema,
+      focus_table: options.focusTable,
+    }, init,
   );
 }

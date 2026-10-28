@@ -14,6 +14,7 @@ from app.schemas.schema_snapshot_history import (
     SchemaSnapshotRevisionDetail,
     SchemaSnapshotRevisionSummary,
     SchemaSnapshotReviewPreview,
+    SnapshotErdResponse,
     SnapshotChangeReviewRequest,
     SnapshotChangeReviewEventResponse,
 )
@@ -21,6 +22,7 @@ from app.services.schema_snapshot_history import (
     get_snapshot_revision,
     list_snapshot_revisions,
 )
+from app.services.schema_snapshot_erd import SnapshotErdError, build_snapshot_erd
 from app.services.schema_snapshot_review import (
     SnapshotReviewError, preview_snapshot_review,
 )
@@ -221,6 +223,47 @@ def post_change_review_event(
             },
         ) from None
     return _review_event_response(result.event, result.created)
+
+
+@router.get("/{revision_id}/erd", response_model=SnapshotErdResponse)
+def get_snapshot_erd(
+    revision_id: int,
+    source_name: str = Query(
+        min_length=1, max_length=255,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$",
+    ),
+    q: str | None = Query(default=None, max_length=128),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=30, ge=1, le=50),
+    focus_schema: str | None = Query(default=None, min_length=1, max_length=255),
+    focus_table: str | None = Query(default=None, min_length=1, max_length=255),
+    session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_READ)),
+) -> SnapshotErdResponse:
+    """Bounded physical metadata preview from a stored Snapshot, NOT Catalog."""
+    row = get_snapshot_revision(session, revision_id, source_name=source_name)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "SNAPSHOT_REVISION_NOT_FOUND", "message": "snapshot not found"},
+        )
+    try:
+        projection = build_snapshot_erd(
+            row, query=q, offset=offset, limit=limit,
+            focus_schema=focus_schema, focus_table=focus_table,
+        )
+    except SnapshotErdError as exc:
+        if exc.code == "SNAPSHOT_ERD_TABLE_NOT_FOUND":
+            code, http_status = exc.code, 404
+        elif exc.code == "SNAPSHOT_ERD_INVALID_FOCUS":
+            code, http_status = exc.code, 422
+        else:
+            code, http_status = "SNAPSHOT_ERD_UNVERIFIABLE", 409
+        raise HTTPException(
+            status_code=http_status,
+            detail={"code": code, "message": "snapshot ERD preview unavailable"},
+        ) from None
+    return SnapshotErdResponse(**projection)
 
 
 @router.get("/{revision_id}", response_model=SchemaSnapshotRevisionDetail)
