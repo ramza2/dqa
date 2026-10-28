@@ -77,9 +77,9 @@ export function SnapshotErdPanel({ snapshot }: { snapshot: SnapshotSummary }) {
     const current = sequence.current;
     setReportStatus("loading");
     try {
-      const blob = await getSnapshotTableReportDocx(
-        snapshot.source_name, snapshot.id, schema, table,
-      );
+      const blob = await readSnapshotWithDeadline(signal => getSnapshotTableReportDocx(
+        snapshot.source_name, snapshot.id, schema, table, { signal },
+      ));
       if (sequence.current !== current) return;
       const url = URL.createObjectURL(blob);
       try {
