@@ -7,7 +7,7 @@ if [ "$#" -gt 0 ]; then QA_DIR="$1"; fi
 PYTHON_CMD="python3"
 if [ -n "$(printenv PYTHON 2>/dev/null || :)" ]; then PYTHON_CMD="$PYTHON"; fi
 cd "$BACKEND_DIR"
-"$PYTHON_CMD" scripts/m2_2e_docx_layout_qa.py --out-dir "$QA_DIR"
+"$PYTHON_CMD" -m scripts.m2_2e_docx_layout_qa --out-dir "$QA_DIR"
 if ! command -v libreoffice >/dev/null 2>&1; then
   echo "M2_2E_RENDER_SKIPPED: libreoffice unavailable; open DOCX in Word."
   echo "QA files: $QA_DIR"
