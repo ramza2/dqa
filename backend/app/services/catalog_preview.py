@@ -112,7 +112,10 @@ def preview_catalog_query(session: Session, body: CatalogPreviewRequest) -> Cata
         base += " WHERE " + " AND ".join(where_parts)
     # Template-style bound limit. Returned placeholders are intentionally
     # unresolved: caller is NOT handed an executable plan or DB adapter.
-    sql_text = f"SELECT * FROM ({base}) q WHERE ROWNUM <= :p_limit"
+    outer_select = ", ".join(
+        f'q.{_ident(require_column(name).name)}' for name in body.columns
+    )
+    sql_text = f"SELECT {outer_select} FROM ({base}) q WHERE ROWNUM <= :p_limit"
     param_schema.append(QueryTemplateParameter(name="p_limit", type="integer"))
     params.append(CatalogPreviewParameter(name="p_limit", type="integer"))
     if not validate_sql_safety(sql_text, param_schema).safe:
