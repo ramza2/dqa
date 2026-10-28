@@ -25,6 +25,7 @@ export function CatalogGraphicalBuilder({
 }) {
   const sequence = useRef(0);
   const mounted = useRef(true);
+  const [tableQuery, setTableQuery] = useState("");
   const [tables, setTables] = useState<CatalogTableItem[]>([]);
   const [tableTotal, setTableTotal] = useState(0);
   const [tableState, setTableState] = useState<"idle" | "loading">("idle");
@@ -75,7 +76,7 @@ export function CatalogGraphicalBuilder({
     setTableError(null);
     setTableState("loading");
     try {
-      const result = await listTables(source, { limit: 500, offset: 0 });
+      const result = await listTables(source, { q: tableQuery.trim() || undefined, limit: 500, offset: 0 });
       if (!mounted.current || seq !== sequence.current) return;
       if (!identityMatches(result)) throw new Error("CATALOG_MISMATCH");
       setTables(result.items);
@@ -170,6 +171,21 @@ export function CatalogGraphicalBuilder({
         조건값은 입력·전송하지 않으며 바인드 자리표시자만 만듭니다.
         이 SQL로는 조회를 실행하거나 승인 템플릿을 생성할 수 없습니다.
       </p>
+      <label className="param-field">
+        <span className="param-label">테이블 검색어 (이름·설명)</span>
+        <input aria-label="테이블 검색어" value={tableQuery} maxLength={100}
+          disabled={!active || tableState === "loading"}
+          onChange={(event) => {
+            clearPreview();
+            setTableQuery(event.target.value);
+            setTables([]);
+            setTableTotal(0);
+            setSelectedTable("");
+            setColumns([]);
+            setSelectedColumns([]);
+            setPredicates([]);
+          }} />
+      </label>
       <div className="qa-actions">
         <button type="button" onClick={() => void fetchTables()}
           disabled={!active || tableState === "loading"}>
