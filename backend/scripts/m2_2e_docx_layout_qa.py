@@ -15,6 +15,12 @@ from io import BytesIO
 import json
 from pathlib import Path
 from zipfile import ZipFile
+import sys
+
+# Support both `python -m scripts.m2_2e_docx_layout_qa` and direct script launch.
+# Direct launch normally places only backend/scripts on sys.path, excluding tests/.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from docx import Document
 from docx.oxml.ns import qn
