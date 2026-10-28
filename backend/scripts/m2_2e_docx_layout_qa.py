@@ -78,8 +78,9 @@ def _inspect_docx(payload: bytes, *, expected: tuple[str, ...]) -> dict:
     assert details is not None, "column detail table is missing"
     assert details.autofit is False, "column detail table must be fixed width"
     widths = [round(c.width.cm, 2) for c in details.columns]
-    expected = [0.65, 4.05, 2.45, 1.75, 1.15, 7.75]
-    assert all(abs(a - b) < 0.03 for a, b in zip(widths, expected))
+    expected_widths_cm = [0.65, 4.05, 2.45, 1.75, 1.15, 7.75]
+    assert len(widths) == len(expected_widths_cm)
+    assert all(abs(a - b) < 0.03 for a, b in zip(widths, expected_widths_cm))
     assert sum(widths) <= 17.82, "table exceeds A4 writable width"
     assert widths[5] > widths[1], "DB COMMENT should be wider than Column"
     for table in doc.tables:
