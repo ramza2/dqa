@@ -882,3 +882,8 @@
 .qb-predicate label { display: flex; flex-direction: column; gap: 0.2rem; }
 .qb-predicate select { max-width: 240px; }
 .qb-sql { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16rem; overflow: auto; font: 0.82rem/1.6 var(--mono); }
+
+/* M3-C1 read-only template review list */
+.qb-review-list { list-style: none; padding: 0; }
+.qb-review-list li { border-bottom: 1px solid var(--border); padding: 0.55rem 0; }
+.qb-review-list button { margin-right: 0.4rem; }

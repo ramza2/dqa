@@ -1,4 +1,4 @@
-export type WorkflowDestination = "profiles" | "discovery" | "assistant";
+export type WorkflowDestination = "profiles" | "discovery" | "assistant" | "template-review";
 
 type Step = {
   number: string;
@@ -41,8 +41,10 @@ const STEPS: Step[] = [
   {
     number: "05",
     title: "Query Template 생성·승인",
-    description: "Catalog에서 선택한 테이블과 조건으로 SELECT 초안을 작성하고 안전성 검토 후 승인합니다.",
+    description: "템플릿 승인 상태·Catalog 호환성·SQL 안전성 조회 화면이 있습니다. 생성·승인 UI는 후속 개발입니다.",
     availability: "integration-pending",
+    actionLabel: "템플릿 검토 현황 보기 (읽기 전용)",
+    destination: "template-review",
   },
   {
     number: "06",
