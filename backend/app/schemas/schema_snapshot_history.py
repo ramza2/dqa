@@ -101,3 +101,42 @@ class SnapshotChangeReviewEventResponse(BaseModel):
     independent_preflight_verified: Literal[False] = False
     catalog_ready: Literal[False] = False
     catalog_activated: Literal[False] = False
+
+
+class SnapshotErdTable(BaseModel):
+    schema_name: str
+    table_name: str
+
+
+class SnapshotErdColumnMapping(BaseModel):
+    source: str
+    target: str
+
+
+class SnapshotErdEdge(BaseModel):
+    direction: Literal["IN", "OUT"]
+    constraint_name: str
+    source_schema: str
+    source_table: str
+    target_schema: str
+    target_table: str
+    referenced_only: bool
+    column_mapping: list[SnapshotErdColumnMapping]
+
+
+class SnapshotErdResponse(BaseModel):
+    """Sanitized ERD preview only. Never a raw snapshot or approval."""
+    source_name: str
+    revision_id: int
+    schema_fingerprint: str
+    preflight_status: Literal["NOT_VERIFIED"]
+    activation_eligible: Literal[False]
+    total_tables: int
+    offset: int
+    limit: int
+    tables: list[SnapshotErdTable]
+    focus_schema: str | None
+    focus_table: str | None
+    total_edges: int
+    edges_truncated: bool
+    edges: list[SnapshotErdEdge]
