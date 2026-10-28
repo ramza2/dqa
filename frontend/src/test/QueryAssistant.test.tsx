@@ -924,7 +924,9 @@ describe("M3-A model-free manual selection", () => {
     try {
       render(<QueryAssistant />);
       await screen.findByLabelText("Active Catalog source");
-      await user.click(screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" }));
+      const loadButton = screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" });
+      await waitFor(() => expect(loadButton).toBeEnabled());
+      await user.click(loadButton);
       const select = await screen.findByLabelText("승인 템플릿 직접 선택");
       await user.selectOptions(select, "10:20");
       expect(await screen.findByLabelText(/병동 코드/)).toBeInTheDocument();
@@ -939,11 +941,11 @@ describe("M3-A model-free manual selection", () => {
 
   it("clears source-scoped manual choices when the source changes", async () => {
     const user = userEvent.setup();
-    let pendingResolve: ((value: Response) => void) | null = null;
+    const pending = { resolve: null as ((value: Response) => void) | null };
     const handlers = assistantHandlers({ actives: [activeSource, secondSource] });
     handlers.unshift((url) => {
       if (url.pathname.endsWith("/query-executions/manual-templates")) {
-        return new Promise<Response>((resolve) => { pendingResolve = resolve; });
+        return new Promise<Response>((resolve) => { pending.resolve = resolve; });
       }
       return null;
     });
@@ -952,10 +954,12 @@ describe("M3-A model-free manual selection", () => {
       render(<QueryAssistant />);
       await screen.findByLabelText("Active Catalog source");
       await user.selectOptions(screen.getByLabelText("Active Catalog source"), activeSource.source_name);
-      await user.click(screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" }));
-      await waitFor(() => expect(pendingResolve).not.toBeNull());
+      const loadButton = screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" });
+      await waitFor(() => expect(loadButton).toBeEnabled());
+      await user.click(loadButton);
+      await waitFor(() => expect(pending.resolve).not.toBeNull());
       await user.selectOptions(screen.getByLabelText("Active Catalog source"), secondSource.source_name);
-      pendingResolve?.(jsonResponse(manualResponse));
+      pending.resolve?.(jsonResponse(manualResponse));
       await waitFor(() =>
         expect(screen.queryByLabelText("승인 템플릿 직접 선택")).not.toBeInTheDocument()
       );
@@ -976,7 +980,9 @@ describe("M3-A model-free manual selection", () => {
     try {
       render(<QueryAssistant />);
       await screen.findByLabelText("Active Catalog source");
-      await user.click(screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" }));
+      const loadButton = screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" });
+      await waitFor(() => expect(loadButton).toBeEnabled());
+      await user.click(loadButton);
       expect(await screen.findByRole("alert")).toHaveTextContent("Catalog revision changed");
       expect(screen.queryByLabelText("승인 템플릿 직접 선택")).not.toBeInTheDocument();
     } finally {
