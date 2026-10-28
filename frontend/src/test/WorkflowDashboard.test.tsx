@@ -9,7 +9,7 @@ describe("M2-0 workflow home", () => {
     expect(screen.getByRole("heading", { name: "DEMIS 데이터 연계 작업" })).toBeInTheDocument();
     const sequence = screen.getByRole("region", { name: "연계 작업 순서" });
     expect(sequence.querySelectorAll("li")).toHaveLength(6);
-    expect(screen.getAllByText("연계 작업 예정")).toHaveLength(4);
+    expect(screen.getAllByText("연계 작업 예정")).toHaveLength(3);
     expect(screen.getByText(/실제 DEMIS 접속 승인이나/)).toBeInTheDocument();
   });
 

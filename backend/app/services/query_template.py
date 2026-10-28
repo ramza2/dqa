@@ -407,14 +407,8 @@ def enable_query_template(session: Session, template_id: int) -> QueryTemplateDe
             QueryTemplateErrorCode.INVALID_TRANSITION,
             "only APPROVED current versions can be enabled",
         )
-    compatibility = _compatibility_view(
-        session, source_name=template.source_name, version=version
-    )
-    if not compatibility.compatible:
-        raise QueryTemplateError(
-            QueryTemplateErrorCode.INCOMPATIBLE_CATALOG,
-            "current Active Catalog is incompatible with pinned template version",
-        )
+    _assert_sql_safe_current(version)
+    _assert_catalog_compatible_current(session, template, version)
     if not template.enabled:
         template.enabled = True
         template.updated_at = datetime.now(timezone.utc)
@@ -473,6 +467,11 @@ def _transition_current_version(
             QueryTemplateErrorCode.INVALID_TRANSITION,
             f"transition {from_status} -> {to_status} is not allowed",
         )
+
+    # Approve is a server-side safety gate, not a UI-only check.
+    if to_status == APPROVAL_APPROVED:
+        _assert_sql_safe_current(version)
+        _assert_catalog_compatible_current(session, template, version)
 
     now = datetime.now(timezone.utc)
     version.approval_status = to_status
@@ -622,6 +621,33 @@ def _current_version(template: QueryTemplate) -> QueryTemplateVersion | None:
 
 def _has_reviewed_history(template: QueryTemplate) -> bool:
     return any(item.approval_status in _REVIEWED_STATUSES for item in template.versions)
+
+
+def _assert_sql_safe_current(version: QueryTemplateVersion) -> None:
+    """Fail closed when stored SQL fails the deterministic safety validator."""
+    report = validate_sql_safety(version.sql_text, version.parameter_schema)
+    if not report.safe:
+        first = report.issues[0].message if report.issues else "SQL safety validation failed"
+        raise QueryTemplateError(
+            QueryTemplateErrorCode.SQL_UNSAFE,
+            f"current template version failed SQL safety validation: {first}",
+        )
+
+
+def _assert_catalog_compatible_current(
+    session: Session,
+    template: QueryTemplate,
+    version: QueryTemplateVersion,
+) -> None:
+    """Fail closed when Active Catalog no longer matches the pinned revision."""
+    compatibility = _compatibility_view(
+        session, source_name=template.source_name, version=version
+    )
+    if not compatibility.compatible:
+        raise QueryTemplateError(
+            QueryTemplateErrorCode.INCOMPATIBLE_CATALOG,
+            "current Active Catalog is incompatible with pinned template version",
+        )
 
 
 def _assert_draft_mutable(template: QueryTemplate, version: QueryTemplateVersion) -> None:
