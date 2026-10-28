@@ -75,7 +75,7 @@ type HandlerOpts = {
   mutateStatus?: number;
   mutateCode?: string;
   mutateBody?: ReviewTemplateDetail;
-  onRequest?: (method: string, path: string, body: string | null) => void;
+  onRequest?: (method: string, path: string, body: string | null, url: URL) => void;
 };
 
 function handlers(opts?: HandlerOpts) {
@@ -84,7 +84,7 @@ function handlers(opts?: HandlerOpts) {
       const path = url.pathname;
       const method = init?.method ?? "GET";
       const body = typeof init?.body === "string" ? init.body : null;
-      opts?.onRequest?.(method, path, body);
+      opts?.onRequest?.(method, path, body, url);
       if (!path.startsWith("/api/v1/query-templates")) return null;
       if (opts?.denyList && method === "GET" && path === "/api/v1/query-templates") {
         return jsonResponse({
@@ -165,9 +165,10 @@ describe("M3-C2 template authoring and review workflow", () => {
     } finally { restore(); }
   });
 
-  it("creates a DRAFT through the existing create API", async () => {
+  it("creates a DRAFT and reloads the list with the created source_name", async () => {
     const user = userEvent.setup();
     const posts: string[] = [];
+    const listSourceFilters: string[] = [];
     const created: ReviewTemplateDetail = {
       ...detail,
       id: 21,
@@ -178,12 +179,17 @@ describe("M3-C2 template authoring and review workflow", () => {
       mutateBody: created,
       detail: created,
       list: { ...listing, items: [{ ...row, approval_status: "DRAFT" }] },
-      onRequest: (method, path) => {
+      onRequest: (method, path, _body, url) => {
         if (method === "POST") posts.push(path);
+        if (method === "GET" && path === "/api/v1/query-templates") {
+          listSourceFilters.push(url.searchParams.get("source_name") ?? "");
+        }
       },
     }));
     try {
       render(<TemplateReviewPortal />);
+      // Source filter starts empty; create must not list with stale "".
+      expect(screen.getByLabelText("템플릿 Source 필터")).toHaveValue("");
       await user.click(screen.getByRole("button", { name: "새 템플릿 DRAFT 작성" }));
       await user.clear(screen.getByLabelText("작성 stable_key"));
       await user.type(screen.getByLabelText("작성 stable_key"), "ward.lookup");
@@ -193,11 +199,13 @@ describe("M3-C2 template authoring and review workflow", () => {
       await user.type(screen.getByLabelText("작성 Source 이름"), "oracle_demis_mock");
       await user.click(screen.getByRole("button", { name: "DRAFT 생성" }));
       await waitFor(() => expect(posts).toContain("/api/v1/query-templates"));
+      await waitFor(() => expect(listSourceFilters).toContain("oracle_demis_mock"));
       expect(await screen.findByText("DRAFT 템플릿을 생성했습니다.")).toBeInTheDocument();
+      expect(screen.getByLabelText("템플릿 Source 필터")).toHaveValue("oracle_demis_mock");
     } finally { restore(); }
   });
 
-  it("submits DRAFT for review via submit-review", async () => {
+  it("submits DRAFT for review via submit-review when editor matches server", async () => {
     const user = userEvent.setup();
     const draftDetail: ReviewTemplateDetail = {
       ...detail,
@@ -222,10 +230,38 @@ describe("M3-C2 template authoring and review workflow", () => {
       await user.click(screen.getByRole("button", { name: "템플릿 목록 조회" }));
       await user.click(await screen.findByRole("button", { name: "검토 대상 병동 조회" }));
       await screen.findByTestId("template-draft-editor");
+      expect(screen.getByRole("button", { name: "검토 제출" })).toBeEnabled();
       await user.click(screen.getByRole("button", { name: "검토 제출" }));
       await waitFor(() =>
         expect(posts).toContain("/api/v1/query-templates/21/submit-review"),
       );
+    } finally { restore(); }
+  });
+
+  it("blocks review submit while unsaved DRAFT edits remain", async () => {
+    const user = userEvent.setup();
+    const draftDetail: ReviewTemplateDetail = {
+      ...detail,
+      approval_status: "DRAFT",
+      version: { ...detail.version, approval_status: "DRAFT" },
+    };
+    const posts: string[] = [];
+    const restore = installFetchMock(handlers({
+      list: { ...listing, items: [{ ...row, approval_status: "DRAFT" }] },
+      detail: draftDetail,
+      onRequest: (method, path) => {
+        if (method === "POST") posts.push(path);
+      },
+    }));
+    try {
+      render(<TemplateReviewPortal />);
+      await user.click(screen.getByRole("button", { name: "템플릿 목록 조회" }));
+      await user.click(await screen.findByRole("button", { name: "검토 대상 병동 조회" }));
+      await screen.findByTestId("template-draft-editor");
+      await user.type(screen.getByLabelText("DRAFT SQL"), "\n-- unsaved");
+      expect(screen.getByRole("button", { name: "검토 제출" })).toBeDisabled();
+      expect(screen.getByText(/저장되지 않은 변경이 있습니다/)).toBeInTheDocument();
+      expect(posts).not.toContain("/api/v1/query-templates/21/submit-review");
     } finally { restore(); }
   });
 

@@ -104,6 +104,26 @@ function formFromDetail(detail: ReviewTemplateDetail): DraftForm {
   };
 }
 
+/** True when the editor matches the last server-loaded DRAFT snapshot. */
+function draftFormMatchesServer(form: DraftForm, detail: ReviewTemplateDetail): boolean {
+  if (form.name.trim() !== detail.name.trim()) return false;
+  if ((form.description.trim() || "") !== (detail.description ?? "").trim()) return false;
+  const formSchemas = parseSchemas(form.target_schemas);
+  if (formSchemas.length !== detail.target_schemas.length
+      || formSchemas.some((name, i) => name !== detail.target_schemas[i])) {
+    return false;
+  }
+  if (form.sql_text !== detail.version.sql_text) return false;
+  if (Number(form.row_limit) !== detail.version.row_limit) return false;
+  if (Number(form.timeout_seconds) !== detail.version.timeout_seconds) return false;
+  try {
+    const parsed = parseParameters(form.parameter_schema_json);
+    return JSON.stringify(parsed) === JSON.stringify(detail.version.parameter_schema);
+  } catch {
+    return false;
+  }
+}
+
 function detailMatchesSummary(
   detail: ReviewTemplateDetail,
   safety: TemplateSqlSafetyReview,
@@ -188,19 +208,24 @@ export function TemplateReviewPortal() {
     setListBusy(false);
   };
 
-  const loadList = async (offset = 0, options?: { keepDetail?: boolean }) => {
+  const loadList = async (
+    offset = 0,
+    options?: { keepDetail?: boolean; sourceFilter?: string },
+  ) => {
     const seq = ++sequence.current;
+    // Prefer an explicit filter (e.g. just-created source) over stale React state.
+    const filter = options?.sourceFilter ?? sourceName;
     if (!options?.keepDetail) clearDetail();
     if (!options?.keepDetail) setPage(null);
     setListError(null);
     setListBusy(true);
     try {
-      const result = await listReviewTemplates(sourceName, offset);
+      const result = await listReviewTemplates(filter, offset);
       if (!mounted.current || seq !== sequence.current) return;
       if (result.limit !== PAGE_SIZE || result.offset !== offset ||
           !Array.isArray(result.items) || result.items.length > PAGE_SIZE ||
           result.items.some((item) =>
-            (sourceName.trim() !== "" && item.source_name !== sourceName.trim()) ||
+            (filter.trim() !== "" && item.source_name !== filter.trim()) ||
             !Number.isSafeInteger(item.id) || item.id <= 0)) {
         setListError("템플릿 목록 응답이 요청 범위와 일치하지 않습니다.");
         return;
@@ -359,7 +384,10 @@ export function TemplateReviewPortal() {
       setShowCreate(false);
       setCreateForm(EMPTY_CREATE);
       setSourceName(created.source_name);
-      await loadList(0, { keepDetail: true });
+      await loadList(0, {
+        keepDetail: true,
+        sourceFilter: created.source_name,
+      });
       await refreshSelected(created.id);
       if (mounted.current) {
         setActionNotice("DRAFT 템플릿을 생성했습니다.");
@@ -400,6 +428,27 @@ export function TemplateReviewPortal() {
       );
     }
   };
+
+  const onSubmitReview = async () => {
+    if (!detail || !editForm || detail.approval_status !== "DRAFT") return;
+    if (!draftFormMatchesServer(editForm, detail)) {
+      setActionError("저장되지 않은 DRAFT 변경이 있습니다. 먼저 DRAFT 저장 후 제출하세요.");
+      setActionNotice(null);
+      return;
+    }
+    await runMutation(
+      detail,
+      () => submitReviewTemplate(detail.id, reviewNote.trim() || undefined),
+      "검토 제출했습니다.",
+    );
+  };
+
+  const draftDirty = Boolean(
+    detail
+      && editForm
+      && detail.approval_status === "DRAFT"
+      && !draftFormMatchesServer(editForm, detail),
+  );
 
   const canApproveOrEnable = Boolean(
     detail && safety
@@ -613,15 +662,17 @@ export function TemplateReviewPortal() {
                     <input aria-label="검토 제출 메모" value={reviewNote}
                       onChange={(e) => setReviewNote(e.target.value)} />
                   </label>
+                  {draftDirty ? (
+                    <p role="status" className="muted">
+                      저장되지 않은 변경이 있습니다. 검토 제출은 서버에 저장된 DRAFT만 대상으로 합니다.
+                    </p>
+                  ) : null}
                   <div className="qa-actions">
                     <button type="button" disabled={actionBusy}
                       onClick={() => void onSaveDraft()}>DRAFT 저장</button>
-                    <button type="button" disabled={actionBusy}
-                      onClick={() => void runMutation(
-                        detail,
-                        () => submitReviewTemplate(detail.id, reviewNote.trim() || undefined),
-                        "검토 제출했습니다.",
-                      )}>검토 제출</button>
+                    <button type="button" aria-label="검토 제출"
+                      disabled={actionBusy || draftDirty}
+                      onClick={() => void onSubmitReview()}>검토 제출</button>
                   </div>
                 </div>
               ) : (
