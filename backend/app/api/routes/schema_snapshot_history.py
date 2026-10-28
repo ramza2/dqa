@@ -24,6 +24,9 @@ from app.services.schema_snapshot_history import (
 )
 from app.services.schema_snapshot_erd import SnapshotErdError, build_snapshot_erd
 from app.services.schema_snapshot_report import SnapshotReportError, build_snapshot_table_docx
+from app.services.schema_snapshot_schema_bundle import (
+    SnapshotSchemaBundleError, build_snapshot_schema_zip,
+)
 from app.services.schema_snapshot_review import (
     SnapshotReviewError, preview_snapshot_review,
 )
@@ -229,6 +232,65 @@ def post_change_review_event(
 _DOCX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
+
+
+@router.get("/{revision_id}/schema-report.zip")
+def download_snapshot_schema_bundle(
+    revision_id: int,
+    source_name: str = Query(
+        min_length=1, max_length=255,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,254}$",
+    ),
+    schema_name: str = Query(min_length=1, max_length=255),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=10, ge=1, le=10),
+    session: Session = Depends(get_db_session),
+    _actor: AuthenticatedActor = Depends(require_permission(Permission.CATALOG_MANAGE)),
+) -> Response:
+    """Download one bounded, immutable schema DOCX ZIP part, never clinical rows."""
+    row = get_snapshot_revision(session, revision_id, source_name=source_name)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "SNAPSHOT_REVISION_NOT_FOUND", "message": "snapshot not found"},
+        )
+    try:
+        content, total, next_offset = build_snapshot_schema_zip(
+            row, schema_name=schema_name, offset=offset, limit=limit,
+        )
+    except SnapshotSchemaBundleError as exc:
+        if exc.code == "SNAPSHOT_SCHEMA_EXPORT_SCHEMA_NOT_FOUND":
+            code, http_status = exc.code, 404
+        elif exc.code == "SNAPSHOT_SCHEMA_EXPORT_RANGE_NOT_SATISFIABLE":
+            code, http_status = exc.code, 416
+        elif exc.code == "SNAPSHOT_SCHEMA_EXPORT_INVALID_RANGE":
+            code, http_status = exc.code, 422
+        elif exc.code == "SNAPSHOT_SCHEMA_EXPORT_TOO_LARGE":
+            code, http_status = exc.code, 413
+        elif exc.code == "SNAPSHOT_SCHEMA_EXPORT_UNVERIFIABLE":
+            code, http_status = exc.code, 409
+        else:
+            code, http_status = "SNAPSHOT_SCHEMA_EXPORT_FAILED", 500
+        raise HTTPException(
+            status_code=http_status,
+            detail={"code": code, "message": "schema export unavailable"},
+        ) from None
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="dqa-snapshot-{revision_id}-schema-batch-{offset}.zip"'
+            ),
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+            "X-Content-Type-Options": "nosniff",
+            "X-DQA-Schema-Total-Tables": str(total),
+            "X-DQA-Schema-Next-Offset": (
+                str(next_offset) if next_offset is not None else "-1"
+            ),
+        },
+    )
 
 
 @router.get("/{revision_id}/report.docx")
