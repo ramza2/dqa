@@ -463,6 +463,7 @@ class QueryTemplateNoteRequest(BaseModel):
 
     note: str | None = Field(default=None, max_length=MAX_NOTE_LENGTH)
     expected_version_id: int | None = Field(default=None, gt=0)
+    expected_updated_at: datetime | None = None
 
 
 class QueryTemplateRejectRequest(BaseModel):
@@ -470,6 +471,7 @@ class QueryTemplateRejectRequest(BaseModel):
 
     note: str = Field(min_length=1, max_length=MAX_NOTE_LENGTH)
     expected_version_id: int | None = Field(default=None, gt=0)
+    expected_updated_at: datetime | None = None
 
     @field_validator("note")
     @classmethod

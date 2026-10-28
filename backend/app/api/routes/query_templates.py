@@ -203,6 +203,7 @@ def submit_review(
         return submit_query_template_for_review(
             session, template_id, note=note, actor=actor.actor_id,
             expected_version_id=body.expected_version_id if body else None,
+            expected_updated_at=body.expected_updated_at if body else None,
         )
     except QueryTemplateError as exc:
         raise _template_http_error(exc) from exc
@@ -222,6 +223,7 @@ def approve(
         return approve_query_template(
             session, template_id, note=note, actor=actor.actor_id,
             expected_version_id=body.expected_version_id if body else None,
+            expected_updated_at=body.expected_updated_at if body else None,
         )
     except QueryTemplateError as exc:
         raise _template_http_error(exc) from exc
@@ -240,6 +242,7 @@ def reject(
         return reject_query_template(
             session, template_id, note=body.note, actor=actor.actor_id,
             expected_version_id=body.expected_version_id,
+            expected_updated_at=body.expected_updated_at,
         )
     except QueryTemplateError as exc:
         raise _template_http_error(exc) from exc

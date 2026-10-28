@@ -228,6 +228,7 @@ def submit_query_template_for_review(
     note: str | None = None,
     actor: str | None = None,
     expected_version_id: int | None = None,
+    expected_updated_at: datetime | None = None,
 ) -> QueryTemplateDetail:
     return _transition_current_version(
         session,
@@ -236,6 +237,7 @@ def submit_query_template_for_review(
         note=note,
         actor=actor,
         expected_version_id=expected_version_id,
+        expected_updated_at=expected_updated_at,
     )
 
 
@@ -246,6 +248,7 @@ def approve_query_template(
     note: str | None = None,
     actor: str | None = None,
     expected_version_id: int | None = None,
+    expected_updated_at: datetime | None = None,
 ) -> QueryTemplateDetail:
     return _transition_current_version(
         session,
@@ -254,6 +257,7 @@ def approve_query_template(
         note=note,
         actor=actor,
         expected_version_id=expected_version_id,
+        expected_updated_at=expected_updated_at,
     )
 
 
@@ -264,6 +268,7 @@ def reject_query_template(
     note: str,
     actor: str | None = None,
     expected_version_id: int | None = None,
+    expected_updated_at: datetime | None = None,
 ) -> QueryTemplateDetail:
     return _transition_current_version(
         session,
@@ -272,6 +277,7 @@ def reject_query_template(
         note=note,
         actor=actor,
         expected_version_id=expected_version_id,
+        expected_updated_at=expected_updated_at,
     )
 
 
@@ -459,6 +465,7 @@ def _transition_current_version(
     note: str | None,
     actor: str | None,
     expected_version_id: int | None = None,
+    expected_updated_at: datetime | None = None,
 ) -> QueryTemplateDetail:
     repo = QueryTemplateRepository(session)
     template = repo.get_by_id_for_update(template_id)
@@ -479,6 +486,16 @@ def _transition_current_version(
         raise QueryTemplateError(
             QueryTemplateErrorCode.STALE_VERSION,
             "template version changed; reload before submitting the action",
+        )
+
+    if expected_updated_at is not None and (
+        template.updated_at is None
+        or template.updated_at.astimezone(timezone.utc)
+           != expected_updated_at.astimezone(timezone.utc)
+    ):
+        raise QueryTemplateError(
+            QueryTemplateErrorCode.STALE_VERSION,
+            "template metadata changed; reload before submitting the action",
         )
 
     from_status = version.approval_status
