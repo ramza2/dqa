@@ -59,7 +59,7 @@ STARTED=1
 
 ready=0
 for _ in $(seq 1 45); do
-  if docker exec "$NAME" pg_isready -q -U dqa -d dqa; then
+  if docker exec "$NAME" pg_isready -q -h 127.0.0.1 -p 5432 -U dqa -d dqa; then
     ready=1
     break
   fi
