@@ -165,3 +165,23 @@ def test_corrupt_endpoint_reports_sanitized_409(client, monkeypatch):
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "SNAPSHOT_SCHEMA_EXPORT_UNVERIFIABLE"
     assert "PRIVATE_TEXT" not in response.text
+
+
+def test_failure_in_second_table_never_returns_part(monkeypatch):
+    from app.services import schema_snapshot_schema_bundle as service
+    from app.services.schema_snapshot_report import SnapshotReportError
+
+    row = _stored()
+    original = service.build_snapshot_table_docx
+    calls = []
+
+    def fail_second(snapshot_row, *, schema_name, table_name):
+        calls.append(table_name)
+        if len(calls) == 2:
+            raise SnapshotReportError("SNAPSHOT_REPORT_SCOPE_TOO_LARGE")
+        return original(snapshot_row, schema_name=schema_name, table_name=table_name)
+
+    monkeypatch.setattr(service, "build_snapshot_table_docx", fail_second)
+    with pytest.raises(SnapshotSchemaBundleError, match="SNAPSHOT_SCHEMA_EXPORT_TOO_LARGE"):
+        build_snapshot_schema_zip(row, schema_name=SCHEMA, offset=0, limit=3)
+    assert calls == ["TB_ALPHA", "TB_BETA"]
