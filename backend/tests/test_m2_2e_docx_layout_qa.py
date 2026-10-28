@@ -10,7 +10,9 @@ import pytest
 
 from docx import Document
 
-from scripts.m2_2e_docx_layout_qa import generate
+from scripts.m2_2e_docx_layout_qa import _inspect_docx, generate
+from tests.test_m2_2c_snapshot_report import _stored as standard_row
+from app.services.schema_snapshot_report import build_snapshot_table_docx
 
 
 def test_qa_generator_produces_standard_stress_and_complete_batch(tmp_path):
@@ -73,3 +75,14 @@ def test_qa_cli_entrypoints_find_backend_tests_package(tmp_path, entrypoint):
     assert manifest["structural_checks"] == "PASS"
     assert manifest["visual_check"] == "PENDING_RENDER_AND_HUMAN_INSPECTION"
     assert (target / "single-table-korean-stress.docx").is_file()
+
+
+def test_layout_checker_preserves_expected_text_token_validation():
+    """Width assertions must not overwrite the required document text tokens."""
+    row = standard_row()
+    content = build_snapshot_table_docx(
+        row, schema_name="DEMIS_OWNER", table_name="TB_MOCK",
+    )
+    assert _inspect_docx(content, expected=("PK_MOCK", "DEMIS_OWNER"))["a4_portrait"]
+    with pytest.raises(AssertionError, match="expected term omitted"):
+        _inspect_docx(content, expected=("SENTINEL_MISSING_FROM_DOCUMENT",))
