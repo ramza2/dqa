@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DataDiscoveryPortal } from "./components/DataDiscoveryPortal";
 import { QueryAssistant } from "./components/QueryAssistant";
+import { TemplateReviewPortal } from "./components/TemplateReviewPortal";
 import { ConnectionProfilePortal } from "./components/ConnectionProfilePortal";
 import { WorkflowDashboard, type WorkflowDestination } from "./components/WorkflowDashboard";
 import "./App.css";
@@ -12,6 +13,7 @@ const NAV_ITEMS: { view: AppView; label: string }[] = [
   { view: "profiles", label: "DB 연결 관리" },
   { view: "discovery", label: "스키마·Catalog" },
   { view: "assistant", label: "조회 시험" },
+  { view: "template-review", label: "템플릿 검토" },
 ];
 
 export default function App() {
@@ -40,6 +42,7 @@ export default function App() {
       {view === "profiles" ? <ConnectionProfilePortal /> : null}
       {view === "discovery" ? <DataDiscoveryPortal /> : null}
       {view === "assistant" ? <QueryAssistant /> : null}
+      {view === "template-review" ? <TemplateReviewPortal /> : null}
     </div>
   );
 }
