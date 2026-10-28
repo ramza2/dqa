@@ -75,7 +75,7 @@ def _grid(
         cell_margins = table._tbl.tblPr.find(qn("w:tblCellMar"))
         if cell_margins is None:
             cell_margins = OxmlElement("w:tblCellMar")
-            table._tbl.tblPr.append(cell_margins)
+            table._tbl.tblPr.insert_element_before(cell_margins, "w:tblLook")
         for side in ("start", "end"):
             margin = cell_margins.find(qn("w:" + side))
             if margin is None:
