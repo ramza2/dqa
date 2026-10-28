@@ -358,10 +358,12 @@ export function TemplateReviewPortal() {
       });
       setShowCreate(false);
       setCreateForm(EMPTY_CREATE);
-      setActionNotice("DRAFT 템플릿을 생성했습니다.");
       setSourceName(created.source_name);
-      await loadList(0);
+      await loadList(0, { keepDetail: true });
       await refreshSelected(created.id);
+      if (mounted.current) {
+        setActionNotice("DRAFT 템플릿을 생성했습니다.");
+      }
     } catch (error) {
       setActionError(
         error instanceof SyntaxError
