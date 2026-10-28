@@ -16,7 +16,7 @@ docker image inspect "$IMAGE" >/dev/null 2>&1 || {
   echo "M3B_REFUSED: local pgvector/pgvector:pg16 image missing"
   exit 1
 }
-NAME="dqa-m3b-${$}-${RANDOM}"
+NAME="dqa-m3b-$-$RANDOM"
 STARTED=0
 cleanup() {
   if [[ "$STARTED" == "1" ]]; then
