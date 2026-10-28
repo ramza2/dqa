@@ -70,7 +70,7 @@ def test_preview_only_and_no_values_or_adapter(
         {"name": "p_limit", "column": None, "type": "integer"},
     ]
     assert body["sql_text"] == (
-        'SELECT * FROM (SELECT "ID", "WARD_CD" FROM "DEMIS_OWNER"."T1" '
+        'SELECT q."ID", q."WARD_CD" FROM (SELECT "ID", "WARD_CD" FROM "DEMIS_OWNER"."T1" '
         'WHERE "WARD_CD" = :p1) q WHERE ROWNUM <= :p_limit'
     )
     assert res.headers["cache-control"] == "no-store, private"
