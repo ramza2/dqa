@@ -1,7 +1,12 @@
 """M2-2E synthetic report structure QA without DB or LibreOffice."""
 import json
 from io import BytesIO
+from pathlib import Path
+import subprocess
+import sys
 from zipfile import ZipFile
+
+import pytest
 
 from docx import Document
 
@@ -37,3 +42,29 @@ def test_qa_generator_produces_standard_stress_and_complete_batch(tmp_path):
                 content = archive.read(entry["file"])
                 assert content.startswith(b"PK")
                 assert Document(BytesIO(content)).tables
+
+
+@pytest.mark.parametrize("entrypoint", ["module", "file"])
+def test_qa_cli_entrypoints_find_backend_tests_package(tmp_path, entrypoint):
+    """A subprocess catches the sys.path bug that regular pytest masked."""
+    backend_root = Path(__file__).resolve().parents[1]
+    target = tmp_path / entrypoint
+    command = (
+        [sys.executable, "-m", "scripts.m2_2e_docx_layout_qa"]
+        if entrypoint == "module"
+        else [sys.executable, "scripts/m2_2e_docx_layout_qa.py"]
+    )
+    completed = subprocess.run(
+        command + ["--out-dir", str(target)],
+        cwd=backend_root,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + "\n" + completed.stderr
+    assert "M2_2E_STRUCTURAL_QA_PASS" in completed.stdout
+    manifest = json.loads((target / "qa-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["structural_checks"] == "PASS"
+    assert manifest["visual_check"] == "PENDING_RENDER_AND_HUMAN_INSPECTION"
+    assert (target / "single-table-korean-stress.docx").is_file()
