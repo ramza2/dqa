@@ -162,6 +162,48 @@ export async function apiGetDocx(
   return body;
 }
 
+export interface SchemaZipResponse {
+  blob: Blob;
+  totalTables: number;
+  nextOffset: number | null;
+}
+
+/** Same authentication and sanitized errors; schema reports are limited to 10 MB. */
+export async function apiGetSchemaZip(
+  path: string,
+  query?: Record<string, string | number | boolean | undefined | null>,
+  init?: RequestInit,
+): Promise<SchemaZipResponse> {
+  const response = await fetch(buildUrl(path, query), {
+    ...init,
+    method: "GET",
+    headers: mergeRequestHeaders(init),
+  });
+  if (!response.ok) throw await parseError(response);
+  const mime = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
+  if (mime !== "application/zip") {
+    throw new Error("Unexpected schema archive content type");
+  }
+  const totalHeader = response.headers.get("X-DQA-Schema-Total-Tables");
+  const nextHeader = response.headers.get("X-DQA-Schema-Next-Offset");
+  if (!totalHeader || !/^[0-9]+$/.test(totalHeader) || !nextHeader
+      || !/^(?:-1|[0-9]+)$/.test(nextHeader)) {
+    throw new Error("Unverifiable schema archive paging metadata");
+  }
+  const totalTables = Number(totalHeader);
+  const parsedNext = Number(nextHeader);
+  if (!Number.isSafeInteger(totalTables) || totalTables < 1
+      || !Number.isSafeInteger(parsedNext)
+      || (parsedNext !== -1 && (parsedNext < 1 || parsedNext >= totalTables))) {
+    throw new Error("Invalid schema archive paging metadata");
+  }
+  const blob = await response.blob();
+  if (blob.size < 4 || blob.size > 10_000_000) {
+    throw new Error("Invalid schema archive size");
+  }
+  return { blob, totalTables, nextOffset: parsedNext === -1 ? null : parsedNext };
+}
+
 export async function apiPost<TRequest, TResponse>(
   path: string,
   body: TRequest,

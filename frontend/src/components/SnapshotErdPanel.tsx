@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getSnapshotErd, getSnapshotTableReportDocx } from "../api/schemaSnapshot";
+import { getSnapshotErd, getSnapshotTableReportDocx, getSnapshotSchemaBatchZip } from "../api/schemaSnapshot";
 import type { SnapshotErdResponse, SnapshotSummary } from "../types/schemaSnapshot";
 import { readSnapshotWithDeadline } from "../utils/snapshotPanelDeadline";
 
@@ -44,6 +44,11 @@ export function SnapshotErdPanel({ snapshot }: { snapshot: SnapshotSummary }) {
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const sequence = useRef(0);
   const [reportStatus, setReportStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [batchStatus, setBatchStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [batchSize, setBatchSize] = useState(5);
+  const [batchProgress, setBatchProgress] = useState<{
+    schema: string; lastOffset: number; nextOffset: number | null; total: number;
+  } | null>(null);
 
   // Parent uses Source/Revision/Fingerprint as the component key.
   useEffect(() => () => { sequence.current += 1; }, []);
@@ -52,6 +57,9 @@ export function SnapshotErdPanel({ snapshot }: { snapshot: SnapshotSummary }) {
     const id = ++sequence.current;
     setStatus("loading");
     setData(null);
+    // Invalidate any earlier report download state when the selected table changes.
+    setReportStatus("idle");
+    setBatchStatus("idle");
     try {
       const result = await readSnapshotWithDeadline(signal => getSnapshotErd(
         snapshot.source_name, snapshot.id,
@@ -95,6 +103,44 @@ export function SnapshotErdPanel({ snapshot }: { snapshot: SnapshotSummary }) {
       setReportStatus("idle");
     } catch {
       if (sequence.current === current) setReportStatus("error");
+    }
+  };
+
+  const downloadSchemaPart = async (schema: string) => {
+    const token = sequence.current;
+    const offset = batchProgress?.schema === schema
+      ? (batchProgress.nextOffset ?? 0) : 0;
+    setBatchStatus("loading");
+    try {
+      const result = await readSnapshotWithDeadline(signal => getSnapshotSchemaBatchZip(
+        snapshot.source_name, snapshot.id, schema, offset, batchSize, { signal },
+      ));
+      if (sequence.current !== token) return;
+      // These paging headers are informational and scoped to the requested part.
+      if (result.nextOffset !== null &&
+          (result.nextOffset <= offset || result.nextOffset > offset + batchSize)) {
+        setBatchStatus("error");
+        return;
+      }
+      const url = URL.createObjectURL(result.blob);
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "dqa-snapshot-" + snapshot.id + "-schema-batch-" + offset + ".zip";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      setBatchProgress({
+        schema, lastOffset: offset,
+        nextOffset: result.nextOffset,
+        total: result.totalTables,
+      });
+      setBatchStatus("idle");
+    } catch {
+      if (sequence.current === token) setBatchStatus("error");
     }
   };
 
@@ -163,6 +209,45 @@ export function SnapshotErdPanel({ snapshot }: { snapshot: SnapshotSummary }) {
                   선택 테이블 DB 분석서 DOCX (관리자)
                 </button>
                 <span className="muted">선택 테이블 1개만 · 미승인 메타데이터 · 외부 공유 주의</span>
+
+              <div className="dd-action-row">
+                <label>
+                  스키마 ZIP 묶음 크기
+                  <select aria-label="스키마 ZIP 묶음 크기"
+                    value={batchSize}
+                    disabled={batchStatus === "loading"}
+                    onChange={event => setBatchSize(Number(event.target.value))}>
+                    <option value={1}>1개</option>
+                    <option value={5}>5개</option>
+                    <option value={10}>10개</option>
+                  </select>
+                </label>
+                <button type="button" className="dd-secondary-btn"
+                  disabled={batchStatus === "loading" || reportStatus === "loading"}
+                  onClick={() => void downloadSchemaPart(data.focus_schema!)}>
+                  스키마 DOCX 묶음 ZIP (관리자)
+                </button>
+                <span className="muted">
+                  {data.focus_schema}의 모든 테이블을 이름순으로 나누어 다운로드 ·
+                  파일별 manifest 포함 · 미승인 메타데이터
+                </span>
+              </div>
+              {batchStatus === "loading" ? <p role="status">스키마 분석서 묶음 생성 중…</p> : null}
+              {batchStatus === "error" ? (
+                <p className="banner banner-error" role="alert">
+                  스키마 분석서 묶음 다운로드 실패: 권한, 데이터 정합성 또는 허용 크기를 확인하세요.
+                </p>
+              ) : null}
+              {batchProgress?.schema === data.focus_schema ? (
+                <p className="dd-guidance" data-testid="schema-report-progress">
+                  {batchProgress.lastOffset + 1}번째부터 다운로드 완료 /
+                  스키마 전체 {batchProgress.total}개 테이블.
+                  {batchProgress.nextOffset !== null
+                    ? " 다음 묶음 시작: " + (batchProgress.nextOffset + 1) + "번째"
+                    : " 마지막 묶음까지 완료. 다시 다운로드하면 처음부터 시작합니다."}
+                </p>
+              ) : null}
+
               </div>
               {reportStatus === "error" ? (
                 <p className="banner banner-error" role="alert">

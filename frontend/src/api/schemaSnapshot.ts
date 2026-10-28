@@ -1,4 +1,4 @@
-import { apiGet, apiGetDocx } from "./client";
+import { apiGet, apiGetDocx, apiGetSchemaZip, type SchemaZipResponse } from "./client";
 import type {
   SnapshotDetail,
   SnapshotErdResponse,
@@ -72,5 +72,20 @@ export function getSnapshotTableReportDocx(
     base + "/" + revisionId + "/report.docx",
     { source_name: sourceName, schema_name: schemaName, table_name: tableName },
     init,
+  );
+}
+
+
+/** Admin-only, ten-table maximum ZIP slice of an immutable Snapshot schema. */
+export function getSnapshotSchemaBatchZip(
+  sourceName: string, revisionId: number, schemaName: string,
+  offset: number, limit: number, init?: RequestInit,
+): Promise<SchemaZipResponse> {
+  return apiGetSchemaZip(
+    base + "/" + revisionId + "/schema-report.zip",
+    {
+      source_name: sourceName, schema_name: schemaName,
+      offset, limit,
+    }, init,
   );
 }
