@@ -14,6 +14,7 @@ from app.api.routes import (
     health,
     parameter_extraction,
     query_executions,
+    query_builder,
     query_templates,
     recommendations,
     schema_inspector,
@@ -34,6 +35,7 @@ api_router.include_router(query_templates.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(parameter_extraction.router)
 api_router.include_router(query_executions.router)
+api_router.include_router(query_builder.router)
 api_router.include_router(connection_profiles.router)
 api_router.include_router(schema_inspector.router)
 api_router.include_router(schema_snapshot_history.router)
