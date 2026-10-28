@@ -34,6 +34,11 @@ def test_qa_generator_produces_standard_stress_and_complete_batch(tmp_path):
     cells = [c.text for table in doc.tables for row in table.rows for c in row.cells]
     assert any("LONG_IDENTIFIER" in text for text in cells)
     assert any("한글" in text for text in cells)
+    widths = [round(column.width.cm, 2) for column in doc.tables[2].columns]
+    assert widths == [0.65, 4.05, 2.45, 1.75, 1.15, 7.75]
+    assert doc.tables[2].autofit is False
+    assert result["documents"]["single-table-korean-stress.docx"]["column_detail_widths_cm"] == widths
+    assert widths[5] > widths[1]
     for batch in result["zip_parts"]:
         with ZipFile(tmp_path / batch["file"]) as archive:
             assert "manifest.json" in archive.namelist()
