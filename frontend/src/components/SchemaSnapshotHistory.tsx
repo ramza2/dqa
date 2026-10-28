@@ -5,6 +5,7 @@ import {
 } from "../api/schemaSnapshot";
 import { CatalogApiError } from "../types/catalog";
 import { SnapshotCatalogContext } from "./SnapshotCatalogContext";
+import { SnapshotErdPanel } from "./SnapshotErdPanel";
 import { SnapshotReviewGates } from "./SnapshotReviewGates";
 import { OfflineMetadataSummaryPanel } from "./OfflineMetadataSummaryPanel";
 import { isSafeSnapshotReviewPreview } from "../utils/snapshotReviewGates";
@@ -370,6 +371,10 @@ export function SchemaSnapshotHistory() {
           {preview.status === "ready" && preview.data ? (
             <SnapshotReviewGates preview={preview.data} />
           ) : null}
+          <SnapshotErdPanel
+            key={"erd:" + selection.source_name + ":" + selection.id + ":" + selection.schema_fingerprint}
+            snapshot={selection}
+          />
           <OfflineMetadataSummaryPanel
             key={selection.source_name + ":" + selection.id + ":" + selection.schema_fingerprint}
             snapshot={selection}

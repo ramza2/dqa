@@ -63,3 +63,30 @@ export interface SnapshotReviewEvent {
   catalog_ready?: false;
   catalog_activated?: false;
 }
+
+
+export interface SnapshotErdResponse {
+  source_name: string;
+  revision_id: number;
+  schema_fingerprint: string;
+  preflight_status: "NOT_VERIFIED";
+  activation_eligible: false;
+  total_tables: number;
+  offset: number;
+  limit: number;
+  tables: { schema_name: string; table_name: string }[];
+  focus_schema: string | null;
+  focus_table: string | null;
+  total_edges: number;
+  edges_truncated: boolean;
+  edges: {
+    direction: "IN" | "OUT";
+    constraint_name: string;
+    source_schema: string;
+    source_table: string;
+    target_schema: string;
+    target_table: string;
+    referenced_only: boolean;
+    column_mapping: { source: string; target: string }[];
+  }[];
+}
