@@ -1,6 +1,7 @@
 import { apiGet, apiPost } from "./client";
 import type {
   ExecutionFormResponse,
+  ManualTemplateListResponse,
   ExecutionPreviewRequest,
   ExecutionPreviewResponse,
   ParameterExtractionRequest,
@@ -53,4 +54,12 @@ export function executeQuery(
     "/query-executions/execute",
     body,
   );
+}
+
+export function listManualTemplates(sourceName: string): Promise<ManualTemplateListResponse> {
+  return apiGet<ManualTemplateListResponse>("/query-executions/manual-templates", {
+    source_name: sourceName,
+    limit: 100,
+    offset: 0,
+  });
 }

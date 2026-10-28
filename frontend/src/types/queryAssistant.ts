@@ -158,3 +158,14 @@ export interface QueryExecutionResponse {
   truncated: boolean;
   elapsed_ms: number;
 }
+
+/** QUERY_OPERATE-safe list for model-free explicit template selection. */
+export interface ManualTemplateListResponse {
+  source_name: string;
+  catalog_revision_id: number;
+  schema_fingerprint: string;
+  total: number;
+  limit: number;
+  offset: number;
+  items: RecommendedTemplate[];
+}
