@@ -23,8 +23,9 @@ M3-C1은 **이 상태를 확인하기 위한 읽기 전용 화면**을 제공한
   review 제출, 승인/반려, enable, 실행 API를 호출하지 않는다.
 
 ## 명확한 범위 한계
-- M3-B PR #153 위의 **스택형 PR**, #153이 `main`에 병합된 뒤
-  이번 PR의 base를 `main`으로 변경하는 순서
+- M3-B PR #153은 `cff09c9`로 `main`에 병합 완료.
+  M3-C1 PR #154는 해당 `main` 커밋 기반으로 재정렬했으며,
+  M3-B의 코드 변경을 중복 포함하지 않는다.
 - SQL Safety PASS는 승인 또는 실행권한이 **아니다**
 - 현행 M3-B SQL 미리보기에서 작성한 SQL을 자동 템플릿으로
   승격하거나 저장·제출·승인하는 연결 **없음**
@@ -40,4 +41,6 @@ src/test/TemplateReviewPortal.test.tsx
 src/test/WorkflowDashboard.test.tsx
 src/test/QueryAssistant.test.tsx
 src/test/CatalogGraphicalBuilder.test.tsx` 및
-`npm run build`, `npm run lint` 수행 전 **Draft** 유지.
+`npm run build`, `npm run lint`를 검증한다.
+2026-10-28 기존 M3-B 브랜치 기준 34/34 PASS, 빌드 PASS, Lint 0 오류·2 경고.
+`main` 재정렬 후 검증 기록은 PR #154에서 별도 확인한다.
