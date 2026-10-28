@@ -224,3 +224,6 @@ __marimo__/
 *.dump.sha256
 
 demis_catalog_package_oracle_demis_mock_v2.zip
+
+# Local-only synthetic DOCX visual QA output (never commit)
+/backend/artifacts/m2-2e-docx-qa/
