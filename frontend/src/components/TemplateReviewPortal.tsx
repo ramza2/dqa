@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { TemplateReviewActions } from "./TemplateReviewActions";
+import { getTemplateReviewActor, type TemplateReviewActor } from "../api/templateReview";
 import {
   getReviewTemplate, getReviewTemplateSqlSafety, listReviewTemplates,
 } from "../api/templateReview";
@@ -33,6 +35,10 @@ export function TemplateReviewPortal() {
   const detailSequence = useRef(0);
   const mounted = useRef(false);
   const [sourceName, setSourceName] = useState("");
+  const [actor, setActor] = useState<TemplateReviewActor | null>(null);
+  const [actorError, setActorError] = useState<string | null>(null);
+  const [actorBusy, setActorBusy] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState<ReviewTemplateList | null>(null);
   const [listBusy, setListBusy] = useState(false);
@@ -65,6 +71,7 @@ export function TemplateReviewPortal() {
 
   const clearList = () => {
     sequence.current++;
+    setActionMessage(null);
     clearDetail();
     setPage(null);
     setListError(null);
@@ -76,6 +83,7 @@ export function TemplateReviewPortal() {
     clearDetail();
     setPage(null);
     setListError(null);
+    setActionMessage(null);
     setListBusy(true);
     try {
       const result = await listReviewTemplates(sourceName, offset);
@@ -153,6 +161,25 @@ export function TemplateReviewPortal() {
         </p>
       </header>
       <section className="qa-panel" aria-labelledby="review-list-heading">
+        <div className="qa-actions">
+          <button type="button" disabled={actorBusy} onClick={() => {
+            setActor(null);
+            setActorBusy(true);
+            setActorError(null);
+            void getTemplateReviewActor().then((user) => {
+              if (mounted.current) setActor(user);
+            }).catch((error: unknown) => {
+              if (mounted.current) setActorError(reviewErrorMessage(error));
+            }).finally(() => {
+              if (mounted.current) setActorBusy(false);
+            });
+          }}>
+            {actorBusy ? "권한 확인 중…" : "검토 작업 권한 확인"}
+          </button>
+          {actor && <span role="status">계정 권한: {actor.roles.join(", ") || "없음"}</span>}
+        </div>
+        {actorError && <p role="alert" className="banner banner-error">{actorError}</p>}
+        {actionMessage && <p role="status" className="banner banner-warn">{actionMessage}</p>}
         <h2 id="review-list-heading">템플릿 목록</h2>
         <label className="param-field">
           <span className="param-label">Source 이름 (선택 입력)</span>
@@ -237,6 +264,14 @@ export function TemplateReviewPortal() {
               ) : null}
               <h3>등록된 SQL (검토용·실행 불가)</h3>
               <pre className="qb-sql">{detail.version.sql_text}</pre>
+              {actor ? <TemplateReviewActions
+                key={`${detail.id}:${detail.version.id}:${detail.updated_at}`}
+                actor={actor} detail={detail} safety={safety}
+                onCompleted={(message) => {
+                  clearList();
+                  setActionMessage(message);
+                }}
+              /> : null}
             </div>
           ) : null}
         </section>
