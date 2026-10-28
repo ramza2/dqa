@@ -136,23 +136,48 @@ export function SnapshotErdPanel({ snapshot }: { snapshot: SnapshotSummary }) {
                 </p>
               ) : null}
               {data.edges.length === 0 ? <p>표시 가능한 FK가 없습니다.</p> : (
-                <ul className="erd-list">
-                  {data.edges.map((e, i) => (
-                    <li className="erd-edge" key={e.constraint_name + ":" + i}>
-                      <strong>{e.source_schema}.{e.source_table} → {e.target_schema}.{e.target_table}</strong>
-                      <div className="erd-edge-meta">
-                        {e.direction === "OUT" ? "나가는 참조" : "들어오는 참조"}
-                        {" · "}{e.constraint_name}
-                      </div>
-                      <div className="erd-edge-meta">
-                        {e.column_mapping.map(c => c.source + " → " + c.target).join(", ")}
-                      </div>
-                      {e.referenced_only ? (
-                        <span className="badge badge-warn">Snapshot 외부 참조 · 권한 미확인</span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                <div className="erd-layout">
+                  <div className="erd-side">
+                    <h4>들어오는 FK</h4>
+                    <ul className="erd-list">
+                      {data.edges.filter(e => e.direction === "IN").map((e, i) => (
+                        <li className="erd-edge" key={e.constraint_name + ":in:" + i}>
+                          <strong>{e.source_schema}.{e.source_table}</strong>
+                          <div className="erd-edge-meta">{e.constraint_name}</div>
+                          <div className="erd-edge-meta">
+                            {e.column_mapping.map(c => c.source + " → " + c.target).join(", ")}
+                          </div>
+                          {e.referenced_only ? (
+                            <span className="badge badge-warn">Snapshot 외부 참조 · 권한 미확인</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                    <span className="erd-arrow">→ 중심 테이블</span>
+                  </div>
+                  <div className="erd-center" aria-label="Snapshot 중심 테이블">
+                    <span className="muted">Snapshot 선택 테이블</span>
+                    <strong>{data.focus_schema}.{data.focus_table}</strong>
+                  </div>
+                  <div className="erd-side">
+                    <h4>나가는 FK</h4>
+                    <span className="erd-arrow">중심 테이블 →</span>
+                    <ul className="erd-list">
+                      {data.edges.filter(e => e.direction === "OUT").map((e, i) => (
+                        <li className="erd-edge" key={e.constraint_name + ":out:" + i}>
+                          <strong>{e.target_schema}.{e.target_table}</strong>
+                          <div className="erd-edge-meta">{e.constraint_name}</div>
+                          <div className="erd-edge-meta">
+                            {e.column_mapping.map(c => c.source + " → " + c.target).join(", ")}
+                          </div>
+                          {e.referenced_only ? (
+                            <span className="badge badge-warn">Snapshot 외부 참조 · 권한 미확인</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               )}
             </section>
           ) : null}
