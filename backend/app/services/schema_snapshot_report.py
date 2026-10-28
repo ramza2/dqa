@@ -11,6 +11,7 @@ from io import BytesIO
 import re
 
 from docx import Document
+from docx.oxml import OxmlElement
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt
@@ -39,7 +40,18 @@ def _clean(value: object, limit: int = 600) -> str:
     return cleaned[:limit] if cleaned else "—"
 
 
-def _grid(document: Document, headers: list[str], rows: list[list[object]]) -> None:
+# A4 portrait inner width: 21.0 - 1.6 - 1.6 = 17.8 cm.
+# Keep names readable, but allocate the most space to actual DB COMMENTS.
+_COLUMN_DETAIL_WIDTHS_CM = (0.65, 4.05, 2.45, 1.75, 1.15, 7.75)
+
+
+def _grid(
+    document: Document,
+    headers: list[str],
+    rows: list[list[object]],
+    *,
+    column_widths_cm: tuple[float, ...] | None = None,
+) -> None:
     table = document.add_table(rows=1, cols=len(headers))
     table.style = "Table Grid"
     for i, item in enumerate(headers):
@@ -48,9 +60,35 @@ def _grid(document: Document, headers: list[str], rows: list[list[object]]) -> N
         cells = table.add_row().cells
         for i, value in enumerate(values):
             cells[i].text = _clean(value)
+    if column_widths_cm is not None:
+        # The default equal-width, auto-fit layout makes comments a tiny column
+        # when long identifiers force Word to expand the Column cell.
+        if len(column_widths_cm) != len(headers):
+            raise ValueError("report column widths must match headers")
+        table.autofit = False
+        for column, width in zip(table.columns, column_widths_cm):
+            column.width = Cm(width)
+        for row in table.rows:
+            for cell, width in zip(row.cells, column_widths_cm):
+                cell.width = Cm(width)
+        # Compact margins and header lettering avoid wrapping Nullable / Keys.
+        cell_margins = table._tbl.tblPr.find(qn("w:tblCellMar"))
+        if cell_margins is None:
+            cell_margins = OxmlElement("w:tblCellMar")
+            table._tbl.tblPr.append(cell_margins)
+        for side in ("start", "end"):
+            margin = cell_margins.find(qn("w:" + side))
+            if margin is None:
+                margin = OxmlElement("w:" + side)
+                cell_margins.append(margin)
+            margin.set(qn("w:w"), "57")  # approx. 0.1 cm in twips
+            margin.set(qn("w:type"), "dxa")
+        for cell in table.rows[0].cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(8)
     # Keep the column names visible when the table spans multiple pages.
     tr_pr = table.rows[0]._tr.get_or_add_trPr()
-    from docx.oxml import OxmlElement
     repeat_header = OxmlElement("w:tblHeader")
     repeat_header.set(qn("w:val"), "true")
     tr_pr.append(repeat_header)
@@ -178,7 +216,7 @@ def build_snapshot_table_docx(
             c.column_comment,
         ]
         for c in columns
-    ])
+    ], column_widths_cm=_COLUMN_DETAIL_WIDTHS_CM)
     doc.add_heading("4. PK 및 UK 구성", 1)
     grouped: dict[tuple[str, str], list[object]] = defaultdict(list)
     for c in pk:
