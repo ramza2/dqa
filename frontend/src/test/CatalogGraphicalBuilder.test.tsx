@@ -14,7 +14,7 @@ const preview: CatalogPreviewResponse = {
   source_name: activeSource.source_name,
   catalog_revision_id: activeSource.revision_id,
   schema_fingerprint: activeSource.schema_fingerprint,
-  sql_text: 'SELECT * FROM (SELECT "WARD_CD" FROM "DEMIS_OWNER"."TB_ADM_HIST" WHERE "WARD_CD" = :p1) q WHERE ROWNUM <= :p_limit',
+  sql_text: 'SELECT q."WARD_CD" FROM (SELECT "WARD_CD" FROM "DEMIS_OWNER"."TB_ADM_HIST" WHERE "WARD_CD" = :p1) q WHERE ROWNUM <= :p_limit',
   parameters: [{ name: "p1", column: "WARD_CD", type: "string" }, {
     name: "p_limit", column: null, type: "integer",
   }],
