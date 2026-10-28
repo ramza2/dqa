@@ -873,3 +873,12 @@
 .erd-arrow { color: var(--accent); display: block; margin: .45rem 0; font-size: .78rem; }
 .erd-empty { color: var(--muted); font-size: .8rem; }
 @media (max-width: 850px) { .erd-layout { grid-template-columns: minmax(0,1fr); } .erd-center { order: -1; } }
+
+/* M3-B preview-only graphical query builder */
+.qb-column-set { border: 1px solid var(--border); border-radius: 6px; padding: 0.7rem 0.85rem; }
+.qb-column-set legend { font-size: 0.9rem; font-weight: 600; }
+.qb-column-check { display: flex; align-items: center; gap: 0.45rem; margin: 0.35rem 0; font-size: 0.86rem; }
+.qb-predicate { flex-wrap: wrap; align-items: end; margin: 0.55rem 0; }
+.qb-predicate label { display: flex; flex-direction: column; gap: 0.2rem; }
+.qb-predicate select { max-width: 240px; }
+.qb-sql { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16rem; overflow: auto; font: 0.82rem/1.6 var(--mono); }

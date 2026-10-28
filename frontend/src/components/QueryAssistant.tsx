@@ -1,4 +1,5 @@
 import { useQueryAssistant } from "../hooks/useQueryAssistant";
+import { CatalogGraphicalBuilder } from "./CatalogGraphicalBuilder";
 import type { ExecutionFormParameter } from "../types/queryAssistant";
 import {
   blockerMessage,
@@ -224,6 +225,10 @@ export function QueryAssistant() {
       </header>
 
       <div className="qa-layout">
+        <CatalogGraphicalBuilder
+          key={`${qa.selectedSource}:${qa.sources.find((s) => s.source_name === qa.selectedSource)?.revision_id ?? ""}:${qa.sources.find((s) => s.source_name === qa.selectedSource)?.schema_fingerprint ?? ""}`}
+          active={qa.sources.find((s) => s.source_name === qa.selectedSource)}
+        />
         <section className="qa-panel" aria-labelledby="manual-template-heading">
           <h2 id="manual-template-heading">승인 템플릿 직접 선택 (AI 불필요)</h2>
           <p className="muted">
