@@ -69,6 +69,19 @@ def _inspect_docx(payload: bytes, *, expected: tuple[str, ...]) -> dict:
     assert abs(sect.page_width - Cm(21)) <= Cm(.01), "not A4 width"
     assert abs(sect.page_height - Cm(29.7)) <= Cm(.01), "not A4 height"
     assert doc.tables, "no tables in analysis report"
+    detail_headers = ["#", "Column", "Type", "Nullable", "Keys", "DB COMMENT"]
+    details = next(
+        (table for table in doc.tables
+         if [c.text for c in table.rows[0].cells] == detail_headers),
+        None,
+    )
+    assert details is not None, "column detail table is missing"
+    assert details.autofit is False, "column detail table must be fixed width"
+    widths = [round(c.width.cm, 2) for c in details.columns]
+    expected = [0.65, 4.05, 2.45, 1.75, 1.15, 7.75]
+    assert all(abs(a - b) < 0.03 for a, b in zip(widths, expected))
+    assert sum(widths) <= 17.82, "table exceeds A4 writable width"
+    assert widths[5] > widths[1], "DB COMMENT should be wider than Column"
     for table in doc.tables:
         assert table.rows, "an empty table"
         tr_pr = table.rows[0]._tr.get_or_add_trPr()
@@ -92,6 +105,7 @@ def _inspect_docx(payload: bytes, *, expected: tuple[str, ...]) -> dict:
         "headings": [p.text for p in doc.paragraphs if p.style.name.startswith("Heading")],
         "a4_portrait": True,
         "all_table_headers_repeat": True,
+        "column_detail_widths_cm": widths,
         "rendered_pages": "NOT_VERIFIED_REQUIRES_RENDER",
     }
 
