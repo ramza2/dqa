@@ -82,3 +82,29 @@ def test_smoke_live_pass_label_is_distinct(smoke_text: str) -> None:
     assert "LIVE_E2E=PASS" in smoke_text
     assert "LIVE_E2E=RUNNING" in smoke_text
     assert "M4A_ORACLE_MOCK_BLOCKED" in smoke_text
+
+
+def test_smoke_does_not_default_app_env_or_auth_provider(smoke_text: str) -> None:
+    # Missing values must BLOCKED — never invent development/dev_headers.
+    assert "${app_env:-development}" not in smoke_text
+    assert "${auth_provider:-dev_headers}" not in smoke_text
+    assert 'app_env:-development' not in smoke_text.replace(" ", "")
+    assert "running backend APP_ENV is missing" in smoke_text
+    assert "running backend DQA_AUTH_PROVIDER is missing" in smoke_text
+
+
+def test_smoke_rejects_shell_env_overrides_as_environment_proof(smoke_text: str) -> None:
+    assert "DQA_M4A_APP_ENV/DQA_M4A_AUTH_PROVIDER overrides are not accepted as environment proof" in smoke_text
+    assert 'label=com.docker.compose.service=backend' in smoke_text
+    assert "docker inspect" in smoke_text
+
+
+def test_smoke_blocks_arbitrary_smoke_base_url(smoke_text: str) -> None:
+    assert "DQA_SMOKE_BASE_URL must exactly match env-file LAN frontend URL" in smoke_text
+    assert "derived_base_url=" in smoke_text
+    assert 'dqa_env_value DQA_LAN_BIND_IP ""' in smoke_text
+    assert 'dqa_env_value DQA_FRONTEND_PORT ""' in smoke_text
+    assert "DQA_LAN_BIND_IP/DQA_FRONTEND_PORT missing from env file" in smoke_text
+    # No silent 127.0.0.1/8080 defaults for the live smoke entrypoint.
+    assert 'dqa_env_value DQA_LAN_BIND_IP 127.0.0.1' not in smoke_text
+    assert 'dqa_env_value DQA_FRONTEND_PORT 8080' not in smoke_text

@@ -11,8 +11,12 @@
 #   - DQA_M4A_ALLOW_LIVE_ORACLE_MOCK=1 (explicit operator opt-in)
 #   - allowlisted host demis-oracle-test:1521 only
 #   - source oracle_demis_mock, environment development
-#   - APP_ENV=development and DQA_AUTH_PROVIDER=dev_headers
+#   - running Compose backend APP_ENV + DQA_AUTH_PROVIDER inspected (no defaults;
+#     shell DQA_M4A_APP_ENV / DQA_M4A_AUTH_PROVIDER overrides are not proof)
+#   - base URL only from env-file DQA_LAN_BIND_IP + DQA_FRONTEND_PORT;
+#     arbitrary DQA_SMOKE_BASE_URL is rejected unless it exactly matches
 #   - DEMIS_SECRET_ORACLE_PASSWORD present (value never printed)
+# If the development Mock stack cannot be verified → exit 2 (no LIVE_E2E PASS).
 #
 # Existing scripts/dqa-oracle-mock-smoke.sh (LLM path) remains unchanged.
 set -euo pipefail
@@ -33,29 +37,42 @@ if [[ "${DQA_M4A_ALLOW_LIVE_ORACLE_MOCK:-}" != "1" ]]; then
   exit 2
 fi
 
+if [[ -n "${DQA_M4A_APP_ENV:-}" || -n "${DQA_M4A_AUTH_PROVIDER:-}" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: DQA_M4A_APP_ENV/DQA_M4A_AUTH_PROVIDER overrides are not accepted as environment proof" >&2
+  exit 2
+fi
+
 if [[ ! -f "${DQA_ENV_FILE}" ]]; then
   echo "M4A_ORACLE_MOCK_BLOCKED: missing env file for live stack smoke" >&2
   exit 2
 fi
 dqa_require_env_file
 
-app_env="$(dqa_env_value APP_ENV "")"
-auth_provider="$(dqa_env_value DQA_AUTH_PROVIDER "")"
-# Dev overlay may set these in Compose rather than .env; allow explicit smoke overrides.
-app_env="${DQA_M4A_APP_ENV:-${app_env:-development}}"
-auth_provider="${DQA_M4A_AUTH_PROVIDER:-${auth_provider:-dev_headers}}"
-if [[ "$app_env" != "development" && "$app_env" != "test" ]]; then
-  echo "M4A_ORACLE_MOCK_BLOCKED: APP_ENV must be development|test for live Mock smoke" >&2
+# LAN frontend entry must be explicit in the env file (no silent defaults).
+bind_ip="$(dqa_env_value DQA_LAN_BIND_IP "")"
+frontend_port="$(dqa_env_value DQA_FRONTEND_PORT "")"
+if [[ -z "$bind_ip" || -z "$frontend_port" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: DQA_LAN_BIND_IP/DQA_FRONTEND_PORT missing from env file" >&2
   exit 2
 fi
-if [[ "$auth_provider" != "dev_headers" ]]; then
-  echo "M4A_ORACLE_MOCK_BLOCKED: DQA_AUTH_PROVIDER must be dev_headers for live Mock smoke" >&2
+if [[ ! "$bind_ip" =~ ^[0-9A-Fa-f.:]+$ && ! "$bind_ip" =~ ^[A-Za-z0-9.-]+$ ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: DQA_LAN_BIND_IP failed safe validation" >&2
+  exit 2
+fi
+if [[ ! "$frontend_port" =~ ^[0-9]+$ ]] || (( frontend_port < 1 || frontend_port > 65535 )); then
+  echo "M4A_ORACLE_MOCK_BLOCKED: DQA_FRONTEND_PORT failed numeric validation" >&2
   exit 2
 fi
 
-bind_ip="$(dqa_env_value DQA_LAN_BIND_IP 127.0.0.1)"
-frontend_port="$(dqa_env_value DQA_FRONTEND_PORT 8080)"
-base_url="${DQA_SMOKE_BASE_URL:-http://${bind_ip}:${frontend_port}}"
+derived_base_url="http://${bind_ip}:${frontend_port}"
+if [[ -n "${DQA_SMOKE_BASE_URL:-}" ]]; then
+  requested="${DQA_SMOKE_BASE_URL%/}"
+  if [[ "$requested" != "$derived_base_url" ]]; then
+    echo "M4A_ORACLE_MOCK_BLOCKED: DQA_SMOKE_BASE_URL must exactly match env-file LAN frontend URL" >&2
+    exit 2
+  fi
+fi
+base_url="$derived_base_url"
 
 MOCK_HOST="${DQA_M4A_ORACLE_MOCK_HOST:-$ALLOWED_MOCK_HOST}"
 MOCK_PORT="${DQA_M4A_ORACLE_MOCK_PORT:-$ALLOWED_MOCK_PORT}"
@@ -82,16 +99,116 @@ if [[ "$ENVIRONMENT" != "$ALLOWED_ENVIRONMENT" ]]; then
   echo "M4A_ORACLE_MOCK_BLOCKED: environment is not development" >&2
   exit 2
 fi
-if [[ ! "$bind_ip" =~ ^[0-9A-Fa-f.:]+$ && ! "$bind_ip" =~ ^[A-Za-z0-9.-]+$ ]]; then
-  echo "M4A_ORACLE_MOCK_BLOCKED: DQA_LAN_BIND_IP failed safe validation" >&2
+
+# Verify the *running* Compose backend — never invent APP_ENV/AUTH defaults.
+if ! command -v docker >/dev/null 2>&1; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: docker required to verify running development Mock stack" >&2
   exit 2
 fi
-if [[ ! "$frontend_port" =~ ^[0-9]+$ ]]; then
-  echo "M4A_ORACLE_MOCK_BLOCKED: DQA_FRONTEND_PORT failed numeric validation" >&2
+if ! docker info >/dev/null 2>&1; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: docker daemon unavailable; cannot verify development Mock stack" >&2
   exit 2
 fi
-if [[ ! "$base_url" =~ ^https?:// ]]; then
-  echo "M4A_ORACLE_MOCK_BLOCKED: smoke base URL must be http(s)" >&2
+
+mapfile -t backend_cids < <(
+  docker ps -q \
+    --filter "label=com.docker.compose.project=${DQA_COMPOSE_PROJECT_NAME}" \
+    --filter "label=com.docker.compose.service=backend" 2>/dev/null || true
+)
+if [[ "${#backend_cids[@]}" -ne 1 || -z "${backend_cids[0]:-}" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: expected exactly one running Compose backend for project ${DQA_COMPOSE_PROJECT_NAME}" >&2
+  exit 2
+fi
+backend_cid="${backend_cids[0]}"
+
+# Read only the two required keys from the container env; never dump full env/secrets.
+app_env="$(
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend_cid" \
+    | awk -F= '$1=="APP_ENV" { print substr($0, index($0, "=")+1); exit }'
+)"
+auth_provider="$(
+  docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend_cid" \
+    | awk -F= '$1=="DQA_AUTH_PROVIDER" { print substr($0, index($0, "=")+1); exit }'
+)"
+if [[ -z "$app_env" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: running backend APP_ENV is missing" >&2
+  exit 2
+fi
+if [[ -z "$auth_provider" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: running backend DQA_AUTH_PROVIDER is missing" >&2
+  exit 2
+fi
+if [[ "$app_env" != "development" && "$app_env" != "test" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: running backend APP_ENV is not development|test" >&2
+  exit 2
+fi
+if [[ "$auth_provider" != "dev_headers" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: running backend DQA_AUTH_PROVIDER is not dev_headers" >&2
+  exit 2
+fi
+
+# Confirm frontend publishes the same LAN entry used as the smoke base URL.
+mapfile -t frontend_cids < <(
+  docker ps -q \
+    --filter "label=com.docker.compose.project=${DQA_COMPOSE_PROJECT_NAME}" \
+    --filter "label=com.docker.compose.service=frontend" 2>/dev/null || true
+)
+if [[ "${#frontend_cids[@]}" -ne 1 || -z "${frontend_cids[0]:-}" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: expected exactly one running Compose frontend for project ${DQA_COMPOSE_PROJECT_NAME}" >&2
+  exit 2
+fi
+frontend_cid="${frontend_cids[0]}"
+export DQA_M4A_FRONTEND_CID="$frontend_cid"
+export DQA_M4A_EXPECTED_BIND_IP="$bind_ip"
+export DQA_M4A_EXPECTED_FRONTEND_PORT="$frontend_port"
+if ! python3 - <<'PY'
+import json
+import os
+import subprocess
+import sys
+
+cid = os.environ["DQA_M4A_FRONTEND_CID"]
+bind_ip = os.environ["DQA_M4A_EXPECTED_BIND_IP"]
+port = os.environ["DQA_M4A_EXPECTED_FRONTEND_PORT"]
+try:
+    raw = subprocess.check_output(
+        ["docker", "inspect", cid],
+        stderr=subprocess.DEVNULL,
+        timeout=15,
+    )
+except (OSError, subprocess.SubprocessError):
+    print("frontend inspect failed", file=sys.stderr)
+    raise SystemExit(1)
+data = json.loads(raw)
+if not isinstance(data, list) or len(data) != 1:
+    print("unexpected inspect payload", file=sys.stderr)
+    raise SystemExit(1)
+ports = (data[0].get("NetworkSettings") or {}).get("Ports") or {}
+bindings = ports.get("80/tcp") or ports.get("80") or []
+if not isinstance(bindings, list) or not bindings:
+    print("frontend has no host binding for container port 80", file=sys.stderr)
+    raise SystemExit(1)
+matched = False
+for item in bindings:
+    if not isinstance(item, dict):
+        continue
+    host_ip = str(item.get("HostIp") or "")
+    host_port = str(item.get("HostPort") or "")
+    if host_port != port:
+        continue
+    # Exact LAN bind, or wildcard publish only when operator bind is loopback.
+    if host_ip in {"", "0.0.0.0", "::"} and bind_ip in {"127.0.0.1", "::1"}:
+        matched = True
+        break
+    if host_ip == bind_ip:
+        matched = True
+        break
+if not matched:
+    print("frontend publish does not match env-file LAN bind/port", file=sys.stderr)
+    raise SystemExit(1)
+PY
+then
+  echo "M4A_ORACLE_MOCK_BLOCKED: running frontend publish does not match env-file LAN entry" >&2
   exit 2
 fi
 
@@ -102,6 +219,7 @@ export DQA_SMOKE_SOURCE="$SOURCE_NAME"
 export DQA_SMOKE_ENVIRONMENT="$ENVIRONMENT"
 export DQA_M4A_APP_ENV="$app_env"
 export DQA_M4A_AUTH_PROVIDER="$auth_provider"
+export DQA_M4A_DERIVED_BASE_URL="$derived_base_url"
 
 python3 - <<'PY'
 import json
@@ -118,6 +236,7 @@ ALLOWED_SOURCE = "oracle_demis_mock"
 ALLOWED_ENVIRONMENT = "development"
 
 base_url = os.environ["DQA_SMOKE_BASE_URL"].rstrip("/")
+derived_base_url = os.environ.get("DQA_M4A_DERIVED_BASE_URL", "").rstrip("/")
 source_name = os.environ["DQA_SMOKE_SOURCE"]
 environment = os.environ["DQA_SMOKE_ENVIRONMENT"]
 expected_stable_key = os.environ.get(
@@ -128,6 +247,7 @@ parameter_value = os.environ.get("DQA_SMOKE_PARAMETER_VALUE", "DQA_TEST")
 expected_row_count = int(os.environ.get("DQA_SMOKE_EXPECTED_ROW_COUNT", "3"))
 mock_host = os.environ["DQA_M4A_ORACLE_MOCK_HOST"]
 mock_port = int(os.environ["DQA_M4A_ORACLE_MOCK_PORT"])
+# Values must be exported from the verified running backend — never invent defaults.
 app_env = os.environ.get("DQA_M4A_APP_ENV", "")
 auth_provider = os.environ.get("DQA_M4A_AUTH_PROVIDER", "")
 
@@ -152,8 +272,12 @@ def blocked(message: str) -> None:
 
 
 def assert_live_allowlist() -> None:
+    if not app_env:
+        blocked("APP_ENV missing after running-stack verification")
     if app_env not in {"development", "test"}:
         blocked("APP_ENV not development|test")
+    if not auth_provider:
+        blocked("DQA_AUTH_PROVIDER missing after running-stack verification")
     if auth_provider != "dev_headers":
         blocked("auth provider is not dev_headers")
     if mock_host != ALLOWED_HOST or mock_port != ALLOWED_PORT:
@@ -162,8 +286,13 @@ def assert_live_allowlist() -> None:
         blocked("source_name is not allowlisted oracle_demis_mock")
     if environment != ALLOWED_ENVIRONMENT:
         blocked("environment is not development")
-    if not base_url.startswith(("http://", "https://")):
-        blocked("base URL scheme is not http(s)")
+    if not derived_base_url.startswith("http://"):
+        blocked("derived LAN base URL is invalid")
+    if base_url != derived_base_url:
+        blocked("smoke base URL does not match verified LAN frontend entry")
+    parsed = urllib.parse.urlparse(base_url)
+    if parsed.scheme != "http" or not parsed.netloc or parsed.path not in {"", "/"}:
+        blocked("smoke base URL must be bare http://bind:port LAN entry")
 
 
 def request_json(

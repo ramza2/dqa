@@ -36,11 +36,17 @@ Gap Audit 이후, 기존 Query Execution 엔진을 재사용해 **LLM 없이**
 1. `DQA_M4A_ALLOW_LIVE_ORACLE_MOCK=1` 명시 opt-in
 2. Mock 엔드포인트 **오직** `demis-oracle-test:1521` (allowlist; 그 외 BLOCKED)
 3. Source `oracle_demis_mock`, environment `development`
-4. `APP_ENV` = `development`|`test`, `DQA_AUTH_PROVIDER` = `dev_headers`
-5. `DEMIS_SECRET_ORACLE_PASSWORD` 존재 (값은 절대 출력하지 않음)
-6. host/port는 안전 charset 검증 후 `os.environ`으로만 Python에 전달 (셸/Python 삽입 금지)
+4. **실행 중** Compose backend의 `APP_ENV`/`DQA_AUTH_PROVIDER`를 `docker inspect`로 확인.
+   값이 없거나 `development|test` + `dev_headers`가 아니면 BLOCKED.
+   셸 `DQA_M4A_APP_ENV` / `DQA_M4A_AUTH_PROVIDER` override나 `.env` 기본값으로
+   개발 환경을 “증명”하지 않는다 (기본값 `development`/`dev_headers` 금지).
+5. Base URL은 env-file의 `DQA_LAN_BIND_IP` + `DQA_FRONTEND_PORT`로만 유도.
+   `DQA_SMOKE_BASE_URL`이 이와 다르면(임의 서버) BLOCKED. frontend publish도 동일 LAN 진입과 일치해야 한다.
+6. `DEMIS_SECRET_ORACLE_PASSWORD` 존재 (값은 절대 출력하지 않음)
+7. host/port는 안전 charset 검증 후 `os.environ`으로만 Python에 전달 (셸/Python 삽입 금지)
 
-실 DEMIS·운영 Oracle·비개발 인증 모드에서는 실행하지 않는다.
+확인 불가능(Docker 없음·backend/frontend 미기동·inspect 실패)하면 exit `2`,
+`LIVE_E2E=PASS` 금지. 실 DEMIS·운영 Oracle·비개발 인증 모드에서는 실행하지 않는다.
 
 ## 오류·출력 안전
 - HTTP 오류 시 상태 코드만 보고하고 응답 본문을 출력하지 않는다.
