@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getAuditEventsById } from "../api/auditEvents";
 import { listActiveCatalogs } from "../api/catalog";
 import {
   executeQuery,
@@ -8,6 +9,7 @@ import {
   previewExecution,
   recommendTemplates,
 } from "../api/queryAssistant";
+import type { QueryAuditEventBundleResponse } from "../types/auditEvents";
 import type { CatalogActiveSummary } from "../types/catalog";
 import type {
   ExecutionFormResponse,
@@ -21,6 +23,7 @@ import {
   buildParameterPayload,
   defaultsFromFormParameters,
   formatAssistantError,
+  isAuditReadDenied,
   isEgressNotAllowed,
   stableParametersKey,
 } from "../utils/queryAssistant";
@@ -77,6 +80,13 @@ export function useQueryAssistant() {
   const [executeState, setExecuteState] = useState<LoadState>("idle");
   const [executeError, setExecuteError] = useState<AssistantErrorState | null>(null);
 
+  const [auditBundle, setAuditBundle] = useState<QueryAuditEventBundleResponse | null>(null);
+  const [auditState, setAuditState] = useState<LoadState>("idle");
+  const [auditError, setAuditError] = useState<AssistantErrorState | null>(null);
+  const [auditForbidden, setAuditForbidden] = useState(false);
+  const auditRequestRef = useRef(0);
+  const resultAuditIdRef = useRef<string | null>(null);
+
   const bumpGeneration = useCallback(() => {
     workflowGeneration.current += 1;
     return workflowGeneration.current;
@@ -84,6 +94,14 @@ export function useQueryAssistant() {
 
   const isCurrentGeneration = useCallback((generation: number) => {
     return generation === workflowGeneration.current;
+  }, []);
+
+  const clearAuditLifecycle = useCallback(() => {
+    auditRequestRef.current += 1;
+    setAuditBundle(null);
+    setAuditState("idle");
+    setAuditError(null);
+    setAuditForbidden(false);
   }, []);
 
   const clearDownstreamWorkflow = useCallback(() => {
@@ -106,9 +124,11 @@ export function useQueryAssistant() {
     setPreviewState("idle");
     setPreviewError(null);
     setResult(null);
+    resultAuditIdRef.current = null;
     setExecuteState("idle");
     setExecuteError(null);
-  }, []);
+    clearAuditLifecycle();
+  }, [clearAuditLifecycle]);
 
   const clearDownstreamFromSource = useCallback(() => {
     bumpGeneration();
@@ -121,9 +141,11 @@ export function useQueryAssistant() {
     setPreviewState("idle");
     setPreviewError(null);
     setResult(null);
+    resultAuditIdRef.current = null;
     setExecuteState("idle");
     setExecuteError(null);
-  }, []);
+    clearAuditLifecycle();
+  }, [clearAuditLifecycle]);
 
   const setRequestText = useCallback(
     (text: string) => {
@@ -493,7 +515,9 @@ export function useQueryAssistant() {
     setPreviewState("loading");
     setPreviewError(null);
     setResult(null);
+    resultAuditIdRef.current = null;
     setExecuteError(null);
+    clearAuditLifecycle();
     try {
       const parameters = buildParameterPayload(
         form?.parameters ?? [],
@@ -530,6 +554,7 @@ export function useQueryAssistant() {
     }
   }, [
     bumpGeneration,
+    clearAuditLifecycle,
     environment,
     form?.parameters,
     isCurrentGeneration,
@@ -553,6 +578,11 @@ export function useQueryAssistant() {
     const opGeneration = bumpGeneration();
     setExecuteState("loading");
     setExecuteError(null);
+    // Drop prior rows/audit UI immediately so a new run (or failure) never
+    // leaves the previous success surface visible.
+    setResult(null);
+    resultAuditIdRef.current = null;
+    clearAuditLifecycle();
     try {
       const parameters = buildParameterPayload(
         form?.parameters ?? [],
@@ -569,18 +599,21 @@ export function useQueryAssistant() {
         return;
       }
       setResult(response);
+      resultAuditIdRef.current = response.audit_id;
       setExecuteState("idle");
     } catch (error) {
       if (!isCurrentGeneration(opGeneration)) {
         return;
       }
       setResult(null);
+      resultAuditIdRef.current = null;
       setExecuteState("error");
       setExecuteError(formatAssistantError(error));
     }
   }, [
     bumpGeneration,
     canExecute,
+    clearAuditLifecycle,
     environment,
     form?.parameters,
     isCurrentGeneration,
@@ -589,6 +622,49 @@ export function useQueryAssistant() {
     selectedCandidate,
     selectedSource,
   ]);
+
+  const loadAuditLifecycle = useCallback(async () => {
+    const auditId = result?.audit_id;
+    if (!auditId || auditState === "loading") {
+      return;
+    }
+    const requestId = auditRequestRef.current + 1;
+    auditRequestRef.current = requestId;
+    setAuditState("loading");
+    setAuditError(null);
+    setAuditForbidden(false);
+    setAuditBundle(null);
+    try {
+      const bundle = await getAuditEventsById(auditId);
+      if (
+        auditRequestRef.current !== requestId ||
+        resultAuditIdRef.current !== auditId
+      ) {
+        return;
+      }
+      setAuditBundle(bundle);
+      setAuditState("idle");
+    } catch (error) {
+      if (
+        auditRequestRef.current !== requestId ||
+        resultAuditIdRef.current !== auditId
+      ) {
+        return;
+      }
+      if (isAuditReadDenied(error)) {
+        // History denied only — keep query result rows visible.
+        setAuditForbidden(true);
+        setAuditBundle(null);
+        setAuditError(null);
+        setAuditState("idle");
+        return;
+      }
+      setAuditForbidden(false);
+      setAuditBundle(null);
+      setAuditState("error");
+      setAuditError(formatAssistantError(error));
+    }
+  }, [auditState, result?.audit_id]);
 
   return {
     maxRequestText: MAX_REQUEST_TEXT,
@@ -633,5 +709,10 @@ export function useQueryAssistant() {
     executeState,
     executeError,
     runExecute,
+    auditBundle,
+    auditState,
+    auditError,
+    auditForbidden,
+    loadAuditLifecycle,
   };
 }

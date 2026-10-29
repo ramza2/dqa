@@ -19,7 +19,22 @@ describe("M2-0 workflow home", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "DB 연결 관리로 이동" }));
     await user.click(screen.getByRole("button", { name: "스키마·Catalog로 이동" }));
-    await user.click(screen.getByRole("button", { name: "조회 시험 화면 열기" }));
-    expect(onNavigate.mock.calls).toEqual([["profiles"], ["discovery"], ["assistant"]]);
+    await user.click(screen.getByRole("button", { name: "템플릿 작성·검토 열기" }));
+    await user.click(screen.getByRole("button", { name: "Mock 조회 시험 열기" }));
+    expect(onNavigate.mock.calls).toEqual([
+      ["profiles"],
+      ["discovery"],
+      ["template-review"],
+      ["assistant"],
+    ]);
+  });
+
+  it("clarifies Oracle Mock LLM-free query trial entry separately from admin workflow", () => {
+    render(<WorkflowDashboard onNavigate={vi.fn()} />);
+    const trial = screen.getByTestId("mock-query-trial");
+    expect(trial).toHaveTextContent("Oracle Mock 조회 시험 (LLM 불필요)");
+    expect(trial).toHaveTextContent("수동 선택");
+    expect(trial).toHaveTextContent("감사 이력");
+    expect(trial).toHaveTextContent("실 DEMIS");
   });
 });

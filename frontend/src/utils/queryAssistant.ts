@@ -15,6 +15,32 @@ export function blockerMessage(code: ExecutionFormBlockerCode | string): string 
   }
 }
 
+/** Operator-facing copy for known Catalog / Template / Profile readiness codes. */
+export function readinessGuidanceMessage(code: string): string | null {
+  switch (code) {
+    case "ACTIVE_CATALOG_NOT_FOUND":
+      return "활성 Catalog가 없습니다. Catalog Package를 먼저 활성화하세요.";
+    case "CATALOG_MISMATCH":
+      return "Catalog가 변경되었습니다. 소스를 다시 선택하고 목록을 갱신하세요.";
+    case "TEMPLATE_NOT_FOUND":
+      return "선택한 Query Template을 찾을 수 없습니다. 목록을 다시 불러오세요.";
+    case "TEMPLATE_NOT_ELIGIBLE":
+      return "선택한 Template이 승인·활성화 상태가 아니거나 현재 Catalog와 맞지 않습니다.";
+    case "STALE_TEMPLATE_VERSION":
+      return "선택한 Template 버전이 최신이 아닙니다. 목록을 다시 불러오세요.";
+    case "CONNECTION_PROFILE_NOT_FOUND":
+      return "해당 소스·환경의 연결 Profile이 없습니다. DB 연결 관리에서 등록하세요.";
+    case "CONNECTION_PROFILE_DISABLED":
+      return "연결 Profile이 비활성 상태입니다. 활성 Profile을 확인하세요.";
+    case "CONNECTION_PROFILE_INCOMPLETE":
+      return blockerMessage("CONNECTION_PROFILE_INCOMPLETE");
+    case "DEMIS_ADAPTER_UNAVAILABLE":
+      return blockerMessage("DEMIS_ADAPTER_UNAVAILABLE");
+    default:
+      return null;
+  }
+}
+
 export function formatAssistantError(error: unknown): { code: string | null; message: string } {
   if (error instanceof CatalogApiError) {
     if (error.status === 401) {
@@ -22,6 +48,12 @@ export function formatAssistantError(error: unknown): { code: string | null; mes
     }
     if (error.status === 403 && error.code === "AUTHORIZATION_DENIED") {
       return { code: error.code, message: "조회 실행 권한이 없습니다." };
+    }
+    if (error.code) {
+      const guided = readinessGuidanceMessage(error.code);
+      if (guided) {
+        return { code: error.code, message: guided };
+      }
     }
     if (error.code === "DEMIS_ADAPTER_UNAVAILABLE" || error.status === 503) {
       if (error.code === "DEMIS_ADAPTER_UNAVAILABLE") {
@@ -37,6 +69,17 @@ export function formatAssistantError(error: unknown): { code: string | null; mes
     };
   }
   return { code: null, message: "요청 처리 중 오류가 발생했습니다." };
+}
+
+/** AUDIT_READ denied — history UI only; preserve query result rows. */
+export function isAuditReadDenied(error: unknown): boolean {
+  if (!(error instanceof CatalogApiError)) {
+    return false;
+  }
+  if (error.status !== 403) {
+    return false;
+  }
+  return error.code === "AUTHORIZATION_DENIED" || error.code === null || error.code === "";
 }
 
 export function isEgressNotAllowed(error: unknown): boolean {
