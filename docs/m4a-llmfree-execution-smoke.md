@@ -42,7 +42,7 @@ Gap Audit 이후, 기존 Query Execution 엔진을 재사용해 **LLM 없이**
    개발 환경을 “증명”하지 않는다 (기본값 `development`/`dev_headers` 금지).
 5. Base URL은 env-file의 `DQA_LAN_BIND_IP` + `DQA_FRONTEND_PORT`로만 유도.
    `DQA_SMOKE_BASE_URL`이 이와 다르면(임의 서버) BLOCKED. frontend publish도 동일 LAN 진입과 일치해야 한다.
-6. `DEMIS_SECRET_ORACLE_PASSWORD` 존재 (값은 절대 출력하지 않음)
+6. 검증된 **실행 중 Backend 컨테이너 내부**에 `DEMIS_SECRET_ORACLE_PASSWORD`가 존재해야 함 (값은 절대 출력하지 않음). 동일 컨테이너에서 allowlisted Oracle Mock TCP 접속 가능 여부를 확인하며, Docker 서비스명은 호스트 DNS에서 해석되지 않아도 됨
 7. host/port는 안전 charset 검증 후 `os.environ`으로만 Python에 전달 (셸/Python 삽입 금지)
 
 확인 불가능(Docker 없음·backend/frontend 미기동·inspect 실패)하면 exit `2`,
@@ -74,6 +74,7 @@ bash scripts/m4a-test-isolated.sh
 
 # 라이브 Mock HTTP smoke (명시 opt-in + 스택·시크릿·allowlisted Mock 필요)
 DQA_M4A_ALLOW_LIVE_ORACLE_MOCK=1 \
-  DEMIS_SECRET_ORACLE_PASSWORD=... \
+  DQA_COMPOSE_PROJECT_NAME=dqa-m4c-verify \
+  DQA_ENV_FILE=/path/to/m4c.env \
   bash scripts/dqa-m4a-llmfree-smoke.sh
 ```
