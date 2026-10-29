@@ -5,11 +5,14 @@
 #   manual-templates → form → preview → execute → audit
 #
 # Never calls /query-recommendations or /query-parameters/extract.
-# Never prints credentials or result row payloads.
+# Never prints credentials, HTTP bodies, or result row payloads.
 #
-# Oracle Mock readiness:
-#   - Missing/unreachable mock → exit 2 with M4A_ORACLE_MOCK_BLOCKED (not PASS)
-#   - Connected mock → full SELECT + durable audit checks
+# Live Oracle Mock gates (all required; otherwise BLOCKED, never PASS):
+#   - DQA_M4A_ALLOW_LIVE_ORACLE_MOCK=1 (explicit operator opt-in)
+#   - allowlisted host demis-oracle-test:1521 only
+#   - source oracle_demis_mock, environment development
+#   - APP_ENV=development and DQA_AUTH_PROVIDER=dev_headers
+#   - DEMIS_SECRET_ORACLE_PASSWORD present (value never printed)
 #
 # Existing scripts/dqa-oracle-mock-smoke.sh (LLM path) remains unchanged.
 set -euo pipefail
@@ -18,19 +21,87 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=dqa-common.sh
 source "${ROOT}/scripts/dqa-common.sh"
 
+ALLOWED_MOCK_HOST="demis-oracle-test"
+ALLOWED_MOCK_PORT="1521"
+ALLOWED_SOURCE="oracle_demis_mock"
+ALLOWED_ENVIRONMENT="development"
+
 dqa_require_cmd python3
+
+if [[ "${DQA_M4A_ALLOW_LIVE_ORACLE_MOCK:-}" != "1" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: set DQA_M4A_ALLOW_LIVE_ORACLE_MOCK=1 for explicit live Mock smoke" >&2
+  exit 2
+fi
+
 if [[ ! -f "${DQA_ENV_FILE}" ]]; then
-  echo "M4A_ORACLE_MOCK_BLOCKED: missing ${DQA_ENV_FILE} (live stack smoke not runnable)" >&2
+  echo "M4A_ORACLE_MOCK_BLOCKED: missing env file for live stack smoke" >&2
   exit 2
 fi
 dqa_require_env_file
+
+app_env="$(dqa_env_value APP_ENV "")"
+auth_provider="$(dqa_env_value DQA_AUTH_PROVIDER "")"
+# Dev overlay may set these in Compose rather than .env; allow explicit smoke overrides.
+app_env="${DQA_M4A_APP_ENV:-${app_env:-development}}"
+auth_provider="${DQA_M4A_AUTH_PROVIDER:-${auth_provider:-dev_headers}}"
+if [[ "$app_env" != "development" && "$app_env" != "test" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: APP_ENV must be development|test for live Mock smoke" >&2
+  exit 2
+fi
+if [[ "$auth_provider" != "dev_headers" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: DQA_AUTH_PROVIDER must be dev_headers for live Mock smoke" >&2
+  exit 2
+fi
 
 bind_ip="$(dqa_env_value DQA_LAN_BIND_IP 127.0.0.1)"
 frontend_port="$(dqa_env_value DQA_FRONTEND_PORT 8080)"
 base_url="${DQA_SMOKE_BASE_URL:-http://${bind_ip}:${frontend_port}}"
 
-export DQA_SMOKE_BASE_URL="${base_url}"
-export DQA_M4A_REQUIRE_ORACLE_MOCK="${DQA_M4A_REQUIRE_ORACLE_MOCK:-1}"
+MOCK_HOST="${DQA_M4A_ORACLE_MOCK_HOST:-$ALLOWED_MOCK_HOST}"
+MOCK_PORT="${DQA_M4A_ORACLE_MOCK_PORT:-$ALLOWED_MOCK_PORT}"
+SOURCE_NAME="${DQA_SMOKE_SOURCE:-$ALLOWED_SOURCE}"
+ENVIRONMENT="${DQA_SMOKE_ENVIRONMENT:-$ALLOWED_ENVIRONMENT}"
+
+if [[ ! "$MOCK_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: mock host failed safe-charset validation" >&2
+  exit 2
+fi
+if [[ ! "$MOCK_PORT" =~ ^[0-9]+$ ]] || (( MOCK_PORT < 1 || MOCK_PORT > 65535 )); then
+  echo "M4A_ORACLE_MOCK_BLOCKED: mock port failed numeric validation" >&2
+  exit 2
+fi
+if [[ "$MOCK_HOST" != "$ALLOWED_MOCK_HOST" || "$MOCK_PORT" != "$ALLOWED_MOCK_PORT" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: host/port is not the allowlisted Oracle Mock endpoint" >&2
+  exit 2
+fi
+if [[ "$SOURCE_NAME" != "$ALLOWED_SOURCE" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: source_name is not the allowlisted oracle_demis_mock" >&2
+  exit 2
+fi
+if [[ "$ENVIRONMENT" != "$ALLOWED_ENVIRONMENT" ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: environment is not development" >&2
+  exit 2
+fi
+if [[ ! "$bind_ip" =~ ^[0-9A-Fa-f.:]+$ && ! "$bind_ip" =~ ^[A-Za-z0-9.-]+$ ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: DQA_LAN_BIND_IP failed safe validation" >&2
+  exit 2
+fi
+if [[ ! "$frontend_port" =~ ^[0-9]+$ ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: DQA_FRONTEND_PORT failed numeric validation" >&2
+  exit 2
+fi
+if [[ ! "$base_url" =~ ^https?:// ]]; then
+  echo "M4A_ORACLE_MOCK_BLOCKED: smoke base URL must be http(s)" >&2
+  exit 2
+fi
+
+export DQA_SMOKE_BASE_URL="$base_url"
+export DQA_M4A_ORACLE_MOCK_HOST="$MOCK_HOST"
+export DQA_M4A_ORACLE_MOCK_PORT="$MOCK_PORT"
+export DQA_SMOKE_SOURCE="$SOURCE_NAME"
+export DQA_SMOKE_ENVIRONMENT="$ENVIRONMENT"
+export DQA_M4A_APP_ENV="$app_env"
+export DQA_M4A_AUTH_PROVIDER="$auth_provider"
 
 python3 - <<'PY'
 import json
@@ -41,18 +112,24 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+ALLOWED_HOST = "demis-oracle-test"
+ALLOWED_PORT = 1521
+ALLOWED_SOURCE = "oracle_demis_mock"
+ALLOWED_ENVIRONMENT = "development"
+
 base_url = os.environ["DQA_SMOKE_BASE_URL"].rstrip("/")
-source_name = os.environ.get("DQA_SMOKE_SOURCE", "oracle_demis_mock")
-environment = os.environ.get("DQA_SMOKE_ENVIRONMENT", "development")
+source_name = os.environ["DQA_SMOKE_SOURCE"]
+environment = os.environ["DQA_SMOKE_ENVIRONMENT"]
 expected_stable_key = os.environ.get(
     "DQA_SMOKE_EXPECTED_STABLE_KEY", "demis.code-master.by-group"
 )
 parameter_name = os.environ.get("DQA_SMOKE_PARAMETER_NAME", "cd_grp_id")
 parameter_value = os.environ.get("DQA_SMOKE_PARAMETER_VALUE", "DQA_TEST")
 expected_row_count = int(os.environ.get("DQA_SMOKE_EXPECTED_ROW_COUNT", "3"))
-mock_host = os.environ.get("DQA_M4A_ORACLE_MOCK_HOST", "demis-oracle-test")
-mock_port = int(os.environ.get("DQA_M4A_ORACLE_MOCK_PORT", "1521"))
-require_mock = os.environ.get("DQA_M4A_REQUIRE_ORACLE_MOCK", "1") == "1"
+mock_host = os.environ["DQA_M4A_ORACLE_MOCK_HOST"]
+mock_port = int(os.environ["DQA_M4A_ORACLE_MOCK_PORT"])
+app_env = os.environ.get("DQA_M4A_APP_ENV", "")
+auth_provider = os.environ.get("DQA_M4A_AUTH_PROVIDER", "")
 
 operator_headers = {
     "X-DQA-Dev-Actor": "dqa-m4a-operator",
@@ -74,6 +151,21 @@ def blocked(message: str) -> None:
     raise SystemExit(2)
 
 
+def assert_live_allowlist() -> None:
+    if app_env not in {"development", "test"}:
+        blocked("APP_ENV not development|test")
+    if auth_provider != "dev_headers":
+        blocked("auth provider is not dev_headers")
+    if mock_host != ALLOWED_HOST or mock_port != ALLOWED_PORT:
+        blocked("mock endpoint is not allowlisted")
+    if source_name != ALLOWED_SOURCE:
+        blocked("source_name is not allowlisted oracle_demis_mock")
+    if environment != ALLOWED_ENVIRONMENT:
+        blocked("environment is not development")
+    if not base_url.startswith(("http://", "https://")):
+        blocked("base URL scheme is not http(s)")
+
+
 def request_json(
     path: str,
     *,
@@ -93,10 +185,11 @@ def request_json(
         with urllib.request.urlopen(req, timeout=90) as response:
             raw = response.read()
     except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        fail(f"{verb} {path} returned HTTP {exc.code}: {body[:500]}")
+        # Never echo response bodies (may contain rows/secrets).
+        _ = exc.read()
+        fail(f"{verb} {path} returned HTTP {exc.code}")
     except Exception as exc:
-        fail(f"{verb} {path} failed: {type(exc).__name__}: {exc}")
+        fail(f"{verb} {path} failed: {type(exc).__name__}")
     try:
         parsed = json.loads(raw)
     except Exception:
@@ -112,19 +205,18 @@ def oracle_mock_ready() -> tuple[bool, str]:
         return False, "DEMIS_SECRET_ORACLE_PASSWORD is unset"
     try:
         with socket.create_connection((mock_host, mock_port), timeout=3):
-            return True, "tcp ok"
+            return True, "allowlisted mock TCP ok"
     except OSError as exc:
-        return False, f"tcp {mock_host}:{mock_port} unreachable ({exc.__class__.__name__})"
+        return False, f"allowlisted mock TCP unreachable ({exc.__class__.__name__})"
 
 
+assert_live_allowlist()
 ready, reason = oracle_mock_ready()
 if not ready:
-    if require_mock:
-        blocked(reason)
-    print(f"M4A_ORACLE_MOCK_SKIPPED: {reason}")
-    raise SystemExit(2)
+    blocked(reason)
 
-print(f"PASS: oracle mock readiness ({reason})")
+print(f"M4A_ORACLE_MOCK_REACHABLE: {reason}")
+print("LIVE_E2E=RUNNING")
 
 manual = request_json(
     "/api/v1/query-executions/manual-templates?"
@@ -143,14 +235,14 @@ chosen = next(
     None,
 )
 if chosen is None:
-    fail(f"manual-templates missing stable_key={expected_stable_key!r}")
+    fail("manual-templates missing expected stable_key")
 
 template_id = chosen.get("template_id")
 version_id = chosen.get("version_id")
 if not isinstance(template_id, int) or not isinstance(version_id, int):
     fail("manual template missing template_id/version_id")
 if parameter_name not in (chosen.get("parameter_names") or []):
-    fail(f"manual template does not declare {parameter_name}")
+    fail("manual template missing expected parameter name")
 print(f"PASS: manual-templates template_id={template_id} version_id={version_id}")
 
 form = request_json(
@@ -164,7 +256,7 @@ form = request_json(
     ),
     headers=operator_headers,
 )
-if form.get("template", {}).get("id") != template_id:
+if form.get("template", {}).get("template_id") != template_id:
     fail("form template_id mismatch")
 print("PASS: execution form metadata")
 
@@ -182,7 +274,7 @@ preview = request_json(
     payload=execution_payload,
 )
 if preview.get("execution_available") is not True:
-    fail(f"preview unavailable: {preview.get('execution_blockers')!r}")
+    fail("preview unavailable")
 if (preview.get("resolved_parameters") or {}).get(parameter_name) != parameter_value:
     fail("preview resolved parameters mismatch")
 print("PASS: execution preview available")
@@ -194,17 +286,13 @@ execution = request_json(
 )
 row_count = execution.get("row_count")
 if row_count != expected_row_count:
-    fail(f"unexpected row_count: expected={expected_row_count}, actual={row_count!r}")
+    fail("unexpected row_count")
 if execution.get("truncated") is not False:
     fail("result unexpectedly truncated")
 audit_id = execution.get("audit_id")
 if not isinstance(audit_id, str) or not audit_id:
     fail("execution did not return audit_id")
-# Never dump rows.
-if "rows" in execution and isinstance(execution["rows"], list):
-    print(f"PASS: read-only execution row_count={row_count} (rows omitted)")
-else:
-    print(f"PASS: read-only execution row_count={row_count}")
+print(f"PASS: read-only execution row_count={row_count} (rows omitted)")
 
 audit = request_json(
     f"/api/v1/audit-events/{urllib.parse.quote(audit_id, safe='')}",
@@ -226,13 +314,14 @@ required = {
 }
 missing = required - actual
 if missing:
-    fail(f"audit lifecycle incomplete: missing={sorted(missing)!r}")
+    fail("audit lifecycle incomplete")
 for item in items:
     if isinstance(item, dict) and item.get("parameter_logging_policy") != "NAMES_ONLY":
         fail("audit parameter logging policy is not NAMES_ONLY")
 serialized = json.dumps(audit, ensure_ascii=False)
 if parameter_value in serialized:
     fail("audit response leaked a parameter value")
-print(f"PASS: durable audit lifecycle audit_id={audit_id}")
-print("PASS: M4-A LLM-free Oracle mock smoke")
+print("PASS: durable audit lifecycle (audit_id omitted from stdout)")
+print("LIVE_E2E=PASS")
+print("PASS: M4-A LLM-free Oracle mock live smoke")
 PY

@@ -4,7 +4,9 @@
 # 1) Refuse any non-disposable PostgreSQL (port 5432 must be free; never touch ops DB).
 # 2) Start ephemeral pgvector/pg16 on 127.0.0.1:5432 (tmpfs PGDATA).
 # 3) Run LLM-free API contract pytest (Fake adapter; no Oracle socket).
-# 4) Probe Oracle Mock readiness separately → BLOCKED/SKIPPED, never PASS.
+# 4) Optionally probe Oracle Mock TCP separately.
+#    Labels: API_CONTRACT / ORACLE_MOCK_REACHABLE / LIVE_E2E=NOT_RUN
+#    Never print M4A_REVIEW_PASS or LIVE_E2E=PASS from this harness.
 #
 # Existing dqa-oracle-mock-smoke.sh is left intact for the legacy LLM path.
 set -euo pipefail
@@ -15,6 +17,9 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
   PYTHON_BIN="${DQA_TEST_PYTHON:-${HOME}/dqa/backend/.venv/bin/python}"
 fi
 IMAGE="pgvector/pgvector:pg16"
+# Fixed allowlisted mock identity (same as app.services.oracle_mock_actions).
+ALLOWED_MOCK_HOST="demis-oracle-test"
+ALLOWED_MOCK_PORT="1521"
 
 port_in_use_5432() {
   if command -v ss >/dev/null 2>&1; then
@@ -33,6 +38,23 @@ else:
     s.close()
     raise SystemExit(0)
 PY
+}
+
+validate_mock_endpoint() {
+  local host="$1" port="$2"
+  if [[ ! "$host" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    echo "M4A_ORACLE_MOCK_BLOCKED: mock host failed safe-charset validation" >&2
+    return 1
+  fi
+  if [[ ! "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+    echo "M4A_ORACLE_MOCK_BLOCKED: mock port failed numeric validation" >&2
+    return 1
+  fi
+  if [[ "$host" != "$ALLOWED_MOCK_HOST" || "$port" != "$ALLOWED_MOCK_PORT" ]]; then
+    echo "M4A_ORACLE_MOCK_BLOCKED: host/port is not the allowlisted Oracle Mock endpoint" >&2
+    return 1
+  fi
+  return 0
 }
 
 for cmd in docker git; do
@@ -97,50 +119,66 @@ echo "M4A_ISOLATED_POSTGRES_READY"
 cd "$ROOT/backend"
 echo "===== API CONTRACT (Fake adapter; no Oracle) ====="
 "$PYTHON_BIN" -m pytest -q --tb=short \
-  tests/test_m4a_llmfree_execution_contract.py
+  tests/test_m4a_llmfree_execution_contract.py \
+  tests/test_m4a_script_safety.py
 echo "M4A_API_CONTRACT_PASS"
 
-echo "===== ORACLE MOCK READINESS (live path; never PASS if unavailable) ====="
-MOCK_HOST="${DQA_M4A_ORACLE_MOCK_HOST:-demis-oracle-test}"
-MOCK_PORT="${DQA_M4A_ORACLE_MOCK_PORT:-1521}"
-if [[ -z "${DEMIS_SECRET_ORACLE_PASSWORD:-}" ]]; then
+echo "===== ORACLE MOCK TCP PROBE (not Live E2E) ====="
+MOCK_HOST="${DQA_M4A_ORACLE_MOCK_HOST:-$ALLOWED_MOCK_HOST}"
+MOCK_PORT="${DQA_M4A_ORACLE_MOCK_PORT:-$ALLOWED_MOCK_PORT}"
+ORACLE_STATUS=blocked
+if ! validate_mock_endpoint "$MOCK_HOST" "$MOCK_PORT"; then
+  ORACLE_STATUS=blocked
+elif [[ -z "${DEMIS_SECRET_ORACLE_PASSWORD:-}" ]]; then
   echo "M4A_ORACLE_MOCK_BLOCKED: DEMIS_SECRET_ORACLE_PASSWORD unset"
   ORACLE_STATUS=blocked
 else
-  if "$PYTHON_BIN" - <<PY
-import socket, sys
-host = "${MOCK_HOST}"
-port = int("${MOCK_PORT}")
+  export DQA_M4A_ORACLE_MOCK_HOST="$MOCK_HOST"
+  export DQA_M4A_ORACLE_MOCK_PORT="$MOCK_PORT"
+  if "$PYTHON_BIN" - <<'PY'
+import os
+import socket
+import sys
+
+host = os.environ["DQA_M4A_ORACLE_MOCK_HOST"]
+port_raw = os.environ["DQA_M4A_ORACLE_MOCK_PORT"]
+if host != "demis-oracle-test" or port_raw != "1521":
+    print("not allowlisted", file=sys.stderr)
+    raise SystemExit(1)
+port = int(port_raw)
 s = socket.socket()
 s.settimeout(3)
 try:
     s.connect((host, port))
 except OSError as exc:
-    print(f"unreachable: {exc.__class__.__name__}")
+    print(exc.__class__.__name__, file=sys.stderr)
     raise SystemExit(1)
-else:
+finally:
     s.close()
-    raise SystemExit(0)
 PY
   then
-    echo "M4A_ORACLE_MOCK_REACHABLE: ${MOCK_HOST}:${MOCK_PORT}"
-    echo "NOTE: live HTTP smoke is optional here; run scripts/dqa-m4a-llmfree-smoke.sh against a running stack."
+    echo "M4A_ORACLE_MOCK_REACHABLE: allowlisted endpoint TCP open"
+    echo "NOTE: TCP reachable is NOT Live E2E PASS. Run scripts/dqa-m4a-llmfree-smoke.sh separately."
     ORACLE_STATUS=reachable
   else
-    echo "M4A_ORACLE_MOCK_BLOCKED: ${MOCK_HOST}:${MOCK_PORT} not reachable"
+    echo "M4A_ORACLE_MOCK_BLOCKED: allowlisted endpoint not reachable"
     ORACLE_STATUS=blocked
   fi
 fi
 
 cd "$ROOT"
 echo "===== DIFF CHECK ====="
-git diff --check 79210d1 HEAD || true
+git diff --check 79210d1 HEAD
 
 echo "===== M4A SUMMARY ====="
 echo "API_CONTRACT=PASS"
-echo "ORACLE_MOCK=${ORACLE_STATUS}"
-if [[ "$ORACLE_STATUS" == "blocked" ]]; then
-  echo "M4A_REVIEW_PARTIAL: API contract PASS; Oracle Mock BLOCKED (not counted as PASS)"
-  exit 0
+if [[ "$ORACLE_STATUS" == "reachable" ]]; then
+  echo "ORACLE_MOCK_REACHABLE=yes"
+else
+  echo "ORACLE_MOCK_REACHABLE=no"
+  echo "ORACLE_MOCK=BLOCKED"
 fi
-echo "M4A_REVIEW_PASS"
+echo "LIVE_E2E=NOT_RUN"
+echo "M4A_ISOLATED_HARNESS_COMPLETE"
+# Never emit M4A_REVIEW_PASS or LIVE_E2E=PASS from this harness.
+exit 0
