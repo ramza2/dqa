@@ -1280,4 +1280,89 @@ describe("M4-B LLM-free audit lifecycle UX", () => {
       restore();
     }
   });
+
+  it("clears prior result and audit UI as soon as a new execute starts", async () => {
+    const user = userEvent.setup();
+    const pending = { resolve: null as ((value: Response) => void) | null };
+    let executeCalls = 0;
+    const handlers = assistantHandlers({ preview: availablePreview });
+    handlers.unshift((url, init) => {
+      if (url.pathname.endsWith("/query-executions/manual-templates")) {
+        return jsonResponse(manualResponse);
+      }
+      if (url.pathname.endsWith("/audit-events/audit-123")) {
+        return jsonResponse(auditBundleResponse);
+      }
+      if (url.pathname.endsWith("/query-executions/execute") && init?.method === "POST") {
+        executeCalls += 1;
+        if (executeCalls === 1) {
+          return jsonResponse(executeResponse);
+        }
+        return new Promise<Response>((resolve) => {
+          pending.resolve = resolve;
+        });
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await runManualExecute(user);
+      await user.click(screen.getByRole("button", { name: "감사 이력 불러오기" }));
+      expect(await screen.findByTestId("audit-lifecycle-table")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "조회 실행" }));
+      await waitFor(() => expect(pending.resolve).not.toBeNull());
+      expect(screen.queryByTestId("audit-id")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("audit-lifecycle")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("audit-lifecycle-table")).not.toBeInTheDocument();
+      pending.resolve?.(
+        jsonResponse({ ...executeResponse, audit_id: "audit-456", row_count: 1 }),
+      );
+      expect(await screen.findByTestId("audit-id")).toHaveTextContent("audit-456");
+    } finally {
+      restore();
+    }
+  });
+
+  it("does not keep prior result or audit UI after a new execute fails", async () => {
+    const user = userEvent.setup();
+    let executeCalls = 0;
+    const handlers = assistantHandlers({ preview: availablePreview });
+    handlers.unshift((url, init) => {
+      if (url.pathname.endsWith("/query-executions/manual-templates")) {
+        return jsonResponse(manualResponse);
+      }
+      if (url.pathname.endsWith("/audit-events/audit-123")) {
+        return jsonResponse(auditBundleResponse);
+      }
+      if (url.pathname.endsWith("/query-executions/execute") && init?.method === "POST") {
+        executeCalls += 1;
+        if (executeCalls === 1) {
+          return jsonResponse(executeResponse);
+        }
+        return jsonResponse(
+          { detail: { code: "DEMIS_ADAPTER_UNAVAILABLE", message: "blocked" } },
+          503,
+        );
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await runManualExecute(user);
+      await user.click(screen.getByRole("button", { name: "감사 이력 불러오기" }));
+      expect(await screen.findByTestId("audit-lifecycle-table")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "조회 실행" }));
+      await waitFor(() => {
+        expect(screen.queryByTestId("audit-id")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("audit-lifecycle")).not.toBeInTheDocument();
+      });
+      expect(await screen.findByRole("alert")).toHaveTextContent("DEMIS_ADAPTER_UNAVAILABLE");
+      expect(screen.queryByTestId("audit-id")).not.toBeInTheDocument();
+      expect(screen.queryByText("A01")).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
 });

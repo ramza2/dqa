@@ -578,6 +578,10 @@ export function useQueryAssistant() {
     const opGeneration = bumpGeneration();
     setExecuteState("loading");
     setExecuteError(null);
+    // Drop prior rows/audit UI immediately so a new run (or failure) never
+    // leaves the previous success surface visible.
+    setResult(null);
+    resultAuditIdRef.current = null;
     clearAuditLifecycle();
     try {
       const parameters = buildParameterPayload(
