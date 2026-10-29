@@ -202,8 +202,13 @@ export function QueryAssistant() {
       <header className="app-header">
         <div className="app-title-row">
           <h1>DQA / Query Assistant</h1>
-          <span className="subtitle">승인된 Query Template 기반 조회</span>
+          <span className="subtitle">LLM 없이 승인 Template으로 조회 시험</span>
         </div>
+        <p className="muted" data-testid="llmfree-guidance">
+          권장 경로: 소스 선택 → 승인 템플릿 직접 선택 → 조건 입력 → 미리보기 → 실행 →
+          감사 이력. 자연어 추천·AI 조건 채우기는 선택 사항이며 LLM·egress 정책이
+          필요합니다.
+        </p>
         <label className="source-field">
           <span className="label">Active Catalog source</span>
           <select
@@ -230,10 +235,10 @@ export function QueryAssistant() {
           active={qa.sources.find((s) => s.source_name === qa.selectedSource)}
         />
         <section className="qa-panel" aria-labelledby="manual-template-heading">
-          <h2 id="manual-template-heading">승인 템플릿 직접 선택 (AI 불필요)</h2>
+          <h2 id="manual-template-heading">1. 승인 템플릿 직접 선택 (LLM 불필요)</h2>
           <p className="muted">
             승인·활성화된 조회 템플릿을 직접 선택한 뒤 조건을 입력합니다.
-            이 목록은 SQL을 생성하거나 DEMIS 데이터를 조회하지 않습니다.
+            이 단계는 SQL을 생성하지 않으며 LLM을 호출하지 않습니다.
           </p>
           <div className="qa-actions">
             <button
@@ -287,7 +292,10 @@ export function QueryAssistant() {
           ) : null}
         </section>
         <section className="qa-panel" aria-labelledby="qa-request-heading">
-          <h2 id="qa-request-heading">자연어 요청</h2>
+          <h2 id="qa-request-heading">선택: 자연어 요청 (LLM 필요)</h2>
+          <p className="muted">
+            Mock 조회 시험의 기본 경로가 아닙니다. LLM 추천·추출이 가능할 때만 사용하세요.
+          </p>
           <textarea
             aria-label="자연어 조회 요청"
             maxLength={qa.maxRequestText}
@@ -438,8 +446,9 @@ export function QueryAssistant() {
                       !qa.requestText.trim() ||
                       qa.extractState === "loading"
                     }
+                    title="선택 사항: LLM·egress 정책이 허용될 때만 사용"
                   >
-                    {qa.extractState === "loading" ? "추출 중…" : "AI로 조건 채우기"}
+                    {qa.extractState === "loading" ? "추출 중…" : "선택: AI로 조건 채우기"}
                   </button>
                 </div>
                 <InfoBanner message={qa.extractInfo} />
@@ -452,7 +461,7 @@ export function QueryAssistant() {
 
         {qa.form ? (
           <section className="qa-panel" aria-labelledby="qa-preview-heading">
-            <h2 id="qa-preview-heading">조회 미리보기</h2>
+            <h2 id="qa-preview-heading">2. 조회 미리보기 · 실행</h2>
             <div className="qa-actions">
               <button
                 type="button"
@@ -539,7 +548,7 @@ export function QueryAssistant() {
 
         {qa.result ? (
           <section className="qa-panel" aria-labelledby="qa-result-heading">
-            <h2 id="qa-result-heading">조회 결과</h2>
+            <h2 id="qa-result-heading">3. 조회 결과</h2>
             <dl className="status-grid">
               <div className="status-item">
                 <span className="label">row_count</span>
@@ -579,6 +588,63 @@ export function QueryAssistant() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div className="qa-audit-lifecycle" data-testid="audit-lifecycle">
+              <h3 id="qa-audit-heading">4. 감사 이력 (AUDIT_READ)</h3>
+              <p className="muted">
+                {"서버 GET /audit-events/{audit_id}로 append-only lifecycle을 조회합니다. "}
+                권한이 없으면 이력만 차단되고 위 조회 결과는 유지됩니다.
+              </p>
+              <div className="qa-actions">
+                <button
+                  type="button"
+                  onClick={() => void qa.loadAuditLifecycle()}
+                  disabled={qa.auditState === "loading"}
+                >
+                  {qa.auditState === "loading" ? "이력 불러오는 중…" : "감사 이력 불러오기"}
+                </button>
+              </div>
+              {qa.auditForbidden ? (
+                <div className="banner banner-warn" role="status" data-testid="audit-forbidden">
+                  감사 이력 조회 권한이 없습니다 (AUDIT_READ). 조회 결과는 그대로 유지됩니다.
+                </div>
+              ) : null}
+              <ErrorBanner error={qa.auditError} />
+              {qa.auditBundle ? (
+                <div className="qa-result-table-wrap" data-testid="audit-lifecycle-table">
+                  <table className="data-table qa-result-table">
+                    <thead>
+                      <tr>
+                        <th>event_type</th>
+                        <th>status</th>
+                        <th>parameter_names</th>
+                        <th>logging_policy</th>
+                        <th>row_count</th>
+                        <th>elapsed_ms</th>
+                        <th>created_at</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {qa.auditBundle.items.map((item) => (
+                        <tr key={item.id}>
+                          <td>{item.event_type}</td>
+                          <td>{item.status}</td>
+                          <td>
+                            {item.parameter_names.length > 0
+                              ? item.parameter_names.join(", ")
+                              : "-"}
+                          </td>
+                          <td>{item.parameter_logging_policy}</td>
+                          <td>{item.row_count ?? "-"}</td>
+                          <td>{item.elapsed_ms ?? "-"}</td>
+                          <td>{item.created_at}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </div>
           </section>
         ) : null}

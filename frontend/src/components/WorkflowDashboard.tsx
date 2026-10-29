@@ -95,14 +95,30 @@ export function WorkflowDashboard({ onNavigate }: {
           ))}
         </ol>
       </section>
-      <section className="workflow-section workflow-legacy">
-        <h2>기존 조회 기능 시험</h2>
+      <section
+        className="workflow-section workflow-legacy"
+        aria-label="Oracle Mock 조회 시험"
+        data-testid="mock-query-trial"
+      >
+        <h2>Oracle Mock 조회 시험 (LLM 불필요)</h2>
         <p>
-          Query Assistant 화면은 승인된 Query Template 기반 조회를 시험하기 위한 기존 기능입니다.
-          Target 분석부터 시작하는 관리자 업무의 첫 단계는 아닙니다.
+          승인·활성화된 Query Template으로{" "}
+          <strong>수동 선택 → 조건 입력 → 미리보기 → 실행 → 감사 이력</strong>을
+          시험하는 기존 Query Assistant 경로입니다. LLM 추천·파라미터 추출 없이도
+          동작합니다.
         </p>
-        <button type="button" className="dd-secondary-btn"
-          onClick={() => onNavigate("assistant")}>조회 시험 화면 열기</button>
+        <p className="muted">
+          개발용 Oracle Mock Target·READY Catalog·승인 템플릿·연결 Profile이 준비된
+          뒤에만 실제 조회가 가능합니다. Target 등록·스키마 분석부터 시작하는
+          관리자 업무의 첫 단계는 아닙니다. 실 DEMIS·MCP·운영 배포와는 별도입니다.
+        </p>
+        <button
+          type="button"
+          className="dd-secondary-btn"
+          onClick={() => onNavigate("assistant")}
+        >
+          Mock 조회 시험 열기
+        </button>
       </section>
     </main>
   );

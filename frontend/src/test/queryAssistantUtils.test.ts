@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { finalizeRequestHeaders } from "../api/client";
 import type { ExecutionFormParameter } from "../types/queryAssistant";
+import { CatalogApiError } from "../types/catalog";
 import {
   buildParameterPayload,
   defaultsFromFormParameters,
   findEnumOptionIndex,
+  formatAssistantError,
+  isAuditReadDenied,
+  readinessGuidanceMessage,
 } from "../utils/queryAssistant";
 
 function param(
@@ -93,6 +97,34 @@ describe("findEnumOptionIndex", () => {
     expect(findEnumOptionIndex(allowed, 1)).toBe(0);
     expect(findEnumOptionIndex(allowed, "1")).toBe(1);
     expect(findEnumOptionIndex(allowed, true)).toBe(2);
+  });
+});
+
+describe("readinessGuidanceMessage / formatAssistantError", () => {
+  it("maps Catalog Template Profile readiness codes to operator guidance", () => {
+    expect(readinessGuidanceMessage("ACTIVE_CATALOG_NOT_FOUND")).toMatch(/활성 Catalog/);
+    expect(readinessGuidanceMessage("TEMPLATE_NOT_ELIGIBLE")).toMatch(/승인·활성화/);
+    expect(readinessGuidanceMessage("CONNECTION_PROFILE_NOT_FOUND")).toMatch(/연결 Profile/);
+    expect(
+      formatAssistantError(
+        new CatalogApiError(404, "raw", "ACTIVE_CATALOG_NOT_FOUND"),
+      ),
+    ).toEqual({
+      code: "ACTIVE_CATALOG_NOT_FOUND",
+      message: readinessGuidanceMessage("ACTIVE_CATALOG_NOT_FOUND"),
+    });
+  });
+
+  it("detects AUDIT_READ denial without treating other 403s as audit denial only", () => {
+    expect(isAuditReadDenied(new CatalogApiError(403, "denied", "AUTHORIZATION_DENIED"))).toBe(
+      true,
+    );
+    expect(
+      isAuditReadDenied(
+        new CatalogApiError(403, "egress", "PARAMETER_EXTRACTION_EGRESS_NOT_ALLOWED"),
+      ),
+    ).toBe(false);
+    expect(isAuditReadDenied(new CatalogApiError(404, "missing", "NOT_FOUND"))).toBe(false);
   });
 });
 

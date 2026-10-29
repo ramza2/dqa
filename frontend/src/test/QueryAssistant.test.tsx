@@ -554,7 +554,7 @@ describe("QueryAssistant", () => {
     const restore = installFetchMock(assistantHandlers());
     render(<QueryAssistant />);
     await recommendHappyPath(user);
-    await user.click(screen.getByRole("button", { name: "AI로 조건 채우기" }));
+    await user.click(screen.getByRole("button", { name: "선택: AI로 조건 채우기" }));
     await waitFor(() => {
       expect(screen.getByLabelText(/병동 코드/)).toHaveValue("A01");
     });
@@ -574,7 +574,7 @@ describe("QueryAssistant", () => {
     );
     render(<QueryAssistant />);
     await recommendHappyPath(user);
-    await user.click(screen.getByRole("button", { name: "AI로 조건 채우기" }));
+    await user.click(screen.getByRole("button", { name: "선택: AI로 조건 채우기" }));
     expect(
       await screen.findByText(
         "현재 정책상 자연어 조건 자동 추출이 비활성화되어 있습니다. 직접 입력해주세요.",
@@ -733,7 +733,7 @@ describe("QueryAssistant", () => {
     render(<QueryAssistant />);
     await recommendHappyPath(user);
 
-    await user.click(screen.getByRole("button", { name: "AI로 조건 채우기" }));
+    await user.click(screen.getByRole("button", { name: "선택: AI로 조건 채우기" }));
     const wardInput = screen.getByLabelText(/병동 코드/);
     await user.type(wardInput, "B02");
 
@@ -1011,6 +1011,271 @@ describe("M3-A model-free manual selection", () => {
       expect(error).toHaveTextContent("CATALOG_MISMATCH");
       expect(error).toHaveTextContent("Catalog가 변경되었습니다");
       expect(screen.queryByLabelText("승인 템플릿 직접 선택")).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+});
+
+const auditBundleResponse = {
+  audit_id: "audit-123",
+  items: [
+    {
+      id: 1,
+      audit_id: "audit-123",
+      event_type: "QUERY_REQUEST",
+      status: "STARTED",
+      actor_id: "op",
+      source_name: activeSource.source_name,
+      catalog_revision_id: 1,
+      catalog_fingerprint: activeSource.schema_fingerprint,
+      template_id: 10,
+      template_version_id: 20,
+      connection_profile_id: 99,
+      parameter_names: ["ward_cd"],
+      sensitive_parameter_names: ["ward_cd"],
+      parameter_logging_policy: "NAMES_ONLY",
+      failure_category: null,
+      elapsed_ms: null,
+      row_count: null,
+      result_truncated: null,
+      created_at: "2026-10-29T01:00:00+00:00",
+    },
+    {
+      id: 2,
+      audit_id: "audit-123",
+      event_type: "QUERY_REQUEST",
+      status: "SUCCEEDED",
+      actor_id: "op",
+      source_name: activeSource.source_name,
+      catalog_revision_id: 1,
+      catalog_fingerprint: activeSource.schema_fingerprint,
+      template_id: 10,
+      template_version_id: 20,
+      connection_profile_id: 99,
+      parameter_names: ["ward_cd"],
+      sensitive_parameter_names: ["ward_cd"],
+      parameter_logging_policy: "NAMES_ONLY",
+      failure_category: null,
+      elapsed_ms: 3,
+      row_count: null,
+      result_truncated: null,
+      created_at: "2026-10-29T01:00:01+00:00",
+    },
+    {
+      id: 3,
+      audit_id: "audit-123",
+      event_type: "QUERY_EXECUTION",
+      status: "STARTED",
+      actor_id: "op",
+      source_name: activeSource.source_name,
+      catalog_revision_id: 1,
+      catalog_fingerprint: activeSource.schema_fingerprint,
+      template_id: 10,
+      template_version_id: 20,
+      connection_profile_id: 99,
+      parameter_names: ["ward_cd"],
+      sensitive_parameter_names: ["ward_cd"],
+      parameter_logging_policy: "NAMES_ONLY",
+      failure_category: null,
+      elapsed_ms: null,
+      row_count: null,
+      result_truncated: null,
+      created_at: "2026-10-29T01:00:01+00:00",
+    },
+    {
+      id: 4,
+      audit_id: "audit-123",
+      event_type: "QUERY_EXECUTION",
+      status: "SUCCEEDED",
+      actor_id: "op",
+      source_name: activeSource.source_name,
+      catalog_revision_id: 1,
+      catalog_fingerprint: activeSource.schema_fingerprint,
+      template_id: 10,
+      template_version_id: 20,
+      connection_profile_id: 99,
+      parameter_names: ["ward_cd"],
+      sensitive_parameter_names: ["ward_cd"],
+      parameter_logging_policy: "NAMES_ONLY",
+      failure_category: null,
+      elapsed_ms: 12,
+      row_count: 2,
+      result_truncated: false,
+      created_at: "2026-10-29T01:00:02+00:00",
+    },
+  ],
+};
+
+describe("M4-B LLM-free audit lifecycle UX", () => {
+  const manualResponse = {
+    source_name: activeSource.source_name,
+    catalog_revision_id: activeSource.revision_id,
+    schema_fingerprint: activeSource.schema_fingerprint,
+    total: 1,
+    limit: 100,
+    offset: 0,
+    items: [recommendation.ranked_candidates[0]],
+  };
+
+  async function runManualExecute(user: ReturnType<typeof userEvent.setup>) {
+    await screen.findByLabelText("Active Catalog source");
+    await user.selectOptions(
+      screen.getByLabelText("Active Catalog source"),
+      activeSource.source_name,
+    );
+    const loadButton = screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" });
+    await waitFor(() => expect(loadButton).toBeEnabled());
+    await user.click(loadButton);
+    const select = await screen.findByLabelText("승인 템플릿 직접 선택");
+    await user.selectOptions(select, "10:20");
+    await screen.findByLabelText(/병동 코드/);
+    await user.type(screen.getByLabelText(/병동 코드/), "A01");
+    await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+    await screen.findByTestId("preview-summary");
+    await user.click(screen.getByRole("button", { name: "조회 실행" }));
+    expect(await screen.findByTestId("audit-id")).toHaveTextContent("audit-123");
+  }
+
+  it("shows LLM-free guidance and loads audit lifecycle after execute", async () => {
+    const user = userEvent.setup();
+    let auditCalls = 0;
+    const handlers = assistantHandlers({ preview: availablePreview });
+    handlers.unshift((url) => {
+      if (url.pathname.endsWith("/query-executions/manual-templates")) {
+        return jsonResponse(manualResponse);
+      }
+      if (url.pathname.endsWith("/audit-events/audit-123")) {
+        auditCalls += 1;
+        return jsonResponse(auditBundleResponse);
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      expect(screen.getByTestId("llmfree-guidance")).toHaveTextContent("권장 경로");
+      expect(screen.getByRole("heading", { name: /승인 템플릿 직접 선택/ })).toBeInTheDocument();
+      await runManualExecute(user);
+      expect(screen.getByTestId("audit-lifecycle")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "감사 이력 불러오기" }));
+      const table = await screen.findByTestId("audit-lifecycle-table");
+      expect(table).toHaveTextContent("QUERY_EXECUTION");
+      expect(table).toHaveTextContent("SUCCEEDED");
+      expect(table).toHaveTextContent("NAMES_ONLY");
+      expect(auditCalls).toBe(1);
+      expect(screen.getByTestId("audit-id")).toHaveTextContent("audit-123");
+    } finally {
+      restore();
+    }
+  });
+
+  it("keeps query results when audit lookup returns 403", async () => {
+    const user = userEvent.setup();
+    const handlers = assistantHandlers({ preview: availablePreview });
+    handlers.unshift((url) => {
+      if (url.pathname.endsWith("/query-executions/manual-templates")) {
+        return jsonResponse(manualResponse);
+      }
+      if (url.pathname.endsWith("/audit-events/audit-123")) {
+        return jsonResponse(
+          { detail: { code: "AUTHORIZATION_DENIED", message: "denied" } },
+          403,
+        );
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await runManualExecute(user);
+      await user.click(screen.getByRole("button", { name: "감사 이력 불러오기" }));
+      expect(await screen.findByTestId("audit-forbidden")).toHaveTextContent("AUDIT_READ");
+      expect(screen.getByTestId("audit-id")).toHaveTextContent("audit-123");
+      expect(screen.getByText("A01")).toBeInTheDocument();
+      expect(screen.queryByTestId("audit-lifecycle-table")).not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it("invalidates audit history when template selection changes", async () => {
+    const user = userEvent.setup();
+    const altCandidate = {
+      template_id: 11,
+      version_id: 21,
+      version: 1,
+      stable_key: "wards.alt",
+      name: "대안 병동 조회",
+      description: "대안",
+      target_schemas: ["DEMIS_OWNER"],
+      parameter_names: ["ward_cd"],
+      parameter_count: 1,
+    };
+    const handlers = assistantHandlers({ preview: availablePreview });
+    handlers.unshift((url) => {
+      if (url.pathname.endsWith("/query-executions/manual-templates")) {
+        return jsonResponse({
+          ...manualResponse,
+          total: 2,
+          items: [recommendation.ranked_candidates[0], altCandidate],
+        });
+      }
+      if (url.pathname.endsWith("/audit-events/audit-123")) {
+        return jsonResponse(auditBundleResponse);
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await runManualExecute(user);
+      await user.click(screen.getByRole("button", { name: "감사 이력 불러오기" }));
+      expect(await screen.findByTestId("audit-lifecycle-table")).toBeInTheDocument();
+      const select = screen.getByLabelText("승인 템플릿 직접 선택");
+      await user.selectOptions(select, "11:21");
+      await waitFor(() => {
+        expect(screen.queryByTestId("audit-id")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("audit-lifecycle-table")).not.toBeInTheDocument();
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it("ignores stale audit response after source change", async () => {
+    const user = userEvent.setup();
+    const pending = { resolve: null as ((value: Response) => void) | null };
+    const handlers = assistantHandlers({
+      preview: availablePreview,
+      actives: [activeSource, secondSource],
+    });
+    handlers.unshift((url) => {
+      if (url.pathname.endsWith("/query-executions/manual-templates")) {
+        return jsonResponse(manualResponse);
+      }
+      if (url.pathname.endsWith("/audit-events/audit-123")) {
+        return new Promise<Response>((resolve) => {
+          pending.resolve = resolve;
+        });
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await runManualExecute(user);
+      await user.click(screen.getByRole("button", { name: "감사 이력 불러오기" }));
+      await waitFor(() => expect(pending.resolve).not.toBeNull());
+      await user.selectOptions(
+        screen.getByLabelText("Active Catalog source"),
+        secondSource.source_name,
+      );
+      pending.resolve?.(jsonResponse(auditBundleResponse));
+      await waitFor(() => {
+        expect(screen.queryByTestId("audit-lifecycle-table")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("audit-id")).not.toBeInTheDocument();
+      });
     } finally {
       restore();
     }
