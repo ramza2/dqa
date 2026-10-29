@@ -4,6 +4,10 @@
 # Verifies:
 #   recommendation -> parameter extraction -> preview -> execute -> audit
 #
+# Compatibility note (M4-A): this legacy LLM recommend/extract path is kept.
+# For LLM-free manual-templates → form → preview → execute → audit, use
+# scripts/dqa-m4a-llmfree-smoke.sh instead.
+#
 # Never use this script against production or real clinical data.
 # It does not print query result rows or credentials.
 set -euo pipefail
