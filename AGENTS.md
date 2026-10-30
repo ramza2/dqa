@@ -474,3 +474,15 @@ real DEMIS source, metadata rights, preflight approval, Catalog READY,
 clinical read/write, or ODS/DR connections. The previously discussed
 11 clinical-information groups are not confirmed without approved mapping.
 See \`docs/m2-1i-integration-readiness.md\` and the DEC decision register.
+
+
+## M5 — optional LLM settings and external service authentication (2026-10-30)
+
+Read `docs/m5-s0-integration-settings-security-plan.md` before modifying the integration settings UI, LLM provider, FHIR/SNUH.AI service authentication, REST, or MCP execution boundaries.
+
+- Preserve **LLM-free / CPU-first** operation for all approved Query Template selection, preview, audited read-only Oracle Mock execution. LLM configuration is advisory, not execution eligibility.
+- The M5-S0 GET integration settings API/UI is **admin-only, read-only, secret-free**. Do not label it as editable provider configuration or external-service authorization. Do not expose endpoint URL, API key, secret refs or original query/clinical result contents.
+- **External client identity must be verified separately from IP/CIDR allowlists**. Never accept IP, `X-Forwarded-For`, `X-DQA-Dev-*`, caller-supplied actor/role, or plain service identifier as sufficient production authentication. Trust forwarding headers only from specifically approved proxies. Enforce client scopes and resource authorization with existing SELECT-only validation and audit for every Web/REST/MCP path.
+- Any future service credentials need one-time issuance, secret hashing/ref storage, expiry, rotation, revocation and admin audit; secure server-side policy checks with default deny. Reuse existing approved IdentityProvider abstraction; production `dev_headers` remains forbidden. No external listeners, allowlist activation or real system test until official G2/security approval.
+- Future LLM edit UI requires a reviewed secret store, URL allowlist/SSRF defenses, admin RBAC and audited changes. Never send PHI, result rows or raw request text without the existing independent egress policy gates **and** site approval. Metadata-only connection test must use no clinical data.
+- Implement this in small Draft PR slices: M5-S0 status (first); M5-S1/S2 service clients & actual authentication; M5-L1/L2 mutable optional LLM configuration. Do not silently merge these phases or claim approval based on mock tests.
