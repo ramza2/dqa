@@ -33,6 +33,15 @@ const EMPTY_FORM: DraftForm = {
   purpose: "", environment: "development", scopes: "", cidrs: "",
 };
 
+/** A non-secret registration identifier; never use it as a service credential. */
+function suggestClientId(): string {
+  const uuid = globalThis.crypto?.randomUUID?.();
+  const suffix = uuid
+    ? uuid.replace(/-/g, "").slice(0, 16)
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return `svc-${suffix}`;
+}
+
 function fromDraft(draft: ServiceClientDraft): DraftForm {
   return {
     client_id: draft.client_id,
@@ -182,7 +191,7 @@ export function ServiceClientDraftsPanel() {
     if (busy) return;
     setSelectedId(null);
     setDetail(null);
-    setForm({ ...EMPTY_FORM });
+    setForm({ ...EMPTY_FORM, client_id: suggestClientId() });
     setMode("create");
     setConfirmRevoke(false);
     setActionError(null);
@@ -273,8 +282,14 @@ export function ServiceClientDraftsPanel() {
     <section className="qa-panel" aria-label="서비스 클라이언트 정책 초안">
       <h3>서비스 클라이언트 정책 초안</h3>
       <p className="dd-guidance">
-        관리자 검토용 등록 정보입니다. DRAFT/REVOKED 상태만 지원하며 서비스 인증,
-        API/MCP 접근, IP 허용 정책은 활성화되지 않습니다. 서비스키·비밀번호·토큰은 입력하지 마세요.
+        외부 연계 서비스의 등록·접근 범위를 사전에 검토하는 신청서입니다.
+        아직 기관 승인과 실제 서비스 인증 기능이 없으므로 <strong>정책 초안</strong>이라고 부릅니다.
+        저장해도 REST/MCP 접근 권한이나 IP 허용 정책이 적용되지 않습니다.
+        상태는 DRAFT(검토 중) 또는 REVOKED(폐기)만 가능하며, 서비스키·비밀번호·토큰은 입력하지 마세요.
+      </p>
+      <p className="muted">
+        사용 순서: 정책 초안 등록 → 서비스·기관·담당자·목적 입력 → 필요 시 scope/IP 범위 제안
+        → 초안 저장 → 목록에서 상세 및 변경 감사 이력 확인. 폐기 시 다시 활성화할 수 없습니다.
       </p>
       <div className="dd-action-row">
         <button type="button" className="dd-secondary-btn" disabled={busy}
@@ -341,10 +356,13 @@ export function ServiceClientDraftsPanel() {
           aria-label={mode === "create" ? "정책 초안 등록 양식" : "정책 초안 수정 양식"}>
           <h3>{mode === "create" ? "정책 초안 등록" : "정책 초안 수정"}</h3>
           <div className="cp-editor-form">
-            <label className="dd-field">클라이언트 ID
-              <input value={form.client_id} disabled={mode === "edit" || busy} maxLength={64}
-                onChange={(event) => update("client_id", event.target.value)} required />
-            </label>
+            <div className="cp-field-with-help">
+              <label className="dd-field">클라이언트 ID
+                <input value={form.client_id} disabled={mode === "edit" || busy} maxLength={64}
+                  onChange={(event) => update("client_id", event.target.value)} required />
+              </label>
+              <p className="muted">새 초안에는 식별자가 자동 제안됩니다. 등록 전 수정 가능하며 서비스키가 아닙니다. 등록 후 변경할 수 없습니다.</p>
+            </div>
             <label className="dd-field">서비스명
               <input value={form.service_name} disabled={busy} maxLength={128}
                 onChange={(event) => update("service_name", event.target.value)} required />
@@ -369,14 +387,20 @@ export function ServiceClientDraftsPanel() {
               <input value={form.purpose} disabled={busy} maxLength={255}
                 onChange={(event) => update("purpose", event.target.value)} required />
             </label>
-            <label className="dd-field">요청 scope (한 줄에 하나)
-              <textarea value={form.scopes} disabled={busy} rows={3}
-                onChange={(event) => update("scopes", event.target.value)} />
-            </label>
-            <label className="dd-field">제안 IP/CIDR (한 줄에 하나)
-              <textarea value={form.cidrs} disabled={busy} rows={3}
-                onChange={(event) => update("cidrs", event.target.value)} />
-            </label>
+            <div className="cp-field-with-help">
+              <label className="dd-field">요청 scope (한 줄에 하나)
+                <textarea value={form.scopes} disabled={busy} rows={3}
+                  onChange={(event) => update("scopes", event.target.value)} />
+              </label>
+              <p className="muted">요청할 작업별 권한 이름입니다. 예: catalog:read(카탈로그 조회 요청). 아직 사용 가능한 권한 목록이나 실제 접근 권한이 아닙니다. 미정이면 비워두세요.</p>
+            </div>
+            <div className="cp-field-with-help">
+              <label className="dd-field">제안 IP/CIDR (한 줄에 하나)
+                <textarea value={form.cidrs} disabled={busy} rows={3}
+                  onChange={(event) => update("cidrs", event.target.value)} />
+              </label>
+              <p className="muted">연계 서버의 출발지 IP 또는 대역입니다. 예: 10.10.2.15/32(단일 IP), 10.10.2.0/24(대역). 승인된 연계망이 미정이면 비워두세요. IP만으로 인증하지 않습니다.</p>
+            </div>
           </div>
           <p className="muted">
             scope/CIDR은 요청안이며 실제 접근 정책에 적용되지 않습니다.

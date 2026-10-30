@@ -70,12 +70,30 @@ describe("M5-S1B service client draft administration", () => {
     expect(screen.queryByRole("button", { name: /활성화|키 발급|연결 시험/ })).not.toBeInTheDocument();
   });
 
+  it("suggests an editable non-secret client ID and explains policy-only fields", async () => {
+    render(<ServiceClientDraftsPanel />);
+    await screen.findByRole("table");
+    await userEvent.click(screen.getByRole("button", { name: "정책 초안 등록" }));
+    const editor = screen.getByRole("form", { name: "정책 초안 등록 양식" });
+    expect(screen.getByText(/사용 순서:/)).toBeInTheDocument();
+    const clientId = within(editor).getByLabelText("클라이언트 ID") as HTMLInputElement;
+    expect(clientId.value).toMatch(/^svc-[a-z0-9]+$/);
+    expect(clientId).not.toBeDisabled();
+    expect(within(editor).getByText(/서비스키가 아닙니다/)).toBeInTheDocument();
+    expect(within(editor).getByText(/catalog:read/)).toBeInTheDocument();
+    expect(within(editor).getByText(/10.10.2.15\/32/)).toBeInTheDocument();
+    await userEvent.clear(clientId);
+    await userEvent.type(clientId, "fhir-demo");
+    expect(clientId).toHaveValue("fhir-demo");
+  });
+
   it("creates only a policy draft with safe allowed fields", async () => {
     vi.mocked(createServiceClientDraft).mockResolvedValue(example);
     render(<ServiceClientDraftsPanel />);
     await screen.findByRole("table");
     await userEvent.click(screen.getByRole("button", { name: "정책 초안 등록" }));
     const editor = screen.getByRole("form", { name: "정책 초안 등록 양식" });
+    await userEvent.clear(within(editor).getByLabelText("클라이언트 ID"));
     await userEvent.type(within(editor).getByLabelText("클라이언트 ID"), "fhir-demo");
     await userEvent.type(within(editor).getByLabelText("서비스명"), "FHIR 시험 서비스");
     await userEvent.type(within(editor).getByLabelText("기관"), "시험 기관");

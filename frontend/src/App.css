@@ -645,6 +645,13 @@
   color: #fff;
 }
 
+/* The generic .qa-panel button rule has higher specificity than .dd-primary-btn. */
+.qa-panel button.dd-primary-btn {
+  border-color: #1e293b;
+  background: #1e293b;
+  color: #fff;
+}
+
 .dd-primary-btn:disabled,
 .dd-secondary-btn:disabled {
   opacity: 0.55;
@@ -758,6 +765,8 @@
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 0.8rem;
 }
+.cp-field-with-help { min-width: 0; display: grid; align-content: start; gap: .35rem; }
+.cp-field-with-help .muted { margin: 0; line-height: 1.45; }
 .cp-form-actions { grid-column: 1 / -1; }
 .cp-detail .value { overflow-wrap: anywhere; }
 

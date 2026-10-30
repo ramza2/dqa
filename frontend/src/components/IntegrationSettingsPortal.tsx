@@ -80,6 +80,11 @@ export function IntegrationSettingsPortal() {
                 </div>
               </div>
               <p className="muted">
+                '설정됨'은 서버에 연결 정보가 있다는 의미이며 실제 접속 성공이나 사용 승인을 뜻하지 않습니다.
+                비임상 메타데이터 연결 시험, URL·모델 변경 및 연결 초기화 기능은 아직 제공되지 않습니다.
+                기존 설정은 서버 환경에서 관리하며, 향후 승인된 비밀관리·접속대상 제한·변경 감사가 마련되면 관리자 기능으로 제공할 예정입니다.
+              </p>
+              <p className="muted">
                 LLM은 선택 기능입니다. 연결 설정 여부만으로 임상정보 외부 전송이 허용되지
                 않습니다. 자연어 요청 원문 전송:{" "}
                 <strong>{status.llm.raw_request_egress_allowed ? "설정상 허용 (기관 정책 승인 별도 확인 필요)" : "차단"}</strong>
