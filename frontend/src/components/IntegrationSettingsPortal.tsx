@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { ServiceClientDraftsPanel } from "./ServiceClientDraftsPanel";
 import {
   getIntegrationSettingsStatus,
   type IntegrationSettingsStatus,
@@ -10,6 +11,7 @@ export function IntegrationSettingsPortal() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const [showPolicyDrafts, setShowPolicyDrafts] = useState(false);
 
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
 
@@ -86,8 +88,8 @@ export function IntegrationSettingsPortal() {
             <section className="qa-panel" aria-label="외부 서비스 접근 제어">
               <h3>FHIR·외부 시스템 접근 제어</h3>
               <p>
-                서비스 클라이언트 등록·서비스키 발급/회수·IP 허용목록의 관리자 기능은
-                아직 구현되지 않았습니다.
+                서비스 클라이언트 정책 초안 등록·감사 기능만 제공됩니다. 서비스키 발급/회수,
+                실제 호출자 인증 및 IP 허용목록 강제는 아직 구현되지 않았습니다.
               </p>
               <p className="muted">
                 인증 기능 개발 및 기관 보안 승인 전까지 이 화면을 외부 접근 허가의 근거로
@@ -104,6 +106,13 @@ export function IntegrationSettingsPortal() {
                   <div className="value">{status.external_service.managed_service_authentication_available ? "사용 가능" : "미구현"}</div>
                 </div>
               </div>
+              <div className="dd-action-row">
+                <button type="button" className="dd-secondary-btn"
+                  onClick={() => setShowPolicyDrafts((value) => !value)}>
+                  {showPolicyDrafts ? "정책 초안 관리 닫기" : "정책 초안 관리 열기"}
+                </button>
+              </div>
+              {showPolicyDrafts && <ServiceClientDraftsPanel />}
             </section>
           </>
         )}

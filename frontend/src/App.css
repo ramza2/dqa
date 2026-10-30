@@ -894,3 +894,21 @@
   gap: 0.65rem;
   margin-top: 0.75rem;
 }
+
+
+/* M5-S1B: policy-draft administration; no credentials or activation control. */
+.cp-editor .dd-field textarea {
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  min-height: 84px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+}
+.cp-editor .dd-field textarea:disabled {
+  opacity: 0.65;
+}
+.cp-table button:disabled {
+  cursor: not-allowed;
+}

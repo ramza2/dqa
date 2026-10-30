@@ -7,6 +7,10 @@ import {
   type IntegrationSettingsStatus,
 } from "../api/integrationSettings";
 
+vi.mock("../components/ServiceClientDraftsPanel", () => ({
+  ServiceClientDraftsPanel: () => <section aria-label="서비스 클라이언트 정책 초안">테스트 정책 화면</section>,
+}));
+
 vi.mock("../api/integrationSettings", () => ({
   getIntegrationSettingsStatus: vi.fn(),
 }));
@@ -50,6 +54,18 @@ describe("M5-S0 integration settings portal", () => {
     render(<IntegrationSettingsPortal />);
     expect(await screen.findByRole("alert")).toHaveTextContent("권한");
     expect(screen.queryByRole("region", { name: "LLM 연결 상태" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "정책 초안 관리 열기" })).not.toBeInTheDocument();
+  });
+
+  it("only reveals the draft-management panel after successful admin status", async () => {
+    vi.mocked(getIntegrationSettingsStatus).mockResolvedValue(current);
+    render(<IntegrationSettingsPortal />);
+    expect(screen.queryByRole("region", { name: "서비스 클라이언트 정책 초안" })).not.toBeInTheDocument();
+    await screen.findByRole("region", { name: "외부 서비스 접근 제어" });
+    await userEvent.click(screen.getByRole("button", { name: "정책 초안 관리 열기" }));
+    expect(screen.getByRole("region", { name: "서비스 클라이언트 정책 초안" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "정책 초안 관리 닫기" }));
+    expect(screen.queryByRole("region", { name: "서비스 클라이언트 정책 초안" })).not.toBeInTheDocument();
   });
 
   it("refreshes state without mutating a connection configuration", async () => {
