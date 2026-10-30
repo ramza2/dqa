@@ -293,6 +293,14 @@ For feature work:
 - open a PR
 - do not merge automatically
 
+Cloud Agent machines use `.cursor/environment.json`.
+`scripts/cloud-agent-install.sh` installs dependencies after checkout.
+`scripts/cloud-agent-start.sh` starts local PostgreSQL, applies Alembic
+migrations when present, and serves the API on `127.0.0.1:8000` and Vite on
+`127.0.0.1:5173`. The generated `.env` is gitignored, uses the local password
+`dqa`, and sets `DQA_AUTH_PROVIDER=dev_headers` for this development VM only.
+Do not reuse that file for on-prem or production.
+
 Do not delete working functionality merely to simplify a change.
 Prefer backward-compatible changes unless explicitly instructed otherwise.
 
