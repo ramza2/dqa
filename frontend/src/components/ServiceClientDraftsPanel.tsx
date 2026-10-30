@@ -226,9 +226,14 @@ export function ServiceClientDraftsPanel() {
     setActionError(null);
     setMessage(null);
     try {
-      const saved = mode === "create"
-        ? await createServiceClientDraft(payload)
-        : await patchServiceClientDraft(detail!.id, changes!);
+      let saved: ServiceClientDraft;
+      if (mode === "create") {
+        saved = await createServiceClientDraft(payload);
+      } else if (detail && changes) {
+        saved = await patchServiceClientDraft(detail.id, changes);
+      } else {
+        return;
+      }
       if (saved.status !== "DRAFT" || saved.authentication_enabled ||
           saved.external_access_allowed) {
         throw new Error("Unexpected service authorization response");
