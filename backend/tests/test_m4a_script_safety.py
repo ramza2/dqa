@@ -108,3 +108,71 @@ def test_smoke_blocks_arbitrary_smoke_base_url(smoke_text: str) -> None:
     # No silent 127.0.0.1/8080 defaults for the live smoke entrypoint.
     assert 'dqa_env_value DQA_LAN_BIND_IP 127.0.0.1' not in smoke_text
     assert 'dqa_env_value DQA_FRONTEND_PORT 8080' not in smoke_text
+
+
+def test_smoke_oracle_preflight_runs_in_verified_backend(smoke_text: str) -> None:
+    """Container-only DNS/secret checks; host environment cannot prove readiness."""
+    assert 'docker exec -i "$backend_cid" python - <<\'PY\'' in smoke_text
+    assert 'if ! docker exec -i "$backend_cid"' in smoke_text
+    assert 'M4A_ORACLE_MOCK_BLOCKED: verified backend credential or Oracle Mock TCP preflight failed' in smoke_text
+    assert 'socket.create_connection((mock_host, mock_port)' not in smoke_text
+    assert 'def oracle_mock_ready()' not in smoke_text
+    assert 'M4A_ORACLE_MOCK_REACHABLE: allowlisted mock TCP ok (verified backend)' in smoke_text
+
+
+@pytest.mark.parametrize(
+    ("secret_present", "tcp_ok", "expected_exit"),
+    [(False, True, 2), (True, False, 3), (True, True, 0)],
+)
+def test_smoke_backend_preflight_fails_closed_without_secret_or_tcp(
+    smoke_text: str,
+    monkeypatch: pytest.MonkeyPatch,
+    secret_present: bool,
+    tcp_ok: bool,
+    expected_exit: int,
+) -> None:
+    """Exercise the exact Python fed to docker exec, without Docker or Oracle."""
+    import re
+    import socket
+
+    match = re.search(
+        r'if ! docker exec -i "\$backend_cid" python - <<\'PY\' >/dev/null 2>&1\n(.*?)\nPY\nthen',
+        smoke_text,
+        re.DOTALL,
+    )
+    assert match is not None
+    probe_code = match.group(1)
+
+    if secret_present:
+        monkeypatch.setenv("DEMIS_SECRET_ORACLE_PASSWORD", "synthetic-test-only")
+    else:
+        monkeypatch.delenv("DEMIS_SECRET_ORACLE_PASSWORD", raising=False)
+
+    calls = []
+
+    class _Socket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def fake_connect(address, timeout):
+        calls.append((address, timeout))
+        if not tcp_ok:
+            raise OSError("synthetic TCP unavailable")
+        return _Socket()
+
+    monkeypatch.setattr(socket, "create_connection", fake_connect)
+
+    try:
+        exec(compile(probe_code, "<backend-oracle-mock-preflight>", "exec"), {})
+    except SystemExit as exc:
+        actual_exit = exc.code
+    else:
+        actual_exit = 0
+
+    assert actual_exit == expected_exit
+    assert calls == (
+        [(("demis-oracle-test", 1521), 3)] if secret_present else []
+    )

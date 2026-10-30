@@ -221,10 +221,29 @@ export DQA_M4A_APP_ENV="$app_env"
 export DQA_M4A_AUTH_PROVIDER="$auth_provider"
 export DQA_M4A_DERIVED_BASE_URL="$derived_base_url"
 
+# Run the credential and TCP preflight in the verified backend container:
+# Docker service DNS (demis-oracle-test) is intentionally not host-resolvable.
+# Never disclose credential values, probe output, or Oracle response payloads.
+if ! docker exec -i "$backend_cid" python - <<'PY' >/dev/null 2>&1
+import os
+import socket
+
+if not os.environ.get("DEMIS_SECRET_ORACLE_PASSWORD", "").strip():
+    raise SystemExit(2)
+try:
+    with socket.create_connection(("demis-oracle-test", 1521), timeout=3):
+        pass
+except OSError:
+    raise SystemExit(3)
+PY
+then
+  echo "M4A_ORACLE_MOCK_BLOCKED: verified backend credential or Oracle Mock TCP preflight failed" >&2
+  exit 2
+fi
+
 python3 - <<'PY'
 import json
 import os
-import socket
 import sys
 import urllib.error
 import urllib.parse
@@ -328,23 +347,9 @@ def request_json(
     return parsed
 
 
-def oracle_mock_ready() -> tuple[bool, str]:
-    secret = os.environ.get("DEMIS_SECRET_ORACLE_PASSWORD", "").strip()
-    if not secret:
-        return False, "DEMIS_SECRET_ORACLE_PASSWORD is unset"
-    try:
-        with socket.create_connection((mock_host, mock_port), timeout=3):
-            return True, "allowlisted mock TCP ok"
-    except OSError as exc:
-        return False, f"allowlisted mock TCP unreachable ({exc.__class__.__name__})"
-
-
 assert_live_allowlist()
-ready, reason = oracle_mock_ready()
-if not ready:
-    blocked(reason)
-
-print(f"M4A_ORACLE_MOCK_REACHABLE: {reason}")
+# The fail-closed backend-container preflight already verified secret + TCP.
+print("M4A_ORACLE_MOCK_REACHABLE: allowlisted mock TCP ok (verified backend)")
 print("LIVE_E2E=RUNNING")
 
 manual = request_json(
