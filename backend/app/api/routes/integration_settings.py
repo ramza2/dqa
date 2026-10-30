@@ -1,7 +1,8 @@
-"""Administrator-only, secret-free integration settings status.
+"""Administrator-only integration settings and dev-gated LLM diagnostic.
 
-M5-S0 inventory: this is not a credential-management API, LLM enable switch,
-or an external-service authentication provider. No outbound requests occur.
+The M5-S0 inventory makes no outbound requests. The separate development-only
+POST may probe the pinned model-list endpoint; neither manages credentials,
+enables provider usage, nor authorizes data egress or external service access.
 """
 
 from __future__ import annotations
