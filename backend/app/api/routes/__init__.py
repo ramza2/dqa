@@ -12,6 +12,7 @@ from app.api.routes import (
     connection_profiles,
     data_discovery,
     health,
+    integration_settings,
     parameter_extraction,
     query_executions,
     query_builder,
@@ -24,6 +25,7 @@ from app.api.routes import (
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
+api_router.include_router(integration_settings.router)
 api_router.include_router(catalog_packages.router)
 api_router.include_router(catalog_imports.router)
 # Register query routes before the bare /{source_name} summary route pattern group.
