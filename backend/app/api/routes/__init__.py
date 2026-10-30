@@ -19,6 +19,7 @@ from app.api.routes import (
     query_templates,
     recommendations,
     schema_inspector,
+    service_client_drafts,
     schema_snapshot_history,
 )
 
@@ -26,6 +27,7 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(integration_settings.router)
+api_router.include_router(service_client_drafts.router)
 api_router.include_router(catalog_packages.router)
 api_router.include_router(catalog_imports.router)
 # Register query routes before the bare /{source_name} summary route pattern group.
