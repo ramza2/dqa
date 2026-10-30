@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntegrationSettingsPortal } from "../components/IntegrationSettingsPortal";
 import {
   getIntegrationSettingsStatus,
+  testConfiguredLLMConnection,
   type IntegrationSettingsStatus,
 } from "../api/integrationSettings";
 
@@ -13,6 +14,7 @@ vi.mock("../components/ServiceClientDraftsPanel", () => ({
 
 vi.mock("../api/integrationSettings", () => ({
   getIntegrationSettingsStatus: vi.fn(),
+  testConfiguredLLMConnection: vi.fn(),
 }));
 
 const current: IntegrationSettingsStatus = {
@@ -23,6 +25,7 @@ const current: IntegrationSettingsStatus = {
     model: "qwen3-14b",
     api_key_present: true,
     raw_request_egress_allowed: false,
+    connection_test_available: false,
   },
   external_service: {
     service_client_management_available: false,
@@ -45,6 +48,7 @@ describe("M5-S0 integration settings portal", () => {
     expect(within(llm).getByText("차단")).toBeInTheDocument();
     const service = screen.getByRole("region", { name: "외부 서비스 접근 제어" });
     expect(within(service).getAllByText("미구현")).toHaveLength(2);
+    expect(within(llm).getByRole("button", { name: "LLM 연결 시험" })).toBeDisabled();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.queryByText(/비밀키 실제값/)).not.toBeInTheDocument();
   });
@@ -76,4 +80,36 @@ describe("M5-S0 integration settings portal", () => {
     expect(await screen.findByRole("region", { name: "외부 서비스 접근 제어" })).toBeInTheDocument();
     expect(getIntegrationSettingsStatus).toHaveBeenCalledTimes(2);
   });
+  it("shows safe metadata-only diagnostic outcome when explicitly available", async () => {
+    vi.mocked(getIntegrationSettingsStatus).mockResolvedValue({
+      ...current,
+      llm: { ...current.llm, connection_test_available: true },
+    });
+    vi.mocked(testConfiguredLLMConnection).mockResolvedValue({
+      status: "CONNECTED",
+      http_status: 200,
+    });
+    render(<IntegrationSettingsPortal />);
+    const llm = await screen.findByRole("region", { name: "LLM 연결 상태" });
+    await userEvent.click(within(llm).getByRole("button", { name: "LLM 연결 시험" }));
+    expect(await within(llm).findByText(/연결 성공: 모델 목록/)).toBeInTheDocument();
+    expect(testConfiguredLLMConnection).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("does not show backend diagnostic exception details", async () => {
+    vi.mocked(getIntegrationSettingsStatus).mockResolvedValue({
+      ...current,
+      llm: { ...current.llm, connection_test_available: true },
+    });
+    vi.mocked(testConfiguredLLMConnection).mockRejectedValue(
+      new Error("private.example:1234/token-secret"),
+    );
+    render(<IntegrationSettingsPortal />);
+    const llm = await screen.findByRole("region", { name: "LLM 연결 상태" });
+    await userEvent.click(within(llm).getByRole("button", { name: "LLM 연결 시험" }));
+    expect(await within(llm).findByRole("alert")).toHaveTextContent("연결 시험을 수행할 수 없습니다");
+    expect(llm).not.toHaveTextContent("token-secret");
+  });
+
 });
