@@ -118,7 +118,7 @@ def test_invalid_input_no_secret_echo_and_no_authority(
     assert bad_patch.status_code == 422
     assert "invisible-sensitive-value" not in bad_patch.text
     assert db_client.patch(f"{PATH}/{row['id']}", json={}).status_code == 422
-    assert db_client.post(f"{PATH}/{row['id']}/enable").status_code == 405
+    assert db_client.post(f"{PATH}/{row['id']}/enable").status_code == 404
     assert db_client.delete(f"{PATH}/{row['id']}").status_code == 405
 
 
