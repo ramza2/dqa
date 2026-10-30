@@ -2,16 +2,34 @@ import { useCallback, useEffect, useState } from "react";
 import { ServiceClientDraftsPanel } from "./ServiceClientDraftsPanel";
 import {
   getIntegrationSettingsStatus,
+  testConfiguredLLMConnection,
+  type LLMConnectionTestResult,
   type IntegrationSettingsStatus,
 } from "../api/integrationSettings";
 
-/** M5-S0: safe visibility only. No secret-editing or client-admission controls. */
+/** Admin-only integration status and development-gated metadata probe. */
 export function IntegrationSettingsPortal() {
   const [status, setStatus] = useState<IntegrationSettingsStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const [showPolicyDrafts, setShowPolicyDrafts] = useState(false);
+  const [testingLLM, setTestingLLM] = useState(false);
+  const [llmTest, setLLMTest] = useState<LLMConnectionTestResult | null>(null);
+  const [llmTestError, setLLMTestError] = useState<string | null>(null);
+
+  const runLLMTest = useCallback(async () => {
+    setTestingLLM(true);
+    setLLMTest(null);
+    setLLMTestError(null);
+    try {
+      setLLMTest(await testConfiguredLLMConnection());
+    } catch {
+      setLLMTestError("연결 시험을 수행할 수 없습니다. 서버 설정 및 관리자 권한을 확인하세요.");
+    } finally {
+      setTestingLLM(false);
+    }
+  }, []);
 
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
 
@@ -81,8 +99,37 @@ export function IntegrationSettingsPortal() {
               </div>
               <p className="muted">
                 '설정됨'은 서버에 연결 정보가 있다는 의미이며 실제 접속 성공이나 사용 승인을 뜻하지 않습니다.
-                비임상 메타데이터 연결 시험, URL·모델 변경 및 연결 초기화 기능은 아직 제공되지 않습니다.
-                기존 설정은 서버 환경에서 관리하며, 향후 승인된 비밀관리·접속대상 제한·변경 감사가 마련되면 관리자 기능으로 제공할 예정입니다.
+                개발 환경에서는 명시적으로 허용한 서버·모델에 한해 비임상 메타데이터 연결 시험을 할 수 있습니다.
+                URL·모델 수정 및 연결 초기화는 아직 제공되지 않으며 승인된 비밀관리와 변경 감사가 마련된 후 도입합니다.
+              </p>
+              <div className="dd-action-row">
+                <button type="button" className="dd-secondary-btn"
+                  disabled={!status.llm.connection_test_available || testingLLM}
+                  onClick={() => void runLLMTest()}>
+                  {testingLLM ? "연결 시험 중…" : "LLM 연결 시험"}
+                </button>
+                {!status.llm.connection_test_available && (
+                  <span className="muted">개발 서버의 허용 URL 설정 후 이용할 수 있습니다.</span>
+                )}
+              </div>
+              {llmTest && (
+                <p role="status">
+                  {llmTest.status === "CONNECTED"
+                    ? "연결 성공: 모델 목록에서 설정된 모델을 확인했습니다."
+                    : llmTest.status === "MODEL_NOT_FOUND"
+                      ? "서버 접속 성공, 설정 모델을 모델 목록에서 찾지 못했습니다."
+                      : llmTest.status === "HTTP_ERROR"
+                        ? "연결 실패: 모델 목록 API 응답 오류"
+                        : llmTest.status === "TIMEOUT"
+                          ? "연결 실패: 응답 시간 초과"
+                          : llmTest.status === "NETWORK_ERROR"
+                            ? "연결 실패: 통신 오류"
+                            : "연결 실패: 모델 목록 응답 형식 오류"}
+                </p>
+              )}
+              {llmTestError && <p role="alert" className="banner banner-error">{llmTestError}</p>}
+              <p className="muted">
+                이 시험은 모델 목록만 확인하며 진료정보나 질의내용을 전송하지 않습니다. 연결 성공은 운영 승인이나 LLM 사용 허가를 뜻하지 않습니다.
               </p>
               <p className="muted">
                 LLM은 선택 기능입니다. 연결 설정 여부만으로 임상정보 외부 전송이 허용되지

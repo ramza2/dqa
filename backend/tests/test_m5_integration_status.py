@@ -31,6 +31,7 @@ def test_default_inventory_is_read_only_and_denies_external_service_management(
             "model": None,
             "api_key_present": False,
             "raw_request_egress_allowed": False,
+            "connection_test_available": False,
         },
         "external_service": {
             "service_client_management_available": False,
