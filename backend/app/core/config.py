@@ -56,6 +56,15 @@ class Settings(BaseSettings):
         default=False,
         alias="LLM_PARAMETER_EXTRACTION_RAW_REQUEST_EGRESS_APPROVED",
     )
+    # Development-only LLM metadata probe. Never enable on a production backend.
+    # Both the flag and the exact operator-approved HTTPS base URL are required.
+    dqa_dev_llm_connection_test_enabled: bool = Field(
+        default=False, alias="DQA_DEV_LLM_CONNECTION_TEST_ENABLED"
+    )
+    dqa_dev_llm_connection_test_allowed_base_url: str | None = Field(
+        default=None, alias="DQA_DEV_LLM_CONNECTION_TEST_ALLOWED_BASE_URL"
+    )
+
     # Authentication provider. Default disabled = fail-closed on protected routes.
     # ``dev_headers`` is development/test only and rejected outside those envs.
     dqa_auth_provider: Literal["disabled", "dev_headers"] = Field(
