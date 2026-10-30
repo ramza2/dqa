@@ -75,6 +75,7 @@ describe("M5-S1B service client draft administration", () => {
     await screen.findByRole("table");
     await userEvent.click(screen.getByRole("button", { name: "정책 초안 등록" }));
     const editor = screen.getByRole("form", { name: "정책 초안 등록 양식" });
+    expect(screen.getByText(/사용 순서:/)).toBeInTheDocument();
     const clientId = within(editor).getByLabelText("클라이언트 ID") as HTMLInputElement;
     expect(clientId.value).toMatch(/^svc-[a-z0-9]+$/);
     expect(clientId).not.toBeDisabled();
