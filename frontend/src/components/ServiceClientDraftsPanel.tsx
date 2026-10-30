@@ -287,6 +287,10 @@ export function ServiceClientDraftsPanel() {
         저장해도 REST/MCP 접근 권한이나 IP 허용 정책이 적용되지 않습니다.
         상태는 DRAFT(검토 중) 또는 REVOKED(폐기)만 가능하며, 서비스키·비밀번호·토큰은 입력하지 마세요.
       </p>
+      <p className="muted">
+        사용 순서: 정책 초안 등록 → 서비스·기관·담당자·목적 입력 → 필요 시 scope/IP 범위 제안
+        → 초안 저장 → 목록에서 상세 및 변경 감사 이력 확인. 폐기 시 다시 활성화할 수 없습니다.
+      </p>
       <div className="dd-action-row">
         <button type="button" className="dd-secondary-btn" disabled={busy}
           onClick={() => setRevision((value) => value + 1)}>
