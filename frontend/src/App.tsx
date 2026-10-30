@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { IntegrationSettingsPortal } from "./components/IntegrationSettingsPortal";
 import { DataDiscoveryPortal } from "./components/DataDiscoveryPortal";
 import { QueryAssistant } from "./components/QueryAssistant";
 import { TemplateReviewPortal } from "./components/TemplateReviewPortal";
@@ -6,7 +7,7 @@ import { ConnectionProfilePortal } from "./components/ConnectionProfilePortal";
 import { WorkflowDashboard, type WorkflowDestination } from "./components/WorkflowDashboard";
 import "./App.css";
 
-type AppView = "dashboard" | WorkflowDestination;
+type AppView = "dashboard" | "integration-settings" | WorkflowDestination;
 
 const NAV_ITEMS: { view: AppView; label: string }[] = [
   { view: "dashboard", label: "대시보드" },
@@ -14,6 +15,7 @@ const NAV_ITEMS: { view: AppView; label: string }[] = [
   { view: "discovery", label: "스키마·Catalog" },
   { view: "assistant", label: "조회 시험" },
   { view: "template-review", label: "템플릿 검토" },
+  { view: "integration-settings", label: "환경 설정" },
 ];
 
 export default function App() {
@@ -43,6 +45,7 @@ export default function App() {
       {view === "discovery" ? <DataDiscoveryPortal /> : null}
       {view === "assistant" ? <QueryAssistant /> : null}
       {view === "template-review" ? <TemplateReviewPortal /> : null}
+      {view === "integration-settings" ? <IntegrationSettingsPortal /> : null}
     </div>
   );
 }

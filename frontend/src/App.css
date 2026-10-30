@@ -346,6 +346,7 @@
 .app-top-nav-tabs {
   display: flex;
   gap: 0.35rem;
+  flex-wrap: wrap;
 }
 
 .nav-tab {

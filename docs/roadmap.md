@@ -53,6 +53,9 @@
 | R-01 | 실제 DEMIS 조회 Profile·권한·배포 네트워크 협의 | 2026-11~2027-01 | DBA·보안·인프라 / 군·DEMIS 운영 | U-04 | 최소 SELECT 권한, live probe, 리소스 접근 정책 문서 | 외부결정 대기 |
 | R-02 | 승인 Query Template / 의료업무 logical resource 매핑 | 2026-12~2027-02 | SA·백엔드·의료 QA | S-03, U-04 | Patient/Encounter/Document 등 **승인된** resource·필드 매핑 | 계획 |
 | R-03 | MCP/REST 공통 조회 API 및 서비스 인증 경계 강화 | 2027-01~03 | 백엔드·보안 / FHIR·SNUH.AI | U-04, R-02 | Web/MCP/REST 동일 Safety·Audit, 호출자·권한 및 오류 계약 | 계획 |
+| M5-S0 | 관리자 전용 선택적 LLM·서비스 인증 설정 상태 조회 UI/API | 2026-10 | PL·백엔드·프론트엔드 | R-03 사전 준비 | 비밀/URL 무노출, read-only 상태, 기본 차단, 운영 IdP 미구현 명시 | Draft PR (개발) |
+| M5-S1/S2 | 외부 서비스 클라이언트/IP·키 관리 및 실제 호출자 인증 | 승인·협의 후 | 보안·백엔드 / 군·FHIR·SNUH.AI | U-04, R-03, G2 | 인증 주체 검증 + IP 보조 통제, scope, 회수·감사·rate, 공통 Web/MCP/REST 정책 | 설계(실연동 미승인) |
+| M5-L1/L2 | 선택적 LLM 연결 편집 및 안전한 메타데이터 연결시험 | 모델·보안 승인 후 | 백엔드·프론트엔드·보안 | M5-S0, 보안정책 | 비밀 저장소, URL allowlist, 기본 OFF, PHI egress 금지, LLM-free 회귀 유지 | 설계(미구현) |
 | R-04 | Oracle Mock 조회 E2E와 FHIR 조회 계약 연동 | 2027-02~03 | 백엔드·QA / FHIR | R-03 | 승인된 query preview/execute, 반환 JSON, 감사 연계 | 계획 |
 | R-05 | Phase 29 Structured Dynamic Query 후속 범위 판단 | 2026-10~2027-03 | PL·SA·백엔드 | R-02 / 별도 승인 | 29-C preview-only 유지, 29-D 실제 실행은 별도 보안 Gate | 진행 |
 | W-01 | DEMIS Insert 지원 방식·DBA grant·문서 유형 확인 | 2026-10~12 | PM·PL·SA·DBA / 군·병원 | U-01 | 공식 저장 API/직접 INSERT 허용 범위, 저장 위치/상태·지원불가 항목 서면 확인 | 외부결정 대기 |
