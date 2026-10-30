@@ -6,12 +6,17 @@ or an external-service authentication provider. No outbound requests occur.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from app.auth.dependencies import require_permission
 from app.auth.models import AuthenticatedActor, Permission
 from app.core.config import Settings, get_settings
+from app.services.llm_connection_probe import (
+    LLMConnectionTestResult,
+    llm_connection_test_available,
+    probe_configured_llm,
+)
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-integrations"])
 
@@ -25,6 +30,7 @@ class LLMStatus(BaseModel):
     model: str | None
     api_key_present: bool
     raw_request_egress_allowed: bool
+    connection_test_available: bool
 
 
 class ExternalServiceStatus(BaseModel):
@@ -65,6 +71,7 @@ def get_integration_settings_status(
             model_configured=model is not None,
             model=model,
             api_key_present=api_key_present,
+            connection_test_available=llm_connection_test_available(settings),
             raw_request_egress_allowed=(
                 settings.llm_parameter_extraction_allow_raw_request
                 and settings.llm_parameter_extraction_raw_request_egress_approved
@@ -72,3 +79,29 @@ def get_integration_settings_status(
         ),
         external_service=ExternalServiceStatus(),
     )
+
+
+@router.post(
+    "/integration-settings/llm/test",
+    response_model=LLMConnectionTestResult,
+)
+def test_configured_llm_connection(
+    _actor: AuthenticatedActor = Depends(
+        require_permission(Permission.CONNECTION_PROFILE_MANAGE)
+    ),
+    settings: Settings = Depends(get_settings),
+) -> LLMConnectionTestResult:
+    """Dev-only GET /v1/models via pinned configuration, with no user URL/body.
+
+    This diagnostic never posts prompts, SQL, query rows, or clinical data.
+    It is intentionally not a runtime provider enable or egress authorization.
+    """
+    if not llm_connection_test_available(settings):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "LLM_CONNECTION_TEST_DISABLED",
+                "message": "LLM connection test is not available",
+            },
+        )
+    return probe_configured_llm(settings)
