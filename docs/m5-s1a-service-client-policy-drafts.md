@@ -31,8 +31,14 @@
 ## 운영·테스트 전제
 
 Alembic 리비전 `20261030_m5s1a`을 적용해야 서버가 기동됩니다.
-기존 DB를 먼저 백업하고, 개발/독립 테스트 환경에서 마이그레이션과
-`backend/tests/test_m5_service_client_drafts.py` 통합 테스트를 실행해야 합니다.
+**기존 개발/운영 DB에서 `pytest`를 직접 실행하지 마세요.**
+공통 `tests/conftest.py`의 DB fixture가 기존 테이블을 TRUNCATE합니다.
+
+독립 검증은 `bash scripts/m5s1a-test-isolated.sh`로 실행합니다.
+이 스크립트는 5432 포트가 이미 사용 중이면 **기존 DB 보호를 위해 중단**하고,
+사용 가능한 경우에만 로컬 Docker의 tmpfs PostgreSQL을 생성해 Alembic과
+관련 API 통합 테스트를 실행한 뒤 **자신이 만든 컨테이너만 제거**합니다.
+기존 DB에 마이그레이션을 적용하지 않습니다.
 
 외부 서비스 인증 자체는 후속 M5-S2의 별도 검토·승인 과제이며,
 컨소시엄 회신이 오기 전에는 호출 계약과 실제 자격증명 정책을 확정하지 않습니다.
