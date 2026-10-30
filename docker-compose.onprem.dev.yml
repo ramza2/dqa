@@ -34,6 +34,11 @@ services:
       DQA_AUTH_PROVIDER: dev_headers
       # Opt-in only on an isolated Oracle Mock development stack.
       DQA_DEV_ORACLE_MOCK_ACTIONS_ENABLED: ${DQA_DEV_ORACLE_MOCK_ACTIONS_ENABLED:-false}
+      # M5-L0: development-only, metadata-only GET /v1/models.
+      # Both controls default OFF/empty; production Compose never forwards these.
+      # dev_headers is not a real admin identity — test only on a trusted isolated stack.
+      DQA_DEV_LLM_CONNECTION_TEST_ENABLED: ${DQA_DEV_LLM_CONNECTION_TEST_ENABLED:-false}
+      DQA_DEV_LLM_CONNECTION_TEST_ALLOWED_BASE_URL: ${DQA_DEV_LLM_CONNECTION_TEST_ALLOWED_BASE_URL:-}
       LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST: ${LLM_PARAMETER_EXTRACTION_ALLOW_RAW_REQUEST:-false}
       LLM_PARAMETER_EXTRACTION_RAW_REQUEST_EGRESS_APPROVED: ${LLM_PARAMETER_EXTRACTION_RAW_REQUEST_EGRESS_APPROVED:-false}
 
