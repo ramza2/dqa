@@ -57,6 +57,21 @@ describe("M5-S0 integration settings portal", () => {
     expect(screen.queryByText(/비밀키 실제값/)).not.toBeInTheDocument();
   });
 
+  it("shows approval blockers as read-only guidance without an activation action", async () => {
+    vi.mocked(getIntegrationSettingsStatus).mockResolvedValue(current);
+    render(<IntegrationSettingsPortal />);
+    const llm = await screen.findByRole("region", { name: "LLM 연결 상태" });
+    const service = screen.getByRole("region", { name: "외부 서비스 접근 제어" });
+    const llmGate = within(llm).getByRole("region", { name: "LLM 운영 활성화 선결사항" });
+    const serviceGate = within(service).getByRole("region", { name: "외부 서비스 인증 선결사항" });
+    expect(within(llmGate).getByText(/데이터 반출 범위/)).toBeInTheDocument();
+    expect(within(serviceGate).getByText(/기관 승인 IdP/)).toBeInTheDocument();
+    expect(within(serviceGate).getByText(/어떤 호출 권한도 부여하지 않습니다/)).toBeInTheDocument();
+    expect(within(llmGate).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(serviceGate).queryByRole("button")).not.toBeInTheDocument();
+    expect(testConfiguredLLMConnection).not.toHaveBeenCalled();
+  });
+
   it("opens and discards an LLM candidate with admin status only", async () => {
     vi.mocked(getIntegrationSettingsStatus).mockResolvedValue(current);
     render(<IntegrationSettingsPortal />);
