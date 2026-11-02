@@ -139,6 +139,15 @@ export function IntegrationSettingsPortal() {
                 않습니다. 자연어 요청 원문 전송:{" "}
                 <strong>{status.llm.raw_request_egress_allowed ? "설정상 허용 (기관 정책 승인 별도 확인 필요)" : "차단"}</strong>
               </p>
+              <section aria-label="LLM 운영 활성화 선결사항" className="dd-guidance">
+                <h4>운영 활성화 선결사항 · 미승인</h4>
+                <ul>
+                  <li>기관의 모델 사용·데이터 반출 범위 및 승인 주체 확정</li>
+                  <li>허용 서버·모델 및 비밀정보 보관·교체 정책 승인</li>
+                  <li>프롬프트·임상정보 유출 방지 및 운영 감사 검증</li>
+                </ul>
+                <p>위 항목은 진행상황 안내이며 승인 여부를 입력하거나 기능을 활성화하지 않습니다.</p>
+              </section>
               <div className="dd-action-row">
                 <button type="button" className="dd-secondary-btn"
                   onClick={() => setShowLLMDraft((value) => !value)}>
@@ -173,6 +182,15 @@ export function IntegrationSettingsPortal() {
                   <div className="value">{status.external_service.managed_service_authentication_available ? "사용 가능" : "미구현"}</div>
                 </div>
               </div>
+              <section aria-label="외부 서비스 인증 선결사항" className="dd-guidance">
+                <h4>실서비스 인증 선결사항 · 미승인</h4>
+                <ul>
+                  <li>FHIR/SNUH.AI 호출 주체·인터페이스 및 허용 scope 확정</li>
+                  <li>기관 승인 IdP·OAuth2/mTLS 방식 및 비밀 저장소 확정</li>
+                  <li>신뢰 프록시·접속 IP·TLS·감사·회수 정책 승인 및 보안 시험</li>
+                </ul>
+                <p>정책 초안에 등록된 scope/IP는 요청안이며 어떤 호출 권한도 부여하지 않습니다.</p>
+              </section>
               <div className="dd-action-row">
                 <button type="button" className="dd-secondary-btn"
                   onClick={() => setShowPolicyDrafts((value) => !value)}>
