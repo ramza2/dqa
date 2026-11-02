@@ -47,3 +47,27 @@ HTTP URL/미지원 어댑터/허용 목록 미등록 URL은 서버 정책상 제
 
 설정 편집·활성화는 운영 IdP, 기관 승인, 시크릿 관리, SSRF·DNS·리다이렉트
 방어, 감사 및 변경 승인 절차가 마련된 별도 단계에서만 수행한다.
+
+## 온프레미스 개발 이미지에서 프론트엔드 격리 재검증
+
+기본 개발용 Frontend 이미지의 `frontend/.dockerignore`는 릴리스 이미지에 불필요한
+`src/test`를 제외한다. 그러므로 실행 중인 프론트엔드 컨테이너 안에서
+`npm test`를 직접 호출하면 테스트 파일을 찾지 못할 수 있다. 이를 **테스트 실패가
+아니라 구성 오류**로 취급하고 성공으로 보고하지 않는다.
+
+소스와 동일 버전의 `dqa-onprem-frontend:latest` 이미지를 개발 Compose로 빌드한 후:
+
+```bash
+cd ~/dqa
+bash scripts/dqa-m5-l1d-frontend-runtime-test.sh
+```
+
+이 스크립트는 테스트 파일 3개 존재 및 로컬 이미지 존재를 먼저 확인하고,
+별도 일회용 Docker 컨테이너에서 호스트의 `frontend/src/test` 폴더만
+읽기 전용으로 마운트한다. Docker 네트워크는 `none`이며, 통과할 때에만
+`DQA_M5_L1D_FRONTEND_RUNTIME_TEST_PASS`를 출력한다. DB·Backend·Frontend
+실행 중인 서비스나 환경 변수·역할은 변경하지 않는다.
+
+2026-11-02 수동 동일 명령 검증: `LLMConnectionDraftPanel` 11개,
+`IntegrationSettingsPortal` 8개, 합계 **19/19 PASS**. 위 래퍼 스크립트
+자체의 재실행 결과는 별도 수용 증빙으로 기록한다.
