@@ -103,7 +103,7 @@ export function IntegrationSettingsPortal() {
                 '설정됨'은 서버에 연결 정보가 있다는 의미이며 실제 접속 성공이나 사용 승인을 뜻하지 않습니다.
                 개발 환경에서는 명시적으로 허용한 서버·모델에 한해 비임상 메타데이터 연결 시험을 할 수 있습니다.
                 서버 URL·모델 수정 및 연결 초기화는 아직 제공되지 않으며 승인된 비밀관리와 변경 감사가 마련된 후 도입합니다.
-                연결 후보는 화면에서 로컬 초안으로만 점검할 수 있습니다.
+                연결 후보는 로컬 초안으로 점검하고, 별도 허용된 개발 환경에서만 서버 정책 검토를 요청할 수 있습니다.
               </p>
               <div className="dd-action-row">
                 <button type="button" className="dd-secondary-btn"
@@ -146,7 +146,10 @@ export function IntegrationSettingsPortal() {
                 </button>
               </div>
               {showLLMDraft && (
-                <LLMConnectionDraftPanel onClose={() => setShowLLMDraft(false)} />
+                <LLMConnectionDraftPanel
+                  onClose={() => setShowLLMDraft(false)}
+                  serverReviewAvailable={status.llm.candidate_review_available}
+                />
               )}
             </section>
             <section className="qa-panel" aria-label="외부 서비스 접근 제어">
