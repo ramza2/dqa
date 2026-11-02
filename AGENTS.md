@@ -498,3 +498,17 @@ Read `docs/m5-s0-integration-settings-security-plan.md` before modifying the int
   durable audit and separate review; keep all such controls disabled for now.
 - Preserve CPU-first / LLM-free query paths and deterministic SELECT-only gates.
 See docs/m5-l1a-local-llm-connection-candidate.md.
+
+## M5-L1D — development-only stateless candidate review UI (2026-11-02)
+
+- Keep M5-L1A local input check offline. Expose the separate server policy
+  check only when the admin GET status explicitly reports
+  `llm.candidate_review_available=true`; no automatic POST.
+- A deliberate click can POST only candidate metadata with integer
+  `timeoutSeconds` to the M5-L1C stateless, default-deny development API.
+  Do not send secrets, prompts, SQL/results, or clinical data.
+- Display sanitized policy codes only. `POLICY_REVIEW_REQUIRED` is never
+  connection success, activation, runtime eligibility or institution approval.
+- Invalidate stale async review when draft edits/reset/close; no config/DB
+  writes, live provider calls, secret access or runtime changes.
+See docs/m5-l1d-candidate-review-ui.md.

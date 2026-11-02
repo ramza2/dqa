@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntegrationSettingsPortal } from "../components/IntegrationSettingsPortal";
 import {
   getIntegrationSettingsStatus,
+  reviewLLMConnectionCandidate,
   testConfiguredLLMConnection,
   type IntegrationSettingsStatus,
 } from "../api/integrationSettings";
@@ -15,6 +16,7 @@ vi.mock("../components/ServiceClientDraftsPanel", () => ({
 vi.mock("../api/integrationSettings", () => ({
   getIntegrationSettingsStatus: vi.fn(),
   testConfiguredLLMConnection: vi.fn(),
+  reviewLLMConnectionCandidate: vi.fn(),
 }));
 
 const current: IntegrationSettingsStatus = {
@@ -26,6 +28,7 @@ const current: IntegrationSettingsStatus = {
     api_key_present: true,
     raw_request_egress_allowed: false,
     connection_test_available: false,
+    candidate_review_available: false,
   },
   external_service: {
     service_client_management_available: false,
@@ -67,6 +70,31 @@ describe("M5-S0 integration settings portal", () => {
       .not.toBeInTheDocument();
     await userEvent.click(within(llm).getByRole("button", { name: "연결 후보 초안 열기" }));
     expect(within(llm).getByLabelText("연결 이름")).toHaveValue("");
+    expect(testConfiguredLLMConnection).not.toHaveBeenCalled();
+  });
+
+  it("only connects the server review action when backend status explicitly allows it", async () => {
+    vi.mocked(getIntegrationSettingsStatus).mockResolvedValue({
+      ...current,
+      llm: { ...current.llm, candidate_review_available: true },
+    });
+    vi.mocked(reviewLLMConnectionCandidate).mockResolvedValue({
+      code: "ENDPOINT_NOT_ALLOWLISTED",
+      server_configuration_changed: false,
+      credential_loaded: false,
+      ready_for_runtime: false,
+      ready_for_connection_test: false,
+    });
+    render(<IntegrationSettingsPortal />);
+    const llm = await screen.findByRole("region", { name: "LLM 연결 상태" });
+    await userEvent.click(within(llm).getByRole("button", { name: "연결 후보 초안 열기" }));
+    await userEvent.type(within(llm).getByLabelText("연결 이름"), "Candidate");
+    await userEvent.type(within(llm).getByLabelText("API 서버 주소"), "https://model.internal.example/v1");
+    await userEvent.type(within(llm).getByLabelText("모델 식별자"), "qwen3-14b");
+    expect(reviewLLMConnectionCandidate).not.toHaveBeenCalled();
+    await userEvent.click(within(llm).getByRole("button", { name: "서버 정책 점검" }));
+    expect(await within(llm).findByText(/관리자가 별도로 허용한 HTTPS/)).toBeInTheDocument();
+    expect(reviewLLMConnectionCandidate).toHaveBeenCalledTimes(1);
     expect(testConfiguredLLMConnection).not.toHaveBeenCalled();
   });
 

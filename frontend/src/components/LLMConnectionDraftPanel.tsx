@@ -1,11 +1,17 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  reviewLLMConnectionCandidate,
+  type LLMConnectionCandidateDecisionCode,
+  type LLMConnectionEnvironment,
+  type LLMConnectionProtocol,
+} from "../api/integrationSettings";
 
 /**
- * M5-L1A: review a proposed connection locally only.
- * No endpoint is called, no secret is entered, and no draft is persisted.
+ * M5-L1D: local drafts can optionally request stateless backend policy review.
+ * Neither action stores a draft, changes the active provider, or calls an LLM.
  */
-type ConnectionEnvironment = "modelops" | "snuh_ai" | "self_hosted" | "other";
-type ApiProtocol = "openai_compatible" | "custom_api";
+type ConnectionEnvironment = LLMConnectionEnvironment;
+type ApiProtocol = LLMConnectionProtocol;
 
 interface ConnectionDraft {
   name: string;
@@ -61,13 +67,44 @@ function validateDraft(draft: ConnectionDraft): string | null {
   return null;
 }
 
-export function LLMConnectionDraftPanel({ onClose }: { onClose: () => void }) {
+const POLICY_MESSAGES: Record<LLMConnectionCandidateDecisionCode, string> = {
+  INVALID_FIELDS: "입력 항목이 서버의 검증 기준에 맞지 않습니다.",
+  INSECURE_ENDPOINT: "HTTPS 주소가 아니므로 서버 정책에서 거부했습니다.",
+  INVALID_ENDPOINT: "서버 주소의 안전성 또는 형식을 확인해야 합니다.",
+  UNSUPPORTED_ADAPTER: "선택한 API 호출 형식은 아직 지원하지 않습니다.",
+  ENDPOINT_NOT_ALLOWLISTED: "관리자가 별도로 허용한 HTTPS 서버 주소와 일치하지 않습니다.",
+  POLICY_REVIEW_REQUIRED: "서버 형식·허용 주소 검사를 통과했지만 운영 정책 검토가 필요합니다. 연결·사용 승인 상태가 아닙니다.",
+};
+
+interface DraftPanelProps {
+  onClose: () => void;
+  serverReviewAvailable?: boolean;
+}
+
+export function LLMConnectionDraftPanel({
+  onClose, serverReviewAvailable = false,
+}: DraftPanelProps) {
   const [draft, setDraft] = useState<ConnectionDraft>({ ...EMPTY_DRAFT });
   const [reviewMessage, setReviewMessage] = useState<string | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [serverReviewBusy, setServerReviewBusy] = useState(false);
+  const [serverReviewMessage, setServerReviewMessage] = useState<string | null>(null);
+  const [serverReviewError, setServerReviewError] = useState<string | null>(null);
+  const requestSequence = useRef(0);
+
+  // A closed form must never show a late response after being reopened.
+  useEffect(() => () => { requestSequence.current += 1; }, []);
+
+  function clearServerReview(): void {
+    requestSequence.current += 1;
+    setServerReviewBusy(false);
+    setServerReviewMessage(null);
+    setServerReviewError(null);
+  }
 
   function update<K extends keyof ConnectionDraft>(key: K, value: ConnectionDraft[K]): void {
+    clearServerReview();
     setDraft((previous) => ({ ...previous, [key]: value }));
     setReviewMessage(null);
     setReviewError(null);
@@ -76,6 +113,7 @@ export function LLMConnectionDraftPanel({ onClose }: { onClose: () => void }) {
 
   function review(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
+    clearServerReview();
     setConfirmReset(false);
     const error = validateDraft(draft);
     setReviewError(error);
@@ -83,10 +121,59 @@ export function LLMConnectionDraftPanel({ onClose }: { onClose: () => void }) {
   }
 
   function resetDraft(): void {
+    clearServerReview();
     setDraft({ ...EMPTY_DRAFT });
     setReviewMessage("입력 중이던 로컬 초안만 초기화했습니다. 서버 설정은 변경되지 않았습니다.");
     setReviewError(null);
     setConfirmReset(false);
+  }
+
+  async function reviewOnServer(): Promise<void> {
+    if (!serverReviewAvailable) return;
+    clearServerReview();
+    setConfirmReset(false);
+    setReviewMessage(null);
+    const error = validateDraft(draft);
+    setReviewError(error);
+    if (error) return;
+
+    const id = ++requestSequence.current;
+    setServerReviewBusy(true);
+    try {
+      const decision = await reviewLLMConnectionCandidate({
+        name: draft.name.trim(),
+        environment: draft.environment,
+        protocol: draft.protocol,
+        baseUrl: draft.baseUrl.trim(),
+        modelId: draft.modelId.trim(),
+        timeoutSeconds: Number(draft.timeoutSeconds),
+      });
+      if (id !== requestSequence.current) return;
+      // An unexpected response must never be displayed as an approval.
+      if (
+        decision.server_configuration_changed !== false ||
+        decision.credential_loaded !== false ||
+        decision.ready_for_runtime !== false ||
+        decision.ready_for_connection_test !== false
+      ) {
+        setServerReviewError("서버 정책 점검 응답을 확인할 수 없습니다.");
+      } else {
+        setServerReviewMessage(
+          POLICY_MESSAGES[decision.code] ?? "알 수 없는 서버 정책 판정입니다. 관리자에게 문의하세요.",
+        );
+      }
+    } catch {
+      if (id === requestSequence.current) {
+        setServerReviewError("서버 정책 점검을 수행할 수 없습니다. 관리자 권한과 개발 설정을 확인하세요.");
+      }
+    } finally {
+      if (id === requestSequence.current) setServerReviewBusy(false);
+    }
+  }
+
+  function closeDraft(): void {
+    clearServerReview();
+    onClose();
   }
 
   return (
@@ -158,11 +245,25 @@ export function LLMConnectionDraftPanel({ onClose }: { onClose: () => void }) {
         )}
         {reviewError && <p className="banner banner-error" role="alert">{reviewError}</p>}
         {reviewMessage && <p role="status">{reviewMessage}</p>}
+        {serverReviewBusy && <p role="status">서버 정책 점검 중…</p>}
+        {serverReviewMessage && serverReviewAvailable && (
+          <p role="status">서버 정책 점검 결과: {serverReviewMessage}</p>
+        )}
+        {serverReviewError && serverReviewAvailable && (
+          <p className="banner banner-error" role="alert">{serverReviewError}</p>
+        )}
         <div className="dd-action-row">
           <button type="submit" className="dd-primary-btn">초안 입력 점검</button>
+          {serverReviewAvailable && (
+            <button type="button" className="dd-secondary-btn"
+              disabled={serverReviewBusy}
+              onClick={() => void reviewOnServer()}>
+              {serverReviewBusy ? "서버 정책 점검 중…" : "서버 정책 점검"}
+            </button>
+          )}
           <button type="button" className="dd-secondary-btn"
             onClick={() => setConfirmReset(true)}>초안 초기화</button>
-          <button type="button" className="dd-secondary-btn" onClick={onClose}>닫기</button>
+          <button type="button" className="dd-secondary-btn" onClick={closeDraft}>닫기</button>
         </div>
         {confirmReset && (
           <div className="banner banner-warn">
@@ -179,8 +280,11 @@ export function LLMConnectionDraftPanel({ onClose }: { onClose: () => void }) {
         </div>
       </form>
       <p className="muted">
-        연결 후보 점검은 브라우저 내부 형식 검사만 수행합니다.
-        실제 서버 저장·비밀키 교체·API 호출·감사 기록은 후속 보안 구현 대상입니다.
+        초안 입력 점검은 브라우저 내부 형식 검사만 수행합니다.
+        {serverReviewAvailable
+          ? " 서버 정책 점검은 명시적 요청 시 개발 서버에서 입력 형식과 허용 주소만 검토합니다."
+          : " 서버 정책 점검은 관리자 허용 설정을 마친 개발 환경에서만 제공됩니다."}
+        두 점검 모두 실제 서버 설정 저장·비밀키 교체·외부 모델 호출·사용 승인을 수행하지 않습니다.
       </p>
     </section>
   );
