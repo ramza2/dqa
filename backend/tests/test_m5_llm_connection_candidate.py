@@ -62,6 +62,9 @@ def test_non_https_fails_closed(unsafe: str) -> None:
     "https://user:password@llm.example.invalid/v1",
     "https://llm.example.invalid/v1?token=hidden",
     "https://llm.example.invalid/v1#fragment",
+    "https://llm.example.invalid/v1?",
+    "https://llm.example.invalid/v1#",
+    "https://llm.example.invalid/v1 ",
     "https://llm.example.invalid/v1/%2e%2e",
     "https://llm.example.invalid/v1/../models",
     "https://llm.example.invalid//v1",
@@ -87,7 +90,9 @@ def test_approved_endpoint_must_be_exact(mismatch: str) -> None:
 
 @pytest.mark.parametrize("invalid", [
     {"name": ""},
+    {"name": "   "},
     {"modelId": ""},
+    {"modelId": "qwen3 14b"},
     {"timeoutSeconds": 0},
     {"timeoutSeconds": 301},
     {"timeoutSeconds": "60"},

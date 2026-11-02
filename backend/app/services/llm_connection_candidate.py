@@ -28,7 +28,7 @@ DecisionCode = Literal[
 class LLMConnectionCandidate(BaseModel):
     """Untrusted candidate form; never an enabled or approved runtime profile."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=100)
     environment: ConnectionEnvironment
@@ -39,11 +39,20 @@ class LLMConnectionCandidate(BaseModel):
         default=60, alias="timeoutSeconds", ge=1, le=300, strict=True
     )
 
-    @field_validator("name", "model_id")
+    @field_validator("name")
     @classmethod
-    def reject_control_characters(cls, value: str) -> str:
+    def validate_name(cls, value: str) -> str:
+        if not value.strip() or any(
+            ord(character) < 32 or ord(character) == 127 for character in value
+        ):
+            raise ValueError("invalid display name")
+        return value
+
+    @field_validator("model_id")
+    @classmethod
+    def validate_model_id(cls, value: str) -> str:
         if any(ord(character) < 33 or ord(character) == 127 for character in value):
-            raise ValueError("invalid identifier")
+            raise ValueError("invalid model identifier")
         return value
 
 
@@ -62,9 +71,12 @@ class LLMConnectionCandidateDecision(BaseModel):
 def _validated_endpoint(value: str) -> tuple[str | None, DecisionCode | None]:
     """Normalize only trivial trailing slash; disallow URL parser ambiguities."""
 
-    raw = value.strip()
+    raw = value
     if (
         not raw
+        or raw != raw.strip()
+        or "?" in raw
+        or "#" in raw
         or len(raw) > 2048
         or any(ord(c) < 33 or ord(c) == 127 for c in raw)
         or "\\" in raw
