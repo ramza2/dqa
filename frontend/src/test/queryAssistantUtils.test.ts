@@ -9,6 +9,7 @@ import {
   formatAssistantError,
   isAuditReadDenied,
   readinessGuidanceMessage,
+  validateParameterValues,
 } from "../utils/queryAssistant";
 
 function param(
@@ -161,5 +162,55 @@ describe("finalizeRequestHeaders", () => {
     expect(headers.get("Authorization")).toBe("Bearer keep-me");
     expect(headers.get("X-DQA-Dev-Actor")).toBe("query-operator");
     expect(headers.get("X-DQA-Dev-Roles")).toBe("query_operator");
+  });
+});
+
+describe("CPU-first parameter guidance", () => {
+  it("reports required and pattern failures without echoing sensitive values", () => {
+    const schema = [
+      param({ name: "ward", type: "string", pattern: "^[A-Z][0-9]{2}$", sensitive: true }),
+      param({ name: "optional", type: "string", required: false }),
+    ];
+    expect(validateParameterValues(schema, {})).toEqual({
+      ward: "필수 조건을 입력하거나 선택하세요.",
+    });
+    const errors = validateParameterValues(schema, { ward: "secret-123", optional: "" });
+    expect(errors.ward).toMatch(/입력 형식/);
+    expect(JSON.stringify(errors)).not.toContain("secret-123");
+    expect(errors).not.toHaveProperty("optional");
+  });
+
+  it("rejects fractional/partial integers and enforces numeric limits", () => {
+    const schema = [
+      param({ name: "count", type: "integer", min: 2, max: 5 }),
+      param({ name: "ratio", type: "decimal", required: false, min: 0, max: 1 }),
+    ];
+    expect(validateParameterValues(schema, { count: "2.5" }).count).toMatch(/정수/);
+    expect(validateParameterValues(schema, { count: "2abc" }).count).toMatch(/정수/);
+    expect(validateParameterValues(schema, { count: "1" }).count).toMatch(/최솟값/);
+    expect(validateParameterValues(schema, { count: "6" }).count).toMatch(/최댓값/);
+    expect(validateParameterValues(schema, { count: "3", ratio: "0.5" })).toEqual({});
+    expect(buildParameterPayload(schema, { count: "3" }).count).toBe(3);
+  });
+
+  it("checks list item types/bounds and preserves typed enum equality", () => {
+    const schema = [
+      param({ name: "codes", type: "integer_list", min_items: 2, max_items: 3 }),
+      param({ name: "choice", type: "enum", allowed_values: [1, "1"] }),
+    ];
+    expect(validateParameterValues(schema, { codes: "1, bad", choice: 1 }).codes).toMatch(/정수/);
+    expect(validateParameterValues(schema, { codes: "1,", choice: 1 }).codes).toMatch(/비워두지/);
+    expect(validateParameterValues(schema, { codes: "1", choice: 1 }).codes).toMatch(/이상/);
+    expect(validateParameterValues(schema, { codes: "1,2,3,4", choice: 1 }).codes).toMatch(/최대/);
+    expect(validateParameterValues(schema, { codes: "1, 2", choice: "1" })).toEqual({});
+    expect(validateParameterValues(schema, { codes: "1,2", choice: true }).choice).toMatch(/허용/);
+  });
+
+  it("validates ISO dates and maps backend parameter errors to safe guidance", () => {
+    const schema = [param({ name: "on", type: "date" })];
+    expect(validateParameterValues(schema, { on: "2026-02-30" }).on).toMatch(/YYYY-MM-DD/);
+    expect(validateParameterValues(schema, { on: "2024-02-29" })).toEqual({});
+    expect(readinessGuidanceMessage("PARAMETER_INVALID")).toMatch(/조건/);
+    expect(readinessGuidanceMessage("SQL_UNSAFE")).toMatch(/안전성/);
   });
 });

@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { useQueryAssistant } from "../hooks/useQueryAssistant";
 import { CatalogGraphicalBuilder } from "./CatalogGraphicalBuilder";
 import type { ExecutionFormParameter } from "../types/queryAssistant";
@@ -39,13 +40,21 @@ function ParameterField({
   param,
   value,
   onChange,
+  error,
 }: {
   param: ExecutionFormParameter;
   value: unknown;
   onChange: (value: unknown) => void;
+  error?: string;
 }) {
   const label = param.label || param.name;
   const id = `param-${param.name}`;
+  const help = (
+    <>
+      {param.description ? <span className="param-help">{param.description}</span> : null}
+      {error ? <span className="param-help banner-error" id={`${id}-error`} role="alert">{error}</span> : null}
+    </>
+  );
   const requiredMark = param.required ? (
     <span className="required-mark" aria-hidden="true">
       *
@@ -64,6 +73,8 @@ function ParameterField({
         </span>
         <select
           id={id}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-error` : undefined}
           value={selectValue}
           onChange={(event) => {
             const next = event.target.value;
@@ -78,9 +89,7 @@ function ParameterField({
           <option value="true">true</option>
           <option value="false">false</option>
         </select>
-        {param.description ? (
-          <span className="param-help">{param.description}</span>
-        ) : null}
+        {help}
       </label>
     );
   }
@@ -97,6 +106,8 @@ function ParameterField({
         </span>
         <select
           id={id}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-error` : undefined}
           value={selectedIndex >= 0 ? String(selectedIndex) : ""}
           onChange={(event) => {
             const raw = event.target.value;
@@ -114,6 +125,7 @@ function ParameterField({
             </option>
           ))}
         </select>
+        {help}
       </label>
     );
   }
@@ -128,6 +140,8 @@ function ParameterField({
         </span>
         <input
           id={id}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-error` : undefined}
           type={param.sensitive ? "password" : "text"}
           value={listInputDisplayValue(value)}
           onChange={(event) => {
@@ -137,9 +151,7 @@ function ParameterField({
           placeholder="쉼표로 구분"
           autoComplete="off"
         />
-        {param.description ? (
-          <span className="param-help">{param.description}</span>
-        ) : null}
+        {help}
       </label>
     );
   }
@@ -164,6 +176,8 @@ function ParameterField({
       </span>
       <input
         id={id}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${id}-error` : undefined}
         type={inputType}
         step={param.type === "decimal" ? "any" : param.type === "integer" ? "1" : undefined}
         value={isUnsetParameterValue(value) ? "" : String(value)}
@@ -173,25 +187,33 @@ function ParameterField({
             onChange(undefined);
             return;
           }
-          if (param.type === "integer") {
-            onChange(Number.parseInt(next, 10));
-            return;
-          }
-          if (param.type === "decimal") {
-            onChange(Number(next));
-            return;
-          }
           onChange(next);
         }}
         autoComplete="off"
       />
-      {param.description ? <span className="param-help">{param.description}</span> : null}
+      {help}
     </label>
   );
 }
 
 export function QueryAssistant() {
   const qa = useQueryAssistant();
+  const [templateSearch, setTemplateSearch] = useState("");
+  const visibleManualTemplates = useMemo(() => {
+    const needle = templateSearch.trim().toLocaleLowerCase();
+    const items = qa.manualCatalog?.items ?? [];
+    if (!needle) return items;
+    return items.filter((item) => [
+      item.name, item.description ?? "", item.stable_key, ...item.target_schemas,
+    ].some((part) => part.toLocaleLowerCase().includes(needle)));
+  }, [qa.manualCatalog, templateSearch]);
+  const selectedManualTemplate = qa.manualCatalog?.items.find((item) =>
+    item.template_id === qa.selectedCandidate?.template_id &&
+    item.version_id === qa.selectedCandidate?.version_id);
+  const dropdownTemplates = selectedManualTemplate &&
+    !visibleManualTemplates.includes(selectedManualTemplate)
+    ? [selectedManualTemplate, ...visibleManualTemplates]
+    : visibleManualTemplates;
 
   const selectedEnvMeta = qa.form?.environments.find(
     (item) => item.environment === qa.environment,
@@ -216,7 +238,10 @@ export function QueryAssistant() {
             aria-label="Active Catalog source"
             value={qa.selectedSource}
             disabled={qa.sourcesState === "loading"}
-            onChange={(event) => qa.selectSource(event.target.value)}
+            onChange={(event) => {
+              setTemplateSearch("");
+              qa.selectSource(event.target.value);
+            }}
           >
             <option value="">소스 선택</option>
             {qa.sources.map((source) => (
@@ -253,6 +278,20 @@ export function QueryAssistant() {
           {qa.manualCatalog ? (
             <>
               <label className="param-field">
+                <span className="param-label">승인 템플릿 검색</span>
+                <input
+                  aria-label="승인 템플릿 검색"
+                  type="search"
+                  value={templateSearch}
+                  onChange={(event) => setTemplateSearch(event.target.value)}
+                  placeholder="이름·설명·템플릿 키·스키마 검색"
+                />
+              </label>
+              <p className="muted" data-testid="manual-template-count">
+                불러온 {qa.manualCatalog.items.length}개 중 {visibleManualTemplates.length}개 표시
+                (승인·활성화, 전체 {qa.manualCatalog.total}개)
+              </p>
+              <label className="param-field">
                 <span className="param-label">승인 템플릿 직접 선택</span>
                 <select
                   aria-label="승인 템플릿 직접 선택"
@@ -273,21 +312,39 @@ export function QueryAssistant() {
                   }}
                 >
                   <option value="">템플릿 선택</option>
-                  {qa.manualCatalog.items.map((item) => (
+                  {dropdownTemplates.map((item) => (
                     <option
                       key={`${item.template_id}:${item.version_id}`}
                       value={`${item.template_id}:${item.version_id}`}
                     >
-                      {item.name} (v{item.version})
+                      {item.name} (v{item.version}, {item.stable_key})
                     </option>
                   ))}
                 </select>
               </label>
+              {selectedManualTemplate ? (
+                <p className="muted" data-testid="selected-manual-template">
+                  선택: {selectedManualTemplate.name} / v{selectedManualTemplate.version} ·
+                  조건 {selectedManualTemplate.parameter_count}개 ·
+                  대상 {selectedManualTemplate.target_schemas.join(", ") || "미지정"}
+                  {selectedManualTemplate.description ? ` — ${selectedManualTemplate.description}` : ""}
+                </p>
+              ) : null}
               {qa.manualCatalog.total === 0 ? (
                 <p className="muted">현재 Catalog에 사용 가능한 승인 템플릿이 없습니다.</p>
-              ) : qa.manualCatalog.total > qa.manualCatalog.items.length ? (
-                <p className="muted">처음 {qa.manualCatalog.items.length}개만 표시합니다. (총 {qa.manualCatalog.total}개)</p>
+              ) : visibleManualTemplates.length === 0 ? (
+                <p className="muted">검색 결과가 없습니다. 다른 검색어를 입력하세요.</p>
               ) : null}
+              {qa.manualCatalog.items.length < qa.manualCatalog.total ? (
+                <div className="qa-actions">
+                  <button type="button"
+                    onClick={() => void qa.loadMoreManualTemplates()}
+                    disabled={qa.manualMoreState === "loading"}>
+                    {qa.manualMoreState === "loading" ? "다음 목록 불러오는 중…" : "다음 100개 더 불러오기"}
+                  </button>
+                </div>
+              ) : null}
+              <ErrorBanner error={qa.manualMoreError} />
             </>
           ) : null}
         </section>
@@ -432,15 +489,26 @@ export function QueryAssistant() {
                       key={param.name}
                       param={param}
                       value={qa.parameterValues[param.name]}
+                      error={qa.validationErrors[param.name]}
                       onChange={(value) => qa.setParameterValue(param.name, value)}
                     />
                   ))}
                 </div>
 
+                {qa.invalidParameterCount > 0 ? (
+                  <p className="muted" role="status" data-testid="parameter-validation-summary">
+                    확인이 필요한 조건 {qa.invalidParameterCount}개가 있습니다.
+                    수정하면 미리보기를 진행할 수 있습니다.
+                  </p>
+                ) : (
+                  <p className="muted" role="status">
+                    조건 입력 확인 완료 · 서버 미리보기에서 최종 검증합니다.
+                  </p>
+                )}
                 <div className="qa-actions">
                   <button
                     type="button"
-                    onClick={() => void qa.runExtraction()}
+                    onClick={() => void qa.runExtraction()
                     disabled={
                       !qa.selectedCandidate ||
                       !qa.requestText.trim() ||
@@ -469,6 +537,7 @@ export function QueryAssistant() {
                 disabled={
                   !qa.selectedCandidate ||
                   !qa.environment ||
+                  qa.invalidParameterCount > 0 ||
                   qa.previewState === "loading"
                 }
               >
@@ -488,6 +557,12 @@ export function QueryAssistant() {
                 {qa.executeState === "loading" ? "실행 중…" : "조회 실행"}
               </button>
             </div>
+            {qa.previewState === "loading" ? (
+              <p className="muted" role="status">서버에서 승인 상태와 조건을 확인하는 중입니다.</p>
+            ) : null}
+            {qa.executeState === "loading" ? (
+              <p className="muted" role="status">읽기 전용 조회를 실행하는 중입니다.</p>
+            ) : null}
             <ErrorBanner error={qa.previewError} />
             <ErrorBanner error={qa.executeError} />
             {qa.preview && qa.previewMatchesCurrent ? (
@@ -526,6 +601,11 @@ export function QueryAssistant() {
                   </div>
                 ) : null}
                 <h3>확정 파라미터</h3>
+                <p className="muted" data-testid="execution-confirmation">
+                  {qa.preview.execution_available && qa.preview.execution_blockers.length === 0
+                    ? "서버 미리보기 통과. 아래 조건과 환경을 확인한 뒤 [조회 실행]을 직접 누르세요."
+                    : "현재 환경에서는 조회를 실행할 수 없습니다. 차단 사유를 확인하세요."}
+                </p>
                 <ul className="qa-param-summary">
                   {Object.entries(qa.preview.resolved_parameters).map(([name, value]) => {
                     const sensitive =
@@ -549,6 +629,7 @@ export function QueryAssistant() {
         {qa.result ? (
           <section className="qa-panel" aria-labelledby="qa-result-heading">
             <h2 id="qa-result-heading">3. 조회 결과</h2>
+              <p className="muted" role="status">조회 완료 · 이력 확인이 필요하면 아래 감사 이력을 조회하세요.</p>
             <dl className="status-grid">
               <div className="status-item">
                 <span className="label">row_count</span>
