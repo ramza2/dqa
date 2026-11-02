@@ -486,3 +486,15 @@ Read `docs/m5-s0-integration-settings-security-plan.md` before modifying the int
 - Any future service credentials need one-time issuance, secret hashing/ref storage, expiry, rotation, revocation and admin audit; secure server-side policy checks with default deny. Reuse existing approved IdentityProvider abstraction; production `dev_headers` remains forbidden. No external listeners, allowlist activation or real system test until official G2/security approval.
 - Future LLM edit UI requires a reviewed secret store, URL allowlist/SSRF defenses, admin RBAC and audited changes. Never send PHI, result rows or raw request text without the existing independent egress policy gates **and** site approval. Metadata-only connection test must use no clinical data.
 - Implement this in small Draft PR slices: M5-S0 status (first); M5-S1/S2 service clients & actual authentication; M5-L1/L2 mutable optional LLM configuration. Do not silently merge these phases or claim approval based on mock tests.
+
+## M5-L1A — local LLM connection candidate UI (2026-11-02)
+
+- The provider-neutral draft form is **browser memory only**: no existing URL
+  or secret ref reads, backend writes, LLM requests, persistence or secret entry.
+- Distinguish model source (ModelOps, SNUH.AI, self-hosted, other) from API
+  protocol (OpenAI-compatible or a future vendor-specific adapter).
+- Local draft reset requires confirmation and never clears server settings.
+  Actual update/reset requires approved identity, secret store, SSRF allowlist,
+  durable audit and separate review; keep all such controls disabled for now.
+- Preserve CPU-first / LLM-free query paths and deterministic SELECT-only gates.
+See docs/m5-l1a-local-llm-connection-candidate.md.

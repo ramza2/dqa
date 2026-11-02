@@ -50,7 +50,24 @@ describe("M5-S0 integration settings portal", () => {
     expect(within(service).getAllByText("미구현")).toHaveLength(2);
     expect(within(llm).getByRole("button", { name: "LLM 연결 시험" })).toBeDisabled();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(within(llm).getByRole("button", { name: "연결 후보 초안 열기" })).toBeEnabled();
     expect(screen.queryByText(/비밀키 실제값/)).not.toBeInTheDocument();
+  });
+
+  it("opens and discards an LLM candidate with admin status only", async () => {
+    vi.mocked(getIntegrationSettingsStatus).mockResolvedValue(current);
+    render(<IntegrationSettingsPortal />);
+    const llm = await screen.findByRole("region", { name: "LLM 연결 상태" });
+    await userEvent.click(within(llm).getByRole("button", { name: "연결 후보 초안 열기" }));
+    expect(within(llm).getByRole("region", { name: "LLM 연결 후보 로컬 초안" }))
+      .toBeInTheDocument();
+    await userEvent.type(within(llm).getByLabelText("연결 이름"), "Only in memory");
+    await userEvent.click(within(llm).getByRole("button", { name: "연결 후보 초안 닫기" }));
+    expect(within(llm).queryByRole("region", { name: "LLM 연결 후보 로컬 초안" }))
+      .not.toBeInTheDocument();
+    await userEvent.click(within(llm).getByRole("button", { name: "연결 후보 초안 열기" }));
+    expect(within(llm).getByLabelText("연결 이름")).toHaveValue("");
+    expect(testConfiguredLLMConnection).not.toHaveBeenCalled();
   });
 
   it("does not render admin inventory on denied access", async () => {
@@ -59,6 +76,7 @@ describe("M5-S0 integration settings portal", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("권한");
     expect(screen.queryByRole("region", { name: "LLM 연결 상태" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "정책 초안 관리 열기" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "연결 후보 초안 열기" })).not.toBeInTheDocument();
   });
 
   it("only reveals the draft-management panel after successful admin status", async () => {
