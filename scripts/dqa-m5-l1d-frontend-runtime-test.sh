@@ -16,15 +16,20 @@ for name in \
   setup.ts; do
   [[ -f "$ROOT/frontend/src/test/$name" ]] || die "test source missing: $name"
 done
+[[ -f "$ROOT/frontend/src/components/IntegrationSettingsPortal.tsx" ]] ||
+  die "integration settings component source missing"
 
 docker image inspect "$IMAGE" >/dev/null 2>&1 ||
   die "local frontend dev image missing (build it with the on-prem dev Compose overlay)"
 
 # The frontend/.dockerignore intentionally excludes test sources from the
-# image. Mount only tests from the matching host checkout; do not rebuild,
+# image. Mount the tested portal source as well, so a newer worktree is not
+# tested against the stale component baked into the existing image.
+# Do not rebuild,
 # change Compose roles, or expose dev administrator identity on the LAN.
 docker run --rm --network none \
   --mount "type=bind,src=$ROOT/frontend/src/test,dst=/app/src/test,readonly" \
+  --mount "type=bind,src=$ROOT/frontend/src/components/IntegrationSettingsPortal.tsx,dst=/app/src/components/IntegrationSettingsPortal.tsx,readonly" \
   --entrypoint /app/node_modules/.bin/vitest \
   "$IMAGE" \
   run \
