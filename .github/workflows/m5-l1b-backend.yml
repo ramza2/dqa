@@ -1,0 +1,43 @@
+name: M5 L1B backend candidate policy
+
+on:
+  pull_request:
+    paths:
+      - 'backend/app/services/llm_connection_candidate.py'
+      - 'backend/tests/test_m5_llm_connection_candidate.py'
+      - 'backend/app/services/llm_connection_probe.py'
+      - 'backend/tests/test_m5_llm_connection_probe.py'
+      - 'backend/tests/test_m5_integration_status.py'
+      - '.github/workflows/m5-l1b-backend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install backend test dependencies
+        working-directory: backend
+        run: python -m pip install -e '.[dev]'
+      - name: Compile candidate policy
+        working-directory: backend
+        run: python -m compileall -q app/services/llm_connection_candidate.py
+      - name: Test candidate policy and existing non-egress guards
+        working-directory: backend
+        env:
+          APP_ENV: test
+        run: >
+          python -m pytest -q
+          tests/test_m5_llm_connection_candidate.py
+          tests/test_m5_llm_connection_probe.py
+          tests/test_m5_integration_status.py
