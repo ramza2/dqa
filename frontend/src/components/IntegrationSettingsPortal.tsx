@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ServiceClientDraftsPanel } from "./ServiceClientDraftsPanel";
+import { LLMConnectionDraftPanel } from "./LLMConnectionDraftPanel";
 import {
   getIntegrationSettingsStatus,
   testConfiguredLLMConnection,
@@ -14,6 +15,7 @@ export function IntegrationSettingsPortal() {
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const [showPolicyDrafts, setShowPolicyDrafts] = useState(false);
+  const [showLLMDraft, setShowLLMDraft] = useState(false);
   const [testingLLM, setTestingLLM] = useState(false);
   const [llmTest, setLLMTest] = useState<LLMConnectionTestResult | null>(null);
   const [llmTestError, setLLMTestError] = useState<string | null>(null);
@@ -100,7 +102,8 @@ export function IntegrationSettingsPortal() {
               <p className="muted">
                 '설정됨'은 서버에 연결 정보가 있다는 의미이며 실제 접속 성공이나 사용 승인을 뜻하지 않습니다.
                 개발 환경에서는 명시적으로 허용한 서버·모델에 한해 비임상 메타데이터 연결 시험을 할 수 있습니다.
-                URL·모델 수정 및 연결 초기화는 아직 제공되지 않으며 승인된 비밀관리와 변경 감사가 마련된 후 도입합니다.
+                서버 URL·모델 수정 및 연결 초기화는 아직 제공되지 않으며 승인된 비밀관리와 변경 감사가 마련된 후 도입합니다.
+                연결 후보는 화면에서 로컬 초안으로만 점검할 수 있습니다.
               </p>
               <div className="dd-action-row">
                 <button type="button" className="dd-secondary-btn"
@@ -136,6 +139,15 @@ export function IntegrationSettingsPortal() {
                 않습니다. 자연어 요청 원문 전송:{" "}
                 <strong>{status.llm.raw_request_egress_allowed ? "설정상 허용 (기관 정책 승인 별도 확인 필요)" : "차단"}</strong>
               </p>
+              <div className="dd-action-row">
+                <button type="button" className="dd-secondary-btn"
+                  onClick={() => setShowLLMDraft((value) => !value)}>
+                  {showLLMDraft ? "연결 후보 초안 닫기" : "연결 후보 초안 열기"}
+                </button>
+              </div>
+              {showLLMDraft && (
+                <LLMConnectionDraftPanel onClose={() => setShowLLMDraft(false)} />
+              )}
             </section>
             <section className="qa-panel" aria-label="외부 서비스 접근 제어">
               <h3>FHIR·외부 시스템 접근 제어</h3>
