@@ -41,6 +41,20 @@ jobs:
   read-only-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: dqa
+          POSTGRES_PASSWORD: dqa
+          POSTGRES_DB: dqa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dqa -d dqa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
     defaults:
       run:
         working-directory: backend

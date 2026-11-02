@@ -508,7 +508,7 @@ export function QueryAssistant() {
                 <div className="qa-actions">
                   <button
                     type="button"
-                    onClick={() => void qa.runExtraction()
+                    onClick={() => void qa.runExtraction()}
                     disabled={
                       !qa.selectedCandidate ||
                       !qa.requestText.trim() ||
