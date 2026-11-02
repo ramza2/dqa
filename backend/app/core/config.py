@@ -64,6 +64,14 @@ class Settings(BaseSettings):
     dqa_dev_llm_connection_test_allowed_base_url: str | None = Field(
         default=None, alias="DQA_DEV_LLM_CONNECTION_TEST_ALLOWED_BASE_URL"
     )
+    # M5-L1C: stateless metadata candidate policy review only (no I/O/writes).
+    # Development/test only, default OFF and separately pinned from L0 probe.
+    dqa_dev_llm_candidate_review_enabled: bool = Field(
+        default=False, alias="DQA_DEV_LLM_CANDIDATE_REVIEW_ENABLED"
+    )
+    dqa_dev_llm_candidate_review_allowed_base_url: str | None = Field(
+        default=None, alias="DQA_DEV_LLM_CANDIDATE_REVIEW_ALLOWED_BASE_URL"
+    )
 
     # Authentication provider. Default disabled = fail-closed on protected routes.
     # ``dev_headers`` is development/test only and rejected outside those envs.
