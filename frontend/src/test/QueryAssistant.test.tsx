@@ -1549,4 +1549,61 @@ describe("M5-S2 CPU Query Assistant usability regression", () => {
       restore();
     }
   });
+  it("keeps template paging responsive when a selected parameter changes in flight", async () => {
+    const user = userEvent.setup();
+    const pending = { resolve: null as ((response: Response) => void) | null };
+    const handlers = assistantHandlers();
+    handlers.unshift((url) => {
+      if (!url.pathname.endsWith("/query-executions/manual-templates")) return null;
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+      if (offset === 1) {
+        return new Promise<Response>((resolve) => { pending.resolve = resolve; });
+      }
+      return jsonResponse({
+        source_name: activeSource.source_name,
+        catalog_revision_id: activeSource.revision_id,
+        schema_fingerprint: activeSource.schema_fingerprint,
+        total: 2,
+        limit: 100,
+        offset: 0,
+        items: [manualItems[0]],
+      });
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await waitFor(() => expect(screen.getByRole("button", {
+        name: "승인 템플릿 목록 불러오기",
+      })).toBeEnabled());
+      await user.click(screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" }));
+      const selector = await screen.findByLabelText("승인 템플릿 직접 선택");
+      await user.selectOptions(selector, "10:20");
+      const parameter = await screen.findByLabelText(/병동 코드/);
+
+      await user.click(screen.getByRole("button", { name: "다음 100개 더 불러오기" }));
+      await waitFor(() => expect(pending.resolve).not.toBeNull());
+      expect(screen.getByRole("button", { name: "다음 목록 불러오는 중…" }))
+        .toBeDisabled();
+
+      // Parameter edits invalidate preview requests, but not the loaded catalog.
+      await user.type(parameter, "A01");
+      pending.resolve?.(jsonResponse({
+        source_name: activeSource.source_name,
+        catalog_revision_id: activeSource.revision_id,
+        schema_fingerprint: activeSource.schema_fingerprint,
+        total: 2,
+        limit: 100,
+        offset: 1,
+        items: [manualItems[1]],
+      }));
+      await waitFor(() => expect(screen.getByTestId("manual-template-count"))
+        .toHaveTextContent("불러온 2개 중 2개 표시"));
+      expect(screen.queryByRole("button", { name: "다음 목록 불러오는 중…" }))
+        .not.toBeInTheDocument();
+      expect(selector).toHaveValue("10:20");
+    } finally {
+      restore();
+    }
+  });
+
 });

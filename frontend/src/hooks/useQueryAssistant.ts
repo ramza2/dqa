@@ -40,6 +40,8 @@ export interface AssistantErrorState {
 
 export function useQueryAssistant() {
   const workflowGeneration = useRef(0);
+  // Paging is tied to the loaded catalog, not to preview/parameter edits.
+  const manualListEpoch = useRef(0);
 
   const [sources, setSources] = useState<CatalogActiveSummary[]>([]);
   const [sourcesState, setSourcesState] = useState<LoadState>("idle");
@@ -208,6 +210,7 @@ export function useQueryAssistant() {
 
   const selectSource = useCallback(
     (sourceName: string) => {
+      manualListEpoch.current += 1;
       setSelectedSource(sourceName);
       setManualCatalog(null);
       setManualState("idle");
@@ -223,6 +226,7 @@ export function useQueryAssistant() {
     if (!selectedSource || manualState === "loading") {
       return;
     }
+    manualListEpoch.current += 1;
     // A manual selection starts a new workflow, invalidating any LLM/preview
     // response that was initiated before this action.
     const generation = bumpGeneration();
@@ -273,13 +277,13 @@ export function useQueryAssistant() {
         manualMoreState === "loading" || manualCatalog.items.length >= manualCatalog.total) {
       return;
     }
-    const generation = workflowGeneration.current;
+    const listEpoch = manualListEpoch.current;
     const offset = manualCatalog.items.length;
     setManualMoreState("loading");
     setManualMoreError(null);
     try {
       const page = await listManualTemplates(selectedSource, offset);
-      if (!isCurrentGeneration(generation)) return;
+      if (listEpoch !== manualListEpoch.current) return;
       if (page.source_name !== manualCatalog.source_name ||
           page.catalog_revision_id !== manualCatalog.catalog_revision_id ||
           page.schema_fingerprint !== manualCatalog.schema_fingerprint ||
@@ -298,11 +302,11 @@ export function useQueryAssistant() {
       } : null);
       setManualMoreState("idle");
     } catch (error) {
-      if (!isCurrentGeneration(generation)) return;
+      if (listEpoch !== manualListEpoch.current) return;
       setManualMoreState("error");
       setManualMoreError(formatAssistantError(error));
     }
-  }, [isCurrentGeneration, manualCatalog, manualMoreState, manualState, selectedSource]);
+  }, [manualCatalog, manualMoreState, manualState, selectedSource]);
 
   const loadFormForCandidate = useCallback(
     async (candidate: RecommendedTemplate, sourceName: string, generation?: number) => {
