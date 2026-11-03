@@ -5,6 +5,7 @@ import type { ExecutionFormParameter } from "../types/queryAssistant";
 import {
   blockerMessage,
   findEnumOptionIndex,
+  filterManualTemplates,
   formatCellValue,
   isUnsetParameterValue,
   listInputDisplayValue,
@@ -199,14 +200,10 @@ function ParameterField({
 export function QueryAssistant() {
   const qa = useQueryAssistant();
   const [templateSearch, setTemplateSearch] = useState("");
-  const visibleManualTemplates = useMemo(() => {
-    const needle = templateSearch.trim().toLocaleLowerCase();
-    const items = qa.manualCatalog?.items ?? [];
-    if (!needle) return items;
-    return items.filter((item) => [
-      item.name, item.description ?? "", item.stable_key, ...item.target_schemas,
-    ].some((part) => part.toLocaleLowerCase().includes(needle)));
-  }, [qa.manualCatalog, templateSearch]);
+  const visibleManualTemplates = useMemo(
+    () => filterManualTemplates(qa.manualCatalog?.items ?? [], templateSearch),
+    [qa.manualCatalog, templateSearch],
+  );
   const selectedManualTemplate = qa.manualCatalog?.items.find((item) =>
     item.template_id === qa.selectedCandidate?.template_id &&
     item.version_id === qa.selectedCandidate?.version_id);
@@ -262,7 +259,7 @@ export function QueryAssistant() {
         <section className="qa-panel" aria-labelledby="manual-template-heading">
           <h2 id="manual-template-heading">1. 승인 템플릿 직접 선택 (LLM 불필요)</h2>
           <p className="muted">
-            승인·활성화된 조회 템플릿을 직접 선택한 뒤 조건을 입력합니다.
+            승인·활성화된 조회 템플릿(미리 정해진 조회 양식)을 선택하고 조건을 입력합니다.
             이 단계는 SQL을 생성하지 않으며 LLM을 호출하지 않습니다.
           </p>
           <div className="qa-actions">
@@ -284,9 +281,24 @@ export function QueryAssistant() {
                   type="search"
                   value={templateSearch}
                   onChange={(event) => setTemplateSearch(event.target.value)}
-                  placeholder="이름·설명·템플릿 키·스키마 검색"
+                  placeholder="이름·설명·조건명·템플릿 키·스키마 (공백으로 여러 단어 검색)"
+                  aria-describedby="manual-template-search-scope"
                 />
               </label>
+              {templateSearch ? (
+                <div className="qa-actions">
+                  <button type="button" onClick={() => setTemplateSearch("")}>
+                    검색어 지우기
+                  </button>
+                </div>
+              ) : null}
+              <p className="muted" id="manual-template-search-scope">
+                검색은 현재 불러온 승인·활성화 목록에만 적용됩니다.
+                공백으로 여러 단어를 입력하면 모두 일치하는 조회 양식을 표시합니다.
+                {qa.manualCatalog.items.length < qa.manualCatalog.total
+                  ? " 전체 목록을 검색하려면 아래에서 다음 목록을 추가로 불러오세요."
+                  : ""}
+              </p>
               <p className="muted" data-testid="manual-template-count">
                 불러온 {qa.manualCatalog.items.length}개 중 {visibleManualTemplates.length}개 표시
                 (승인·활성화, 전체 {qa.manualCatalog.total}개)
@@ -323,17 +335,30 @@ export function QueryAssistant() {
                 </select>
               </label>
               {selectedManualTemplate ? (
-                <p className="muted" data-testid="selected-manual-template">
-                  선택: {selectedManualTemplate.name} / v{selectedManualTemplate.version} ·
-                  조건 {selectedManualTemplate.parameter_count}개 ·
-                  대상 {selectedManualTemplate.target_schemas.join(", ") || "미지정"}
-                  {selectedManualTemplate.description ? ` — ${selectedManualTemplate.description}` : ""}
-                </p>
+                <>
+                  <p className="muted" data-testid="selected-manual-template">
+                    선택: {selectedManualTemplate.name} / v{selectedManualTemplate.version} ·
+                    조건 {selectedManualTemplate.parameter_count}개 ·
+                    대상 {selectedManualTemplate.target_schemas.join(", ") || "미지정"}
+                    {selectedManualTemplate.description ? ` — ${selectedManualTemplate.description}` : ""}
+                  </p>
+                  {!visibleManualTemplates.includes(selectedManualTemplate) ? (
+                    <p className="muted" role="status" data-testid="manual-selection-preserved">
+                      검색 결과와 무관하게 이미 선택한 조회 양식을 유지합니다.
+                      변경하려면 검색어를 지우거나 다른 양식을 선택하세요.
+                    </p>
+                  ) : null}
+                </>
               ) : null}
               {qa.manualCatalog.total === 0 ? (
                 <p className="muted">현재 Catalog에 사용 가능한 승인 템플릿이 없습니다.</p>
               ) : visibleManualTemplates.length === 0 ? (
-                <p className="muted">검색 결과가 없습니다. 다른 검색어를 입력하세요.</p>
+                <p className="muted">
+                  불러온 목록에서 검색 결과가 없습니다. 검색어를 변경하세요.
+                  {qa.manualCatalog.items.length < qa.manualCatalog.total
+                    ? " 아직 불러오지 않은 승인 템플릿은 아래 버튼으로 추가 확인할 수 있습니다."
+                    : ""}
+                </p>
               ) : null}
               {qa.manualCatalog.items.length < qa.manualCatalog.total ? (
                 <div className="qa-actions">

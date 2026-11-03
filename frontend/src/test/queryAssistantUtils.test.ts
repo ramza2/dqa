@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { finalizeRequestHeaders } from "../api/client";
-import type { ExecutionFormParameter } from "../types/queryAssistant";
+import type { ExecutionFormParameter, RecommendedTemplate } from "../types/queryAssistant";
 import { CatalogApiError } from "../types/catalog";
 import {
   buildParameterPayload,
   defaultsFromFormParameters,
+  filterManualTemplates,
   findEnumOptionIndex,
   formatAssistantError,
   isAuditReadDenied,
@@ -212,5 +213,33 @@ describe("CPU-first parameter guidance", () => {
     expect(validateParameterValues(schema, { on: "2024-02-29" })).toEqual({});
     expect(readinessGuidanceMessage("PARAMETER_INVALID")).toMatch(/조건/);
     expect(readinessGuidanceMessage("SQL_UNSAFE")).toMatch(/안전성/);
+  });
+});
+
+describe("M5-S3 loaded-only approved template search", () => {
+  const templates: RecommendedTemplate[] = [
+    {
+      template_id: 1, version_id: 11, version: 1, stable_key: "wards.lookup",
+      name: "병동 조회", description: "진료 병동 코드", target_schemas: ["DEMIS_OWNER"],
+      parameter_names: ["ward_cd", "active_yn"], parameter_count: 2,
+    },
+    {
+      template_id: 2, version_id: 22, version: 1, stable_key: "doctors.lookup",
+      name: "의료진 조회", description: "진료과별 목록", target_schemas: ["DEMIS_OWNER"],
+      parameter_names: ["doctor_id"], parameter_count: 1,
+    },
+  ];
+
+  it("matches space-separated terms across metadata fields and parameter names", () => {
+    expect(filterManualTemplates(templates, "  병동   진료  ")).toEqual([templates[0]]);
+    expect(filterManualTemplates(templates, "WARD_CD  DEMIS_OWNER")).toEqual([templates[0]]);
+    expect(filterManualTemplates(templates, "ｗａｒｄｓ．ｌｏｏｋｕｐ")).toEqual([templates[0]]);
+    expect(filterManualTemplates(templates, "조회")).toEqual(templates);
+  });
+
+  it("does not synthesize unloaded results or change an empty search", () => {
+    expect(filterManualTemplates(templates, "없는 임의 조회")).toEqual([]);
+    expect(filterManualTemplates(templates, "   ")).toBe(templates);
+    expect(filterManualTemplates([], "의료진")).toEqual([]);
   });
 });

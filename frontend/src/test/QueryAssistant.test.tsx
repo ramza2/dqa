@@ -1413,6 +1413,11 @@ describe("M5-S2 CPU Query Assistant usability regression", () => {
       expect(screen.getByText(/검색 결과가 없습니다/)).toBeInTheDocument();
       // Keep the chosen version visible even if the search filter changes.
       expect(select).toHaveValue("11:21");
+      expect(screen.getByTestId("manual-selection-preserved")).toHaveTextContent("선택한 조회 양식");
+      await user.click(screen.getByRole("button", { name: "검색어 지우기" }));
+      expect(search).toHaveValue("");
+      expect(select).toHaveValue("11:21");
+      expect(screen.queryByTestId("manual-selection-preserved")).not.toBeInTheDocument();
       expect(llmCalls).toBe(0);
     } finally {
       restore();
@@ -1445,6 +1450,7 @@ describe("M5-S2 CPU Query Assistant usability regression", () => {
       ).toBeEnabled());
       await user.click(screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" }));
       await screen.findByLabelText("승인 템플릿 직접 선택");
+      expect(screen.getByText(/전체 목록을 검색하려면 아래에서 다음 목록/)).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "다음 100개 더 불러오기" }));
       await waitFor(() => expect(screen.getByTestId("manual-template-count"))
         .toHaveTextContent("불러온 2개 중 2개 표시"));

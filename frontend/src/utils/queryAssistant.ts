@@ -2,7 +2,27 @@ import { CatalogApiError } from "../types/catalog";
 import type {
   ExecutionFormBlockerCode,
   ExecutionFormParameter,
+  RecommendedTemplate,
 } from "../types/queryAssistant";
+
+/** Search only already-loaded APPROVED + ENABLED templates; never imply server-wide results. */
+export function filterManualTemplates(
+  items: RecommendedTemplate[],
+  rawQuery: string,
+): RecommendedTemplate[] {
+  const terms = rawQuery.normalize("NFKC").toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return items;
+  return items.filter((item) => {
+    const searchable = [
+      item.name,
+      item.description ?? "",
+      item.stable_key,
+      ...item.target_schemas,
+      ...item.parameter_names,
+    ].join(" ").normalize("NFKC").toLocaleLowerCase();
+    return terms.every((term) => searchable.includes(term));
+  });
+}
 
 export function blockerMessage(code: ExecutionFormBlockerCode | string): string {
   switch (code) {
