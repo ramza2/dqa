@@ -735,13 +735,14 @@ export function useQueryAssistant() {
         !bundle ||
         bundle.audit_id !== auditId ||
         !Array.isArray(bundle.items) ||
+        bundle.items.length === 0 ||
         bundle.items.some((event) => event?.audit_id !== auditId)
       ) {
         setAuditBundle(null);
         setAuditState("error");
         setAuditError({
           code: "AUDIT_RESPONSE_MISMATCH",
-          message: "감사 이력 응답의 실행 식별자가 현재 조회와 일치하지 않습니다. 다시 조회해 주세요.",
+          message: "감사 이력 응답이 비어 있거나 현재 조회의 실행 식별자와 일치하지 않습니다. 다시 조회해 주세요.",
         });
         return;
       }
