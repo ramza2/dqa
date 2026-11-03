@@ -1366,3 +1366,244 @@ describe("M4-B LLM-free audit lifecycle UX", () => {
     }
   });
 });
+
+describe("M5-S2 CPU Query Assistant usability regression", () => {
+  const manualItems = recommendation.ranked_candidates;
+
+  it("filters approved templates by stable key and selects without LLM traffic", async () => {
+    const user = userEvent.setup();
+    let llmCalls = 0;
+    const handlers = assistantHandlers();
+    handlers.unshift((url) => {
+      if (url.pathname.endsWith("/query-executions/manual-templates")) {
+        return jsonResponse({
+          source_name: activeSource.source_name,
+          catalog_revision_id: activeSource.revision_id,
+          schema_fingerprint: activeSource.schema_fingerprint,
+          total: 2,
+          limit: 100,
+          offset: 0,
+          items: manualItems,
+        });
+      }
+      if (url.pathname.endsWith("/query-recommendations") ||
+          url.pathname.endsWith("/query-parameters/extract")) {
+        llmCalls += 1;
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await waitFor(() => expect(
+        screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" }),
+      ).toBeEnabled());
+      await user.click(screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" }));
+      const search = await screen.findByLabelText("승인 템플릿 검색");
+      await user.type(search, "wards.alt");
+      expect(screen.getByTestId("manual-template-count")).toHaveTextContent("1개 표시");
+      const select = screen.getByLabelText("승인 템플릿 직접 선택");
+      expect(select).toHaveTextContent("병동 대안");
+      expect(select).not.toHaveTextContent("병동 조회");
+      await user.selectOptions(select, "11:21");
+      expect(await screen.findByTestId("selected-manual-template")).toHaveTextContent("병동 대안");
+      expect(await screen.findByLabelText(/병동 코드/)).toHaveValue("Z99");
+      await user.clear(search);
+      await user.type(search, "찾을 수 없는 템플릿");
+      expect(screen.getByText(/검색 결과가 없습니다/)).toBeInTheDocument();
+      // Keep the chosen version visible even if the search filter changes.
+      expect(select).toHaveValue("11:21");
+      expect(llmCalls).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it("loads the next approved-only page and never invents a search result", async () => {
+    const user = userEvent.setup();
+    const offsets: string[] = [];
+    const handlers = assistantHandlers();
+    handlers.unshift((url) => {
+      if (!url.pathname.endsWith("/query-executions/manual-templates")) return null;
+      const offset = url.searchParams.get("offset") ?? "";
+      offsets.push(offset);
+      return jsonResponse({
+        source_name: activeSource.source_name,
+        catalog_revision_id: activeSource.revision_id,
+        schema_fingerprint: activeSource.schema_fingerprint,
+        total: 2,
+        limit: 100,
+        offset: Number(offset),
+        items: [manualItems[offset === "0" ? 0 : 1]],
+      });
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await waitFor(() => expect(
+        screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" }),
+      ).toBeEnabled());
+      await user.click(screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" }));
+      await screen.findByLabelText("승인 템플릿 직접 선택");
+      await user.click(screen.getByRole("button", { name: "다음 100개 더 불러오기" }));
+      await waitFor(() => expect(screen.getByTestId("manual-template-count"))
+        .toHaveTextContent("불러온 2개 중 2개 표시"));
+      expect(offsets).toEqual(["0", "1"]);
+      expect(screen.queryByRole("button", { name: "다음 100개 더 불러오기" }))
+        .not.toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it("blocks invalid sensitive inputs locally and allows preview after correction", async () => {
+    const user = userEvent.setup();
+    let previewCalls = 0;
+    const handlers = assistantHandlers({ preview: availablePreview });
+    handlers.unshift((url, init) => {
+      if (url.pathname.endsWith("/query-executions/preview") && init?.method === "POST") {
+        previewCalls += 1;
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await recommendHappyPath(user);
+      const input = screen.getByLabelText(/병동 코드/);
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByRole("button", { name: "조회 미리보기" })).toBeDisabled();
+      await user.type(input, "sensitive-invalid");
+      expect(screen.getByTestId("parameter-validation-summary")).toHaveTextContent("1개");
+      expect(screen.getByRole("button", { name: "조회 미리보기" })).toBeDisabled();
+      expect(previewCalls).toBe(0);
+      expect(screen.getByText("입력 형식이 템플릿 규칙에 맞지 않습니다."))
+        .toBeInTheDocument();
+      expect(screen.getByTestId("query-assistant")).not.toHaveTextContent("sensitive-invalid");
+      await user.clear(input);
+      await user.type(input, "A01");
+      expect(input).toHaveAttribute("aria-invalid", "false");
+      await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+      expect(await screen.findByTestId("execution-confirmation")).toHaveTextContent("서버 미리보기 통과");
+      expect(previewCalls).toBe(1);
+    } finally {
+      restore();
+    }
+  });
+
+  it("fails closed when a preview response refers to a different Catalog", async () => {
+    const user = userEvent.setup();
+    let executeCalls = 0;
+    const handlers = assistantHandlers({
+      preview: { ...availablePreview, catalog_revision_id: 999 },
+    });
+    handlers.unshift((url, init) => {
+      if (url.pathname.endsWith("/query-executions/execute") && init?.method === "POST") {
+        executeCalls += 1;
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await recommendHappyPath(user);
+      await user.type(screen.getByLabelText(/병동 코드/), "A01");
+      await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+      expect(await screen.findByText(/미리보기의 Catalog·템플릿·환경이 현재 선택과 다릅니다/))
+        .toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "조회 실행" })).toBeDisabled();
+      expect(executeCalls).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it("prevents execution while a fresh preview is still pending", async () => {
+    const user = userEvent.setup();
+    let previews = 0;
+    const pending = { resolve: null as ((response: Response) => void) | null };
+    const handlers = assistantHandlers({ preview: availablePreview });
+    handlers.unshift((url, init) => {
+      if (url.pathname.endsWith("/query-executions/preview") && init?.method === "POST") {
+        previews += 1;
+        if (previews === 1) return jsonResponse(availablePreview);
+        return new Promise<Response>((resolve) => { pending.resolve = resolve; });
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await recommendHappyPath(user);
+      await user.type(screen.getByLabelText(/병동 코드/), "A01");
+      await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+      expect(await screen.findByTestId("preview-summary")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "조회 실행" })).toBeEnabled();
+      await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+      expect(screen.getByRole("button", { name: "조회 실행" })).toBeDisabled();
+      expect(screen.getByText(/서버에서 승인 상태와 조건을 확인하는 중/)).toBeInTheDocument();
+      pending.resolve?.(jsonResponse(availablePreview));
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "조회 실행" })).toBeEnabled());
+    } finally {
+      restore();
+    }
+  });
+  it("keeps template paging responsive when a selected parameter changes in flight", async () => {
+    const user = userEvent.setup();
+    const pending = { resolve: null as ((response: Response) => void) | null };
+    const handlers = assistantHandlers();
+    handlers.unshift((url) => {
+      if (!url.pathname.endsWith("/query-executions/manual-templates")) return null;
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+      if (offset === 1) {
+        return new Promise<Response>((resolve) => { pending.resolve = resolve; });
+      }
+      return jsonResponse({
+        source_name: activeSource.source_name,
+        catalog_revision_id: activeSource.revision_id,
+        schema_fingerprint: activeSource.schema_fingerprint,
+        total: 2,
+        limit: 100,
+        offset: 0,
+        items: [manualItems[0]],
+      });
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await waitFor(() => expect(screen.getByRole("button", {
+        name: "승인 템플릿 목록 불러오기",
+      })).toBeEnabled());
+      await user.click(screen.getByRole("button", { name: "승인 템플릿 목록 불러오기" }));
+      const selector = await screen.findByLabelText("승인 템플릿 직접 선택");
+      await user.selectOptions(selector, "10:20");
+      const parameter = await screen.findByLabelText(/병동 코드/);
+
+      await user.click(screen.getByRole("button", { name: "다음 100개 더 불러오기" }));
+      await waitFor(() => expect(pending.resolve).not.toBeNull());
+      expect(screen.getByRole("button", { name: "다음 목록 불러오는 중…" }))
+        .toBeDisabled();
+
+      // Parameter edits invalidate preview requests, but not the loaded catalog.
+      await user.type(parameter, "A01");
+      pending.resolve?.(jsonResponse({
+        source_name: activeSource.source_name,
+        catalog_revision_id: activeSource.revision_id,
+        schema_fingerprint: activeSource.schema_fingerprint,
+        total: 2,
+        limit: 100,
+        offset: 1,
+        items: [manualItems[1]],
+      }));
+      await waitFor(() => expect(screen.getByTestId("manual-template-count"))
+        .toHaveTextContent("불러온 2개 중 2개 표시"));
+      expect(screen.queryByRole("button", { name: "다음 목록 불러오는 중…" }))
+        .not.toBeInTheDocument();
+      expect(selector).toHaveValue("10:20");
+    } finally {
+      restore();
+    }
+  });
+
+});

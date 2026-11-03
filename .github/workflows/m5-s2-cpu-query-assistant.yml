@@ -1,0 +1,78 @@
+name: DQA M5-S2 CPU Query Assistant
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/src/components/QueryAssistant.tsx'
+      - 'frontend/src/hooks/useQueryAssistant.ts'
+      - 'frontend/src/utils/queryAssistant.ts'
+      - 'frontend/src/api/queryAssistant.ts'
+      - 'frontend/src/test/QueryAssistant.test.tsx'
+      - 'frontend/src/test/queryAssistantUtils.test.ts'
+      - '.github/workflows/m5-s2-cpu-query-assistant.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: CPU Query Assistant regression
+        run: npx vitest run src/test/QueryAssistant.test.tsx src/test/queryAssistantUtils.test.ts
+      - name: Production build
+        run: npm run build
+      - name: Lint
+        run: npm run lint
+
+  read-only-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: dqa
+          POSTGRES_PASSWORD: dqa
+          POSTGRES_DB: dqa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dqa -d dqa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      APP_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install backend dependencies
+        run: python -m pip install -e '.[dev]'
+      - name: Approved-template and Mock read-only contracts
+        run: >
+          python -m pytest -q
+          tests/test_m3a_manual_template_catalog.py
+          tests/test_m4a_llmfree_execution_contract.py
+          tests/test_m4a_script_safety.py
+          tests/test_parameter_validation.py

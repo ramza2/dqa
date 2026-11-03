@@ -56,10 +56,10 @@ export function executeQuery(
   );
 }
 
-export function listManualTemplates(sourceName: string): Promise<ManualTemplateListResponse> {
+export function listManualTemplates(sourceName: string, offset = 0): Promise<ManualTemplateListResponse> {
   return apiGet<ManualTemplateListResponse>("/query-executions/manual-templates", {
     source_name: sourceName,
     limit: 100,
-    offset: 0,
+    offset,
   });
 }

@@ -28,6 +28,14 @@ export function readinessGuidanceMessage(code: string): string | null {
       return "선택한 Template이 승인·활성화 상태가 아니거나 현재 Catalog와 맞지 않습니다.";
     case "STALE_TEMPLATE_VERSION":
       return "선택한 Template 버전이 최신이 아닙니다. 목록을 다시 불러오세요.";
+    case "PARAMETER_INVALID":
+      return "입력한 조건이 템플릿 규칙에 맞지 않습니다. 각 항목을 확인한 뒤 다시 미리보기를 진행하세요.";
+    case "PARAMETER_UNDECLARED":
+      return "템플릿에 정의되지 않은 조건이 포함됐습니다. 템플릿을 다시 선택하세요.";
+    case "PARAMETER_SCHEMA_INVALID":
+      return "템플릿 조건 정의를 확인할 수 없습니다. 관리자에게 검토를 요청하세요.";
+    case "SQL_UNSAFE":
+      return "승인 템플릿의 안전성 검사를 통과하지 못했습니다. 실행할 수 없습니다.";
     case "CONNECTION_PROFILE_NOT_FOUND":
       return "해당 소스·환경의 연결 Profile이 없습니다. DB 연결 관리에서 등록하세요.";
     case "CONNECTION_PROFILE_DISABLED":
@@ -134,7 +142,7 @@ function parseStringList(raw: unknown): string[] | null {
 function parseIntegerList(raw: unknown): number[] | null {
   if (Array.isArray(raw)) {
     return raw.map((item) =>
-      typeof item === "number" ? item : Number.parseInt(String(item), 10),
+      typeof item === "number" ? item : Number(String(item)),
     );
   }
   if (typeof raw !== "string") {
@@ -148,7 +156,7 @@ function parseIntegerList(raw: unknown): number[] | null {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean)
-    .map((item) => Number.parseInt(item, 10));
+    .map((item) => Number(item));
 }
 
 /** Convert form state into API parameter payload (omit blank optional values). */
@@ -173,7 +181,7 @@ export function buildParameterPayload(
       if (isUnsetParameterValue(raw)) {
         continue;
       }
-      payload[param.name] = typeof raw === "number" ? raw : Number.parseInt(String(raw), 10);
+      payload[param.name] = typeof raw === "number" ? raw : Number(String(raw));
       continue;
     }
 
@@ -256,4 +264,91 @@ export function stableParametersKey(parameters: Record<string, unknown>): string
 /** Selected enum option index for exact-type mapping (string "1" vs number 1). */
 export function findEnumOptionIndex(allowedValues: unknown[], value: unknown): number {
   return allowedValues.findIndex((item) => Object.is(item, value));
+}
+
+/**
+ * Browser-side guidance only. The backend remains authoritative for template
+ * eligibility, parameter validation and SQL safety on every preview/execute.
+ * Messages never embed actual parameter values (including sensitive fields).
+ */
+export function validateParameterValues(
+  parameters: ExecutionFormParameter[],
+  values: Record<string, unknown>,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  for (const param of parameters) {
+    const raw = values[param.name];
+    const missing = isUnsetParameterValue(raw) ||
+      (typeof raw === "string" && raw.trim() === "");
+    if (missing) {
+      if (param.required) errors[param.name] = "필수 조건을 입력하거나 선택하세요.";
+      continue;
+    }
+
+    if (param.type === "boolean") {
+      if (typeof raw !== "boolean") errors[param.name] = "참/거짓 중 하나를 선택하세요.";
+    } else if (param.type === "enum") {
+      if (!((param.allowed_values ?? []).some((item) => Object.is(item, raw)))) {
+        errors[param.name] = "허용된 선택지 중 하나를 선택하세요.";
+      }
+    } else if (param.type === "integer" || param.type === "decimal") {
+      const value = typeof raw === "number" ? raw : Number(raw);
+      const valid = typeof raw === "number" ||
+        (typeof raw === "string" && (param.type === "integer"
+          ? /^[+-]?\d+$/.test(raw.trim())
+          : /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(raw.trim())));
+      if (!valid || !Number.isFinite(value) ||
+          (param.type === "integer" && !Number.isSafeInteger(value))) {
+        errors[param.name] = param.type === "integer"
+          ? "정수만 입력할 수 있습니다."
+          : "유효한 숫자를 입력하세요.";
+      } else if (param.min !== null && value < param.min) {
+        errors[param.name] = `최솟값은 ${param.min}입니다.`;
+      } else if (param.max !== null && value > param.max) {
+        errors[param.name] = `최댓값은 ${param.max}입니다.`;
+      }
+    } else if (param.type === "integer_list" || param.type === "string_list") {
+      const items = Array.isArray(raw) ? raw : typeof raw === "string"
+        ? raw.split(",").map((item) => item.trim())
+        : null;
+      const valuesWithoutBlanks = items?.filter((item) => item !== "") ?? [];
+      if (!items || valuesWithoutBlanks.length !== items.length) {
+        errors[param.name] = "쉼표로 구분한 각 항목을 비워두지 마세요.";
+      } else if (param.type === "integer_list" &&
+          !items.every((item) => (typeof item === "number"
+            ? Number.isSafeInteger(item)
+            : /^[+-]?\d+$/.test(String(item)) && Number.isSafeInteger(Number(item))))) {
+        errors[param.name] = "목록에는 정수만 입력할 수 있습니다.";
+      } else if (param.min_items !== null && items.length < param.min_items) {
+        errors[param.name] = `항목을 ${param.min_items}개 이상 입력하세요.`;
+      } else if (param.max_items !== null && items.length > param.max_items) {
+        errors[param.name] = `항목은 최대 ${param.max_items}개까지 입력할 수 있습니다.`;
+      }
+    } else if (param.type === "string") {
+      if (typeof raw !== "string") {
+        errors[param.name] = "문자열을 입력하세요.";
+      } else if (param.pattern) {
+        try {
+          if (!new RegExp(`^(?:${param.pattern})$`).test(raw)) {
+            errors[param.name] = "입력 형식이 템플릿 규칙에 맞지 않습니다.";
+          }
+        } catch {
+          // Python-only regex: defer to the backend instead of blocking safely
+          // entered values based on an unsupported browser expression.
+        }
+      }
+    } else if (param.type === "date") {
+      if (typeof raw !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(raw) ||
+          !Number.isFinite(Date.parse(`${raw}T00:00:00Z`)) ||
+          new Date(`${raw}T00:00:00Z`).toISOString().slice(0, 10) !== raw) {
+        errors[param.name] = "날짜를 YYYY-MM-DD 형식으로 입력하세요.";
+      }
+    } else if (param.type === "datetime") {
+      if (typeof raw !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw) ||
+          !Number.isFinite(Date.parse(raw))) {
+        errors[param.name] = "날짜와 시간을 올바르게 입력하세요.";
+      }
+    }
+  }
+  return errors;
 }

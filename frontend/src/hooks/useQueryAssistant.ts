@@ -26,6 +26,7 @@ import {
   isAuditReadDenied,
   isEgressNotAllowed,
   stableParametersKey,
+  validateParameterValues,
 } from "../utils/queryAssistant";
 
 const MAX_REQUEST_TEXT = 2000;
@@ -39,6 +40,8 @@ export interface AssistantErrorState {
 
 export function useQueryAssistant() {
   const workflowGeneration = useRef(0);
+  // Paging is tied to the loaded catalog, not to preview/parameter edits.
+  const manualListEpoch = useRef(0);
 
   const [sources, setSources] = useState<CatalogActiveSummary[]>([]);
   const [sourcesState, setSourcesState] = useState<LoadState>("idle");
@@ -48,6 +51,8 @@ export function useQueryAssistant() {
   const [manualCatalog, setManualCatalog] = useState<ManualTemplateListResponse | null>(null);
   const [manualState, setManualState] = useState<LoadState>("idle");
   const [manualError, setManualError] = useState<AssistantErrorState | null>(null);
+  const [manualMoreState, setManualMoreState] = useState<LoadState>("idle");
+  const [manualMoreError, setManualMoreError] = useState<AssistantErrorState | null>(null);
 
   const [requestText, setRequestTextState] = useState("");
   const [recommendation, setRecommendation] =
@@ -205,10 +210,13 @@ export function useQueryAssistant() {
 
   const selectSource = useCallback(
     (sourceName: string) => {
+      manualListEpoch.current += 1;
       setSelectedSource(sourceName);
       setManualCatalog(null);
       setManualState("idle");
       setManualError(null);
+      setManualMoreState("idle");
+      setManualMoreError(null);
       clearDownstreamFromSource();
     },
     [clearDownstreamFromSource],
@@ -218,6 +226,7 @@ export function useQueryAssistant() {
     if (!selectedSource || manualState === "loading") {
       return;
     }
+    manualListEpoch.current += 1;
     // A manual selection starts a new workflow, invalidating any LLM/preview
     // response that was initiated before this action.
     const generation = bumpGeneration();
@@ -225,6 +234,8 @@ export function useQueryAssistant() {
     setManualCatalog(null);
     setManualState("loading");
     setManualError(null);
+    setManualMoreState("idle");
+    setManualMoreError(null);
     try {
       const data = await listManualTemplates(selectedSource);
       if (!isCurrentGeneration(generation)) {
@@ -261,6 +272,42 @@ export function useQueryAssistant() {
     manualState, selectedSource, sources,
   ]);
 
+  const loadMoreManualTemplates = useCallback(async () => {
+    if (!selectedSource || !manualCatalog || manualState === "loading" ||
+        manualMoreState === "loading" || manualCatalog.items.length >= manualCatalog.total) {
+      return;
+    }
+    const listEpoch = manualListEpoch.current;
+    const offset = manualCatalog.items.length;
+    setManualMoreState("loading");
+    setManualMoreError(null);
+    try {
+      const page = await listManualTemplates(selectedSource, offset);
+      if (listEpoch !== manualListEpoch.current) return;
+      if (page.source_name !== manualCatalog.source_name ||
+          page.catalog_revision_id !== manualCatalog.catalog_revision_id ||
+          page.schema_fingerprint !== manualCatalog.schema_fingerprint ||
+          page.offset !== offset || page.total !== manualCatalog.total ||
+          page.items.length === 0) {
+        setManualMoreState("error");
+        setManualMoreError({
+          code: "CATALOG_MISMATCH",
+          message: "목록 또는 Catalog가 변경되었습니다. 처음부터 다시 불러오세요.",
+        });
+        return;
+      }
+      setManualCatalog((previous) => previous ? {
+        ...previous,
+        items: [...previous.items, ...page.items],
+      } : null);
+      setManualMoreState("idle");
+    } catch (error) {
+      if (listEpoch !== manualListEpoch.current) return;
+      setManualMoreState("error");
+      setManualMoreError(formatAssistantError(error));
+    }
+  }, [manualCatalog, manualMoreState, manualState, selectedSource]);
+
   const loadFormForCandidate = useCallback(
     async (candidate: RecommendedTemplate, sourceName: string, generation?: number) => {
       const opGeneration = generation ?? bumpGeneration();
@@ -268,6 +315,8 @@ export function useQueryAssistant() {
       setForm(null);
       setFormState("loading");
       setFormError(null);
+      setManualMoreState("idle");
+      setManualMoreError(null);
       setParameterValues({});
       setDirtyParams(new Set());
       setEnvironment("");
@@ -285,6 +334,20 @@ export function useQueryAssistant() {
         if (!isCurrentGeneration(opGeneration)) {
           return;
         }
+        const active = sources.find((item) => item.source_name === sourceName);
+        if (!active ||
+            metadata.source_name !== sourceName ||
+            metadata.catalog_revision_id !== active.revision_id ||
+            metadata.catalog_fingerprint !== active.schema_fingerprint ||
+            metadata.template.template_id !== candidate.template_id ||
+            metadata.template.version_id !== candidate.version_id) {
+          setFormState("error");
+          setFormError({
+            code: "CATALOG_MISMATCH",
+            message: "Catalog 또는 템플릿 버전이 변경되었습니다. 목록을 갱신하세요.",
+          });
+          return;
+        }
         setForm(metadata);
         setParameterValues(defaultsFromFormParameters(metadata.parameters));
         const available = metadata.environments.find((item) => item.execution_available);
@@ -299,7 +362,7 @@ export function useQueryAssistant() {
         setFormError(formatAssistantError(error));
       }
     },
-    [bumpGeneration, invalidatePreviewAndResult, isCurrentGeneration],
+    [bumpGeneration, invalidatePreviewAndResult, isCurrentGeneration, sources],
   );
 
   const submitRecommendation = useCallback(async () => {
@@ -378,7 +441,7 @@ export function useQueryAssistant() {
     await loadFormForCandidate(candidate, selectedSource);
   }, [formState, loadFormForCandidate, manualCatalog, selectedSource]);
 
-    const setParameterValue = useCallback(
+  const setParameterValue = useCallback(
     (name: string, value: unknown) => {
       // Parameter edits supersede extraction/preview/execute operations that
       // were started with the previous parameter state.
@@ -487,6 +550,11 @@ export function useQueryAssistant() {
     return buildParameterPayload(form.parameters, parameterValues);
   }, [form, parameterValues]);
 
+  const validationErrors = useMemo(() => form
+    ? validateParameterValues(form.parameters, parameterValues)
+    : {}, [form, parameterValues]);
+  const invalidParameterCount = Object.keys(validationErrors).length;
+
   const currentPreviewKey = useMemo(() => {
     if (!selectedCandidate || !environment) {
       return null;
@@ -507,6 +575,7 @@ export function useQueryAssistant() {
       !selectedSource ||
       !selectedCandidate ||
       !environment ||
+      invalidParameterCount > 0 ||
       previewState === "loading"
     ) {
       return;
@@ -533,6 +602,21 @@ export function useQueryAssistant() {
       if (!isCurrentGeneration(opGeneration)) {
         return;
       }
+      if (!form || response.source_name !== selectedSource ||
+          response.catalog_revision_id !== form.catalog_revision_id ||
+          response.catalog_fingerprint !== form.catalog_fingerprint ||
+          response.template_id !== selectedCandidate.template_id ||
+          response.version_id !== selectedCandidate.version_id ||
+          response.environment !== environment) {
+        setPreview(null);
+        setPreviewSnapshot(null);
+        setPreviewState("error");
+        setPreviewError({
+          code: "CATALOG_MISMATCH",
+          message: "미리보기의 Catalog·템플릿·환경이 현재 선택과 다릅니다. 다시 시도하세요.",
+        });
+        return;
+      }
       setPreview(response);
       setPreviewSnapshot(
         [
@@ -556,7 +640,8 @@ export function useQueryAssistant() {
     bumpGeneration,
     clearAuditLifecycle,
     environment,
-    form?.parameters,
+    form,
+    invalidParameterCount,
     isCurrentGeneration,
     parameterValues,
     previewState,
@@ -569,6 +654,8 @@ export function useQueryAssistant() {
     preview !== null &&
     preview.execution_available === true &&
     preview.execution_blockers.length === 0 &&
+    invalidParameterCount === 0 &&
+    previewState !== "loading" &&
     executeState !== "loading";
 
   const runExecute = useCallback(async () => {
@@ -679,7 +766,10 @@ export function useQueryAssistant() {
     manualCatalog,
     manualState,
     manualError,
+    manualMoreState,
+    manualMoreError,
     loadManualTemplates,
+    loadMoreManualTemplates,
     selectManualTemplate,
     recommendation,
     selectedCandidate,
@@ -691,6 +781,8 @@ export function useQueryAssistant() {
     formState,
     formError,
     parameterValues,
+    validationErrors,
+    invalidParameterCount,
     setParameterValue,
     environment,
     setSelectedEnvironment,
