@@ -1170,6 +1170,60 @@ describe("M4-B LLM-free audit lifecycle UX", () => {
     }
   });
 
+  it.each([
+    {
+      caseName: "bundle audit_id mismatch",
+      invalidBundle: { ...auditBundleResponse, audit_id: "audit-other" },
+    },
+    {
+      caseName: "event audit_id mismatch",
+      invalidBundle: {
+        ...auditBundleResponse,
+        items: auditBundleResponse.items.map((event, index) =>
+          index === 2 ? { ...event, audit_id: "audit-other" } : event,
+        ),
+      },
+    },
+    {
+      caseName: "invalid event list",
+      invalidBundle: { ...auditBundleResponse, items: null },
+    },
+  ])("rejects $caseName and permits a safe retry", async ({ invalidBundle }) => {
+    const user = userEvent.setup();
+    let auditCalls = 0;
+    const handlers = assistantHandlers({ preview: availablePreview });
+    handlers.unshift((url) => {
+      if (url.pathname.endsWith("/query-executions/manual-templates")) {
+        return jsonResponse(manualResponse);
+      }
+      if (url.pathname.endsWith("/audit-events/audit-123")) {
+        auditCalls += 1;
+        return jsonResponse(auditCalls === 1 ? invalidBundle : auditBundleResponse);
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      await runManualExecute(user);
+      await user.click(screen.getByRole("button", { name: "감사 이력 불러오기" }));
+      expect(await screen.findByText("AUDIT_RESPONSE_MISMATCH")).toBeInTheDocument();
+      expect(screen.getByTestId("audit-id")).toHaveTextContent("audit-123");
+      expect(screen.getByText("A01")).toBeInTheDocument();
+      expect(screen.queryByTestId("audit-lifecycle-table")).not.toBeInTheDocument();
+      expect(auditCalls).toBe(1);
+
+      await user.click(screen.getByRole("button", { name: "감사 이력 불러오기" }));
+      expect(await screen.findByTestId("audit-lifecycle-table")).toHaveTextContent(
+        "SUCCEEDED",
+      );
+      expect(screen.queryByText("AUDIT_RESPONSE_MISMATCH")).not.toBeInTheDocument();
+      expect(auditCalls).toBe(2);
+    } finally {
+      restore();
+    }
+  });
+
   it("keeps query results when audit lookup returns 403", async () => {
     const user = userEvent.setup();
     const handlers = assistantHandlers({ preview: availablePreview });
