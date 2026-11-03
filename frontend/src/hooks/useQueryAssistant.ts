@@ -729,6 +729,22 @@ export function useQueryAssistant() {
       ) {
         return;
       }
+      // Fail closed if the server returns events for a different execution.
+      // Never display a mismatched audit trail under the current result.
+      if (
+        !bundle ||
+        bundle.audit_id !== auditId ||
+        !Array.isArray(bundle.items) ||
+        bundle.items.some((event) => event?.audit_id !== auditId)
+      ) {
+        setAuditBundle(null);
+        setAuditState("error");
+        setAuditError({
+          code: "AUDIT_RESPONSE_MISMATCH",
+          message: "감사 이력 응답의 실행 식별자가 현재 조회와 일치하지 않습니다. 다시 조회해 주세요.",
+        });
+        return;
+      }
       setAuditBundle(bundle);
       setAuditState("idle");
     } catch (error) {
