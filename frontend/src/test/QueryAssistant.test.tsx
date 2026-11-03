@@ -1163,6 +1163,7 @@ describe("M4-B LLM-free audit lifecycle UX", () => {
       expect(table).toHaveTextContent("QUERY_EXECUTION");
       expect(table).toHaveTextContent("SUCCEEDED");
       expect(table).toHaveTextContent("NAMES_ONLY");
+      expect(screen.getByTestId("audit-loaded-status")).toHaveTextContent("4건");
       expect(auditCalls).toBe(1);
       expect(screen.getByTestId("audit-id")).toHaveTextContent("audit-123");
     } finally {
@@ -1187,6 +1188,10 @@ describe("M4-B LLM-free audit lifecycle UX", () => {
     {
       caseName: "invalid event list",
       invalidBundle: { ...auditBundleResponse, items: null },
+    },
+    {
+      caseName: "empty event list",
+      invalidBundle: { ...auditBundleResponse, items: [] },
     },
   ])("rejects $caseName and permits a safe retry", async ({ invalidBundle }) => {
     const user = userEvent.setup();
@@ -1666,4 +1671,104 @@ describe("M5-S2 CPU Query Assistant usability regression", () => {
     }
   });
 
+});
+
+describe("M5-S5 read-only Query Assistant recovery and accessibility", () => {
+  it("recovers from an initial Catalog source load failure without refreshing", async () => {
+    const user = userEvent.setup();
+    let loads = 0;
+    const handlers = assistantHandlers();
+    handlers.unshift((url) => {
+      if (url.pathname !== "/api/v1/catalog/active") return null;
+      loads += 1;
+      return loads === 1
+        ? jsonResponse({ detail: { code: "SERVICE_UNAVAILABLE", message: "일시적인 오류" } }, 503)
+        : jsonResponse([activeSource]);
+    });
+    const restore = installFetchMock(handlers);
+    try {
+      render(<QueryAssistant />);
+      const retry = await screen.findByRole("button", {
+        name: "활성 Catalog 목록 다시 불러오기",
+      });
+      expect(screen.getByRole("button", {
+        name: "승인 템플릿 목록 불러오기",
+      })).toBeDisabled();
+      await user.click(retry);
+      await waitFor(() => expect(screen.getByLabelText("Active Catalog source"))
+        .toHaveValue(activeSource.source_name));
+      expect(screen.queryByRole("button", {
+        name: "활성 Catalog 목록 다시 불러오기",
+      })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", {
+        name: "승인 템플릿 목록 불러오기",
+      })).toBeEnabled();
+      expect(loads).toBe(2);
+    } finally {
+      restore();
+    }
+  });
+
+  it("explains when no approved active Catalog exists without enabling selection", async () => {
+    const restore = installFetchMock(assistantHandlers({ actives: [] }));
+    try {
+      render(<QueryAssistant />);
+      expect(await screen.findByText(/활성 Catalog가 없습니다. 관리자가 검증된 Catalog/))
+        .toBeInTheDocument();
+      expect(screen.getByLabelText("Active Catalog source")).toHaveValue("");
+      expect(screen.getByRole("button", {
+        name: "승인 템플릿 목록 불러오기",
+      })).toBeDisabled();
+    } finally {
+      restore();
+    }
+  });
+
+  it("associates a sensitive parameter's help and validation error with its input", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(assistantHandlers());
+    try {
+      render(<QueryAssistant />);
+      await recommendHappyPath(user);
+      const input = screen.getByLabelText(/병동 코드/);
+      expect(input).toHaveAttribute("aria-required", "true");
+      expect(input).toHaveAttribute(
+        "aria-describedby",
+        "param-ward_cd-description param-ward_cd-error",
+      );
+      expect(document.getElementById("param-ward_cd-description"))
+        .toHaveTextContent("민감 병동 코드");
+      expect(document.getElementById("param-ward_cd-error"))
+        .toHaveTextContent("필수 조건");
+      await user.type(input, "invalid-sensitive");
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(document.getElementById("param-ward_cd-error"))
+        .toHaveTextContent("입력 형식");
+      expect(screen.getByTestId("query-assistant"))
+        .not.toHaveTextContent("invalid-sensitive");
+    } finally {
+      restore();
+    }
+  });
+
+  it("shows a clear empty-result state without losing the execution audit ID", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock(assistantHandlers({
+      preview: availablePreview,
+      execute: { ...executeResponse, row_count: 0, rows: [] },
+    }));
+    try {
+      render(<QueryAssistant />);
+      await recommendHappyPath(user);
+      await user.type(screen.getByLabelText(/병동 코드/), "A01");
+      await user.click(screen.getByRole("button", { name: "조회 미리보기" }));
+      await screen.findByTestId("preview-summary");
+      await user.click(screen.getByRole("button", { name: "조회 실행" }));
+      expect(await screen.findByText(/조회된 데이터가 없습니다/)).toBeInTheDocument();
+      expect(screen.getByTestId("audit-id")).toHaveTextContent("audit-123");
+      expect(screen.getByTestId("query-assistant")).not.toHaveTextContent("A01");
+    } finally {
+      restore();
+    }
+  });
 });

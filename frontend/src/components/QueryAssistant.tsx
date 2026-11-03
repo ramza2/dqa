@@ -50,9 +50,13 @@ function ParameterField({
 }) {
   const label = param.label || param.name;
   const id = `param-${param.name}`;
+  const describedBy = [
+    param.description ? `${id}-description` : null,
+    error ? `${id}-error` : null,
+  ].filter(Boolean).join(" ") || undefined;
   const help = (
     <>
-      {param.description ? <span className="param-help">{param.description}</span> : null}
+      {param.description ? <span className="param-help" id={`${id}-description`}>{param.description}</span> : null}
       {error ? <span className="param-help banner-error" id={`${id}-error`} role="alert">{error}</span> : null}
     </>
   );
@@ -75,7 +79,8 @@ function ParameterField({
         <select
           id={id}
           aria-invalid={Boolean(error)}
-          aria-describedby={error ? `${id}-error` : undefined}
+          aria-required={param.required}
+          aria-describedby={describedBy}
           value={selectValue}
           onChange={(event) => {
             const next = event.target.value;
@@ -108,7 +113,8 @@ function ParameterField({
         <select
           id={id}
           aria-invalid={Boolean(error)}
-          aria-describedby={error ? `${id}-error` : undefined}
+          aria-required={param.required}
+          aria-describedby={describedBy}
           value={selectedIndex >= 0 ? String(selectedIndex) : ""}
           onChange={(event) => {
             const raw = event.target.value;
@@ -142,7 +148,8 @@ function ParameterField({
         <input
           id={id}
           aria-invalid={Boolean(error)}
-          aria-describedby={error ? `${id}-error` : undefined}
+          aria-required={param.required}
+          aria-describedby={describedBy}
           type={param.sensitive ? "password" : "text"}
           value={listInputDisplayValue(value)}
           onChange={(event) => {
@@ -178,7 +185,8 @@ function ParameterField({
       <input
         id={id}
         aria-invalid={Boolean(error)}
-        aria-describedby={error ? `${id}-error` : undefined}
+        aria-required={param.required}
+        aria-describedby={describedBy}
         type={inputType}
         step={param.type === "decimal" ? "any" : param.type === "integer" ? "1" : undefined}
         value={isUnsetParameterValue(value) ? "" : String(value)}
@@ -249,6 +257,21 @@ export function QueryAssistant() {
           </select>
         </label>
         <ErrorBanner error={qa.sourcesError} />
+        {qa.sourcesState === "loading" ? (
+          <p className="muted" role="status">활성 Catalog 목록을 확인하는 중입니다.</p>
+        ) : null}
+        {qa.sourcesState === "error" ? (
+          <div className="qa-actions">
+            <button type="button" onClick={() => void qa.reloadSources()}>
+              활성 Catalog 목록 다시 불러오기
+            </button>
+          </div>
+        ) : null}
+        {qa.sourcesState === "idle" && qa.sources.length === 0 ? (
+          <p className="muted" role="status">
+            활성 Catalog가 없습니다. 관리자가 검증된 Catalog를 활성화한 후 다시 확인하세요.
+          </p>
+        ) : null}
       </header>
 
       <div className="qa-layout">
@@ -272,6 +295,9 @@ export function QueryAssistant() {
             </button>
           </div>
           <ErrorBanner error={qa.manualError} />
+          {qa.manualState === "loading" ? (
+            <p className="muted" role="status">승인·활성화된 템플릿 목록을 확인하는 중입니다.</p>
+          ) : null}
           {qa.manualCatalog ? (
             <>
               <label className="param-field">
@@ -299,7 +325,7 @@ export function QueryAssistant() {
                   ? " 전체 목록을 검색하려면 아래에서 다음 목록을 추가로 불러오세요."
                   : ""}
               </p>
-              <p className="muted" data-testid="manual-template-count">
+              <p className="muted" data-testid="manual-template-count" role="status">
                 불러온 {qa.manualCatalog.items.length}개 중 {visibleManualTemplates.length}개 표시
                 (승인·활성화, 전체 {qa.manualCatalog.total}개)
               </p>
@@ -654,7 +680,10 @@ export function QueryAssistant() {
         {qa.result ? (
           <section className="qa-panel" aria-labelledby="qa-result-heading">
             <h2 id="qa-result-heading">3. 조회 결과</h2>
-              <p className="muted" role="status">조회 완료 · 이력 확인이 필요하면 아래 감사 이력을 조회하세요.</p>
+            <p className="muted" role="status">조회 완료 · 이력 확인이 필요하면 아래 감사 이력을 조회하세요.</p>
+            {qa.result.row_count === 0 ? (
+              <p className="muted" role="status">조회된 데이터가 없습니다. 조건을 확인해 주세요.</p>
+            ) : null}
             <dl className="status-grid">
               <div className="status-item">
                 <span className="label">row_count</span>
@@ -670,7 +699,7 @@ export function QueryAssistant() {
               </div>
               <div className="status-item">
                 <span className="label">감사 추적 ID</span>
-                <span className="value" data-testid="audit-id">
+                <span className="value" data-testid="audit-id" style={{ overflowWrap: "anywhere" }}>
                   {qa.result.audit_id}
                 </span>
               </div>
@@ -711,6 +740,14 @@ export function QueryAssistant() {
                   {qa.auditState === "loading" ? "이력 불러오는 중…" : "감사 이력 불러오기"}
                 </button>
               </div>
+              {qa.auditState === "loading" ? (
+                <p className="muted" role="status">감사 이력을 불러오는 중입니다.</p>
+              ) : null}
+              {qa.auditBundle ? (
+                <p className="muted" role="status" data-testid="audit-loaded-status">
+                  감사 이력 {qa.auditBundle.items.length}건을 확인했습니다.
+                </p>
+              ) : null}
               {qa.auditForbidden ? (
                 <div className="banner banner-warn" role="status" data-testid="audit-forbidden">
                   감사 이력 조회 권한이 없습니다 (AUDIT_READ). 조회 결과는 그대로 유지됩니다.
