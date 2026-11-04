@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   CatalogCategoryItem,
   CatalogColumnItem,
@@ -14,16 +15,28 @@ interface DetailProps {
   columns: CatalogColumnItem[];
   relations: DirectedRelation[];
   indexes: CatalogIndexItem[];
+  categories?: CatalogCategoryItem[];
   state: LoadState;
 }
+
+type DetailTab = "columns" | "relations" | "indexes" | "categories";
+
+const DETAIL_TABS: { id: DetailTab; label: string }[] = [
+  { id: "columns", label: "Columns" },
+  { id: "relations", label: "Relations" },
+  { id: "indexes", label: "Indexes" },
+  { id: "categories", label: "Categories" },
+];
 
 export function TableDetailPanel({
   detail,
   columns,
   relations,
   indexes,
+  categories = [],
   state,
 }: DetailProps) {
+  const [tab, setTab] = useState<DetailTab>("columns");
   if (state.status === "idle") {
     return <div className="placeholder">Select a table to inspect metadata.</div>;
   }
@@ -34,10 +47,53 @@ export function TableDetailPanel({
     return <div className="placeholder">No table detail available.</div>;
   }
 
+  const outbound = relations.filter((relation) => relation.direction === "OUT");
+  const inbound = relations.filter((relation) => relation.direction === "IN");
+  const matchingCategories = categories.filter((category) =>
+    detail.category_ids.includes(category.id) ||
+    category.assignments.some((assignment) =>
+      assignment.table_name === detail.name &&
+      assignment.schema_name === detail.schema_name,
+    ),
+  );
+  // The active table detail is authoritative even when the bounded category list
+  // omits a category name or its assignment metadata.
+  const tableCategories = [
+    ...matchingCategories,
+    ...detail.category_ids.filter((id) => !matchingCategories.some((item) => item.id === id))
+      .map((id) => ({ id, name: null, description: null, assignments: [] })),
+  ];
+
+  const relationTable = (items: DirectedRelation[], direction: "OUT" | "IN") => (
+    items.length === 0 ? (
+      <p className="placeholder">{direction === "OUT" ? "나가는 FK" : "들어오는 FK"}가 없습니다.</p>
+    ) : (
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead><tr><th>Constraint</th><th>Related Table</th><th>Column Mapping</th></tr></thead>
+          <tbody>
+            {items.map((relation) => (
+              <tr key={relation.key}>
+                <td className="mono">{relation.name ?? "—"}</td>
+                <td className="mono">
+                  {direction === "OUT"
+                    ? [relation.targetSchema, relation.targetTable].filter(Boolean).join(".")
+                    : [relation.sourceSchema, relation.sourceTable].filter(Boolean).join(".")}
+                </td>
+                <td className="mono">{formatColumnMapping(relation.columns)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  );
+
   return (
-    <div>
+    <div className="table-detail-workspace">
       <section className="section" aria-label="Table overview">
         <h3>Overview</h3>
+        <p className="table-detail-title mono">{detail.schema_name}.{detail.name}</p>
         <div className="meta-grid">
           <div className="meta-card">
             <div className="label">Schema</div>
@@ -62,10 +118,32 @@ export function TableDetailPanel({
             </div>
           </div>
         </div>
+        <div className="explorer-metrics" aria-label="선택 테이블 메타데이터 건수">
+          <div><strong>{columns.length}</strong><span>Columns</span></div>
+          <div><strong>{outbound.length}</strong><span>Outbound FK</span></div>
+          <div><strong>{inbound.length}</strong><span>Inbound FK</span></div>
+          <div><strong>{indexes.length}</strong><span>Indexes</span></div>
+        </div>
       </section>
 
-      <section className="section" aria-label="Columns">
+      <div className="table-detail-tabs" role="tablist" aria-label="테이블 상세 항목">
+        {DETAIL_TABS.map((item) => (
+          <button key={item.id} type="button" role="tab"
+            aria-selected={tab === item.id}
+            className={tab === item.id ? "table-detail-tab selected" : "table-detail-tab"}
+            onClick={() => setTab(item.id)}>
+            {item.label}
+            <span className="table-detail-tab-count">
+              {item.id === "columns" ? columns.length : item.id === "relations" ? relations.length
+                : item.id === "indexes" ? indexes.length : tableCategories.length}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {tab === "columns" ? <section className="section" aria-label="Columns">
         <h3>Columns ({columns.length})</h3>
+        <div className="table-scroll">
         <table className="data-table">
           <thead>
             <tr>
@@ -97,50 +175,23 @@ export function TableDetailPanel({
             ))}
           </tbody>
         </table>
-      </section>
+        </div>
+      </section> : null}
 
-      <section className="section" aria-label="Relationships">
+      {tab === "relations" ? <section className="section" aria-label="Relationships">
         <h3>Relationships ({relations.length})</h3>
-        {relations.length === 0 ? (
-          <div className="placeholder">No relationships for this table.</div>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Direction</th>
-                <th>Constraint</th>
-                <th>Source</th>
-                <th>Target</th>
-                <th>Column mapping</th>
-              </tr>
-            </thead>
-            <tbody>
-              {relations.map((relation) => (
-                <tr key={relation.key}>
-                  <td>
-                    <span className="badge badge-muted">{relation.direction}</span>
-                  </td>
-                  <td className="mono">{relation.name ?? "—"}</td>
-                  <td className="mono">
-                    {[relation.sourceSchema, relation.sourceTable].filter(Boolean).join(".")}
-                  </td>
-                  <td className="mono">
-                    {[relation.targetSchema, relation.targetTable].filter(Boolean).join(".")}
-                  </td>
-                  <td className="mono">{formatColumnMapping(relation.columns)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+        <h4>Outbound FK ({outbound.length})</h4>
+        {relationTable(outbound, "OUT")}
+        <h4>Inbound FK ({inbound.length})</h4>
+        {relationTable(inbound, "IN")}
+      </section> : null}
 
-      <section className="section" aria-label="Indexes">
+      {tab === "indexes" ? <section className="section" aria-label="Indexes">
         <h3>Indexes ({indexes.length})</h3>
         {indexes.length === 0 ? (
           <div className="placeholder">No indexes for this table.</div>
         ) : (
-          <table className="data-table">
+          <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -159,9 +210,40 @@ export function TableDetailPanel({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
-      </section>
+      </section> : null}
+
+      {tab === "categories" ? <section className="section" aria-label="Table categories">
+        <h3>Categories ({tableCategories.length})</h3>
+        {tableCategories.length === 0 ? <p className="placeholder">지정된 Category가 없습니다.</p> : (
+          <div className="table-scroll"><table className="data-table">
+            <thead><tr><th>Category</th><th>Key</th><th>Primary</th><th>Source</th><th>Confidence</th><th>Note</th></tr></thead>
+            <tbody>{tableCategories.flatMap((category) => {
+              const assignments = category.assignments.filter((assignment) =>
+                assignment.table_name === detail.name &&
+                assignment.schema_name === detail.schema_name,
+              );
+              return (assignments.length ? assignments : [null]).map((assignment, index) => (
+                <tr key={`${category.id}:${index}`}>
+                  <td>{category.name ?? category.id}</td>
+                  <td className="mono">{category.id}</td>
+                  <td>{assignment?.is_primary == null ? "—" : assignment.is_primary ? "YES" : "NO"}</td>
+                  <td>{assignment?.provenance ?? "—"}</td>
+                  <td>{assignment?.confidence ?? "—"}</td>
+                  <td>{assignment?.note ?? "—"}</td>
+                </tr>
+              ));
+            })}</tbody>
+          </table></div>
+        )}
+      </section> : null}
+
+      <details className="table-technical-info">
+        <summary>기술 정보</summary>
+        <div>Table Type: {detail.table_type ?? "—"}</div>
+        <div>Category Keys: {detail.category_ids.join(", ") || "—"}</div>
+      </details>
     </div>
   );
 }

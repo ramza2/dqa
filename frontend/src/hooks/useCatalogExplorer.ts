@@ -61,7 +61,12 @@ export function useCatalogExplorer() {
 
   const [tableQuery, setTableQuery] = useState("");
   const debouncedQuery = useDebouncedValue(tableQuery, 300);
+  const [schemaFilter, setSchemaFilter] = useState("");
+  const debouncedSchemaFilter = useDebouncedValue(schemaFilter, 300);
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [tables, setTables] = useState<CatalogTableItem[]>([]);
+  const [tableTotal, setTableTotal] = useState<number | null>(null);
+  const [tablesMeta, setTablesMeta] = useState<QueryMeta | null>(null);
   const [tablesState, setTablesState] = useState<LoadState>({
     status: "idle",
     message: null,
@@ -75,6 +80,8 @@ export function useCatalogExplorer() {
   const [relations, setRelations] = useState<DirectedRelation[]>([]);
   const [indexes, setIndexes] = useState<CatalogIndexItem[]>([]);
   const [categories, setCategories] = useState<CatalogCategoryItem[]>([]);
+  const [categoriesMeta, setCategoriesMeta] = useState<QueryMeta | null>(null);
+  const [detailMeta, setDetailMeta] = useState<QueryMeta | null>(null);
   const [detailState, setDetailState] = useState<LoadState>({
     status: "idle",
     message: null,
@@ -96,12 +103,23 @@ export function useCatalogExplorer() {
   const selectedSourceRef = useRef(selectedSource);
   selectedSourceRef.current = selectedSource;
 
+  const currentTables = useMemo(
+    () => active && tablesMeta && matchesActive(tablesMeta, active, selectedSource)
+      ? tables : [],
+    [active, tablesMeta, selectedSource, tables],
+  );
+  const currentCategories = active && categoriesMeta && matchesActive(categoriesMeta, active, selectedSource)
+    ? categories : [];
+  const detailIsActive = Boolean(
+    active && detailMeta && matchesActive(detailMeta, active, selectedSource),
+  );
+
   const selectedTable = useMemo(() => {
     if (!selectedTableKey) {
       return null;
     }
-    return tables.find((t) => tableKey(t.schema_name, t.name) === selectedTableKey) ?? null;
-  }, [selectedTableKey, tables]);
+    return currentTables.find((t) => tableKey(t.schema_name, t.name) === selectedTableKey) ?? null;
+  }, [selectedTableKey, currentTables]);
 
   const refreshActive = useCallback(async (sourceName: string) => {
     const summary = await catalogApi.getActiveCatalog(sourceName);
@@ -208,12 +226,16 @@ export function useCatalogExplorer() {
     if (!selectedSource) {
       setActive(null);
       setTables([]);
+      setTableTotal(null);
+      setTablesMeta(null);
       setSelectedTableKey(null);
       setDetail(null);
       setColumns([]);
       setRelations([]);
       setIndexes([]);
       setCategories([]);
+      setCategoriesMeta(null);
+      setDetailMeta(null);
       setStaleWarning(null);
       return;
     }
@@ -225,7 +247,13 @@ export function useCatalogExplorer() {
     setRelations([]);
     setIndexes([]);
     setCategories([]);
+    setTablesMeta(null);
+    setCategoriesMeta(null);
+    setDetailMeta(null);
+    setTableTotal(null);
     setTableQuery("");
+    setSchemaFilter("");
+    setCategoryFilter("");
     setStaleWarning(null);
     setActive(null);
     refreshedForActiveRevision.current = null;
@@ -281,6 +309,8 @@ export function useCatalogExplorer() {
       try {
         const response = await catalogApi.listTables(expectedSource, {
           q: debouncedQuery || undefined,
+          schema_name: debouncedSchemaFilter.trim() || undefined,
+          category: categoryFilter || undefined,
           limit: 500,
         });
         if (cancelled || selectedSourceRef.current !== expectedSource) {
@@ -291,6 +321,8 @@ export function useCatalogExplorer() {
           return;
         }
         setTables(response.items);
+        setTableTotal(response.total);
+        setTablesMeta({ revision_id: response.revision_id, schema_fingerprint: response.schema_fingerprint });
         convergedLoads.current.tables = true;
         clearWarningIfConverged();
         setTablesState(
@@ -315,6 +347,8 @@ export function useCatalogExplorer() {
       } catch (err) {
         if (!cancelled && selectedSourceRef.current === expectedSource) {
           setTables([]);
+          setTableTotal(null);
+          setTablesMeta(null);
           setTablesState(errorState(err));
         }
       }
@@ -323,7 +357,7 @@ export function useCatalogExplorer() {
     return () => {
       cancelled = true;
     };
-  }, [selectedSource, debouncedQuery, active, acceptSnapshot, clearWarningIfConverged]);
+  }, [selectedSource, debouncedQuery, debouncedSchemaFilter, categoryFilter, active, acceptSnapshot, clearWarningIfConverged]);
 
   // Categories: same active revision dependency as tables.
   useEffect(() => {
@@ -347,6 +381,7 @@ export function useCatalogExplorer() {
           return;
         }
         setCategories(response.items);
+        setCategoriesMeta({ revision_id: response.revision_id, schema_fingerprint: response.schema_fingerprint });
         convergedLoads.current.categories = true;
         clearWarningIfConverged();
         setCategoriesState(
@@ -362,6 +397,7 @@ export function useCatalogExplorer() {
       } catch (err) {
         if (!cancelled && selectedSourceRef.current === expectedSource) {
           setCategories([]);
+          setCategoriesMeta(null);
           setCategoriesState(errorState(err));
         }
       }
@@ -379,6 +415,7 @@ export function useCatalogExplorer() {
       setColumns([]);
       setRelations([]);
       setIndexes([]);
+      setDetailMeta(null);
       setDetailState({ status: "idle", message: null, code: null, httpStatus: null });
       return;
     }
@@ -450,6 +487,7 @@ export function useCatalogExplorer() {
           ),
         );
         setIndexes(indexesResponse.items);
+        setDetailMeta(batchMeta);
         setDetailState({ status: "ready", message: null, code: null, httpStatus: null });
         clearWarningIfConverged();
       } catch (err) {
@@ -458,6 +496,7 @@ export function useCatalogExplorer() {
           setColumns([]);
           setRelations([]);
           setIndexes([]);
+          setDetailMeta(null);
           setDetailState(errorState(err));
         }
       }
@@ -484,15 +523,20 @@ export function useCatalogExplorer() {
     sourcesState,
     tableQuery,
     setTableQuery,
-    tables,
+    schemaFilter,
+    setSchemaFilter,
+    categoryFilter,
+    setCategoryFilter,
+    tables: currentTables,
+    tableTotal: currentTables.length > 0 ? tableTotal : null,
     tablesState,
     selectedTable,
     selectTable,
-    detail,
-    columns,
-    relations,
-    indexes,
-    categories,
+    detail: detailIsActive ? detail : null,
+    columns: detailIsActive ? columns : [],
+    relations: detailIsActive ? relations : [],
+    indexes: detailIsActive ? indexes : [],
+    categories: currentCategories,
     detailState,
     categoriesState,
     staleWarning,

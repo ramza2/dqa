@@ -9,6 +9,9 @@ interface Props {
   selectedKey: string | null;
   onSelect: (schemaName: string, tableName: string) => void;
   state: LoadState;
+  loadedCount?: number;
+  totalCount?: number;
+  serverLoadedCount?: number;
 }
 
 export function TableList({
@@ -18,11 +21,21 @@ export function TableList({
   selectedKey,
   onSelect,
   state,
+  loadedCount,
+  totalCount,
+  serverLoadedCount,
 }: Props) {
   return (
     <aside className="pane" aria-label="Table explorer">
       <div className="pane-header">
-        <h2>Tables</h2>
+        <div className="table-list-heading">
+          <h2>Tables</h2>
+          {loadedCount != null ? (
+            <span className="muted" aria-label="표시된 테이블 수">
+              {loadedCount}건 표시
+            </span>
+          ) : null}
+        </div>
         <input
           className="search-input"
           type="search"
@@ -31,6 +44,12 @@ export function TableList({
           onChange={(event) => onQueryChange(event.target.value)}
           aria-label="Search tables"
         />
+        {totalCount != null && serverLoadedCount != null && totalCount > serverLoadedCount ? (
+          <p className="table-list-hint" role="status">
+            검색 결과 {totalCount}건 중 서버가 반환한 {serverLoadedCount}건만 탐색합니다.
+            더 좁은 검색어를 입력해 주세요.
+          </p>
+        ) : null}
       </div>
       {state.status === "loading" || state.status === "error" || state.status === "empty" ? (
         <div className="pane-status">
