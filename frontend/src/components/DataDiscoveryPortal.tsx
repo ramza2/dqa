@@ -30,7 +30,7 @@ export function DataDiscoveryPortal() {
           onClick={() => setTab("explorer")}
           data-testid="dd-tab-explorer"
         >
-          Schema Explorer
+          Table Explorer
         </button>
         <button
           type="button"
