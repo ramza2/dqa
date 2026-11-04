@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as catalogApi from "../api/catalog";
 import { useDebouncedValue } from "./useDebouncedValue";
+import type { CatalogSourceSelection } from "./useCatalogSourceSelection";
 import { mergeDirectedRelations } from "../utils/relations";
 import {
   assertSameSnapshot,
@@ -17,13 +18,9 @@ import {
   type CatalogTableItem,
   type DirectedRelation,
 } from "../types/catalog";
+import type { LoadState } from "../types/loadState";
 
-export interface LoadState {
-  status: "idle" | "loading" | "ready" | "error" | "empty";
-  message: string | null;
-  code: string | null;
-  httpStatus: number | null;
-}
+export type { LoadState } from "../types/loadState";
 
 const STALE_MESSAGE = "Catalog revision changed. Refreshing metadata…";
 
@@ -48,12 +45,17 @@ function tableKey(schemaName: string, tableName: string): string {
   return `${schemaName}.${tableName}`;
 }
 
-export function useCatalogExplorer() {
-  const [sources, setSources] = useState<CatalogActiveSummary[]>([]);
-  const [selectedSource, setSelectedSource] = useState<string>("");
+export function useCatalogExplorer(sourceSelection: CatalogSourceSelection) {
+  const {
+    sources,
+    selectedSource,
+    selectSource,
+    sourcesState,
+    reloadSources,
+  } = sourceSelection;
   const [active, setActive] = useState<CatalogActiveSummary | null>(null);
-  const [sourcesState, setSourcesState] = useState<LoadState>({
-    status: "loading",
+  const [pointerState, setPointerState] = useState<LoadState>({
+    status: "idle",
     message: null,
     code: null,
     httpStatus: null,
@@ -186,45 +188,11 @@ export function useCatalogExplorer() {
     [handleStaleSnapshot],
   );
 
-  const loadSources = useCallback(async () => {
-    setSourcesState({ status: "loading", message: null, code: null, httpStatus: null });
-    try {
-      const list = await catalogApi.listActiveCatalogs();
-      setSources(list);
-      if (list.length === 0) {
-        setSelectedSource("");
-        setActive(null);
-        setSourcesState({
-          status: "empty",
-          message: "No active Catalog",
-          code: null,
-          httpStatus: null,
-        });
-        return;
-      }
-      setSourcesState({ status: "ready", message: null, code: null, httpStatus: null });
-      setSelectedSource((prev) => {
-        if (prev && list.some((item) => item.source_name === prev)) {
-          return prev;
-        }
-        return list[0].source_name;
-      });
-    } catch (err) {
-      setSources([]);
-      setSelectedSource("");
-      setActive(null);
-      setSourcesState(errorState(err));
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadSources();
-  }, [loadSources]);
-
-  // Source change: reset selection and resolve the active pointer for that source only.
+  // Source change: reset table/detail state and resolve the active pointer for that source only.
   useEffect(() => {
     if (!selectedSource) {
       setActive(null);
+      setPointerState({ status: "idle", message: null, code: null, httpStatus: null });
       setTables([]);
       setTableTotal(null);
       setTablesMeta(null);
@@ -236,6 +204,9 @@ export function useCatalogExplorer() {
       setCategories([]);
       setCategoriesMeta(null);
       setDetailMeta(null);
+      setTablesState({ status: "idle", message: null, code: null, httpStatus: null });
+      setDetailState({ status: "idle", message: null, code: null, httpStatus: null });
+      setCategoriesState({ status: "idle", message: null, code: null, httpStatus: null });
       setStaleWarning(null);
       return;
     }
@@ -247,6 +218,7 @@ export function useCatalogExplorer() {
     setRelations([]);
     setIndexes([]);
     setCategories([]);
+    setTables([]);
     setTablesMeta(null);
     setCategoriesMeta(null);
     setDetailMeta(null);
@@ -256,6 +228,10 @@ export function useCatalogExplorer() {
     setCategoryFilter("");
     setStaleWarning(null);
     setActive(null);
+    setPointerState({ status: "loading", message: null, code: null, httpStatus: null });
+    setTablesState({ status: "idle", message: null, code: null, httpStatus: null });
+    setDetailState({ status: "idle", message: null, code: null, httpStatus: null });
+    setCategoriesState({ status: "idle", message: null, code: null, httpStatus: null });
     refreshedForActiveRevision.current = null;
     lastActiveRevisionRef.current = null;
     convergedLoads.current = { tables: false, categories: false };
@@ -268,10 +244,11 @@ export function useCatalogExplorer() {
         }
         lastActiveRevisionRef.current = summary.revision_id;
         setActive(summary);
+        setPointerState({ status: "ready", message: null, code: null, httpStatus: null });
       } catch (err) {
         if (!cancelled && selectedSourceRef.current === selectedSource) {
           setActive(null);
-          setSourcesState(errorState(err));
+          setPointerState(errorState(err));
         }
       }
     })();
@@ -507,10 +484,6 @@ export function useCatalogExplorer() {
     };
   }, [selectedSource, selectedTable, active, acceptSnapshot, handleStaleSnapshot, clearWarningIfConverged]);
 
-  const selectSource = (sourceName: string) => {
-    setSelectedSource(sourceName);
-  };
-
   const selectTable = (schemaName: string, tableName: string) => {
     setSelectedTableKey(tableKey(schemaName, tableName));
   };
@@ -521,6 +494,7 @@ export function useCatalogExplorer() {
     selectSource,
     active,
     sourcesState,
+    pointerState,
     tableQuery,
     setTableQuery,
     schemaFilter,
@@ -540,6 +514,6 @@ export function useCatalogExplorer() {
     detailState,
     categoriesState,
     staleWarning,
-    reloadSources: loadSources,
+    reloadSources,
   };
 }

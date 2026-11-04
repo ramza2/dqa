@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { CatalogExplorer } from "./CatalogExplorer";
+import { CatalogSourceProvider } from "./CatalogSourceContext";
 import { DataDiscoveryIndexStatus } from "./DataDiscoveryIndexStatus";
 import { SchemaSearch } from "./SchemaSearch";
 import { SchemaSnapshotHistory } from "./SchemaSnapshotHistory";
@@ -67,11 +68,16 @@ export function DataDiscoveryPortal() {
         </button>
       </div>
 
+      {/* Shared Source is scoped to Table/ERD only; other tabs keep independent flows. */}
+      <CatalogSourceProvider>
+        {tab === "explorer" ? <CatalogExplorer /> : null}
+        {tab === "erd" ? (
+          <Suspense fallback={<p role="status">ERD Explorer 로딩 중…</p>}>
+            <ActiveCatalogErdExplorer />
+          </Suspense>
+        ) : null}
+      </CatalogSourceProvider>
       {tab === "search" ? <SchemaSearch /> : null}
-      {tab === "explorer" ? <CatalogExplorer /> : null}
-      {tab === "erd" ? <Suspense fallback={<p role="status">ERD Explorer 로딩 중…</p>}>
-        <ActiveCatalogErdExplorer />
-      </Suspense> : null}
       {tab === "index" ? <DataDiscoveryIndexStatus /> : null}
       {tab === "snapshot" ? <SchemaSnapshotHistory /> : null}
     </div>
