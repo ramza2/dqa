@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Mapping, NoReturn
 
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app.adapters.catalog.query_errors import CatalogQueryError, CatalogQueryErrorCode
 from app.adapters.data_discovery.errors import DataDiscoveryError, DataDiscoveryErrorCode
