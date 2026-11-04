@@ -675,7 +675,7 @@ def test_describe_resource_fails_closed_on_revision_change(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Mid-describe active revision drift must not return mixed metadata."""
-    from mcp.server.fastmcp.exceptions import ToolError
+    from mcp.server.mcpserver.exceptions import ToolError
 
     from app.mcp.errors import MCP_CATALOG_REVISION_CHANGED
     from app.services.catalog_query import ResolvedActiveRevision

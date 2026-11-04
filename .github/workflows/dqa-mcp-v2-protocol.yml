@@ -1,0 +1,84 @@
+name: DQA MCP v2 and 2026 protocol regression
+
+on:
+  pull_request:
+    paths:
+      - 'backend/pyproject.toml'
+      - 'backend/app/mcp/**'
+      - 'backend/app/main.py'
+      - 'backend/tests/test_mcp_foundation.py'
+      - 'backend/tests/test_mcp_discovery_tools.py'
+      - 'backend/tests/test_mcp_template_query.py'
+      - 'backend/tests/test_p30a_web_mcp_offline_execution_parity.py'
+      - '.github/workflows/dqa-mcp-v2-protocol.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-dual-protocol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: dqa
+          POSTGRES_PASSWORD: dqa
+          POSTGRES_DB: dqa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dqa -d dqa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      APP_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install SDK v2 and DQA test dependencies
+        run: python -m pip install -e '.[dev]'
+      - name: Verify installed MCP SDK major version
+        run: |
+          python -c 'from importlib.metadata import version; assert version("mcp").split(".")[0] == "2", version("mcp")'
+      - name: Compile MCP transport and tests
+        run: python -m compileall -q app/mcp tests/test_mcp_foundation.py tests/test_mcp_template_query.py
+      - name: Dual-era MCP, authentication, discovery, approved-template regression
+        run: >
+          python -m pytest -q
+          tests/test_mcp_foundation.py
+          tests/test_mcp_discovery_tools.py
+          tests/test_mcp_template_query.py
+          tests/test_p30a_web_mcp_offline_execution_parity.py
+
+  mcp-disposable-asgi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install DQA SDK v2 and test dependencies
+        working-directory: backend
+        run: python -m pip install -e '.[dev]'
+      - name: Isolated offline parity and Docker test DB regressions
+        run: |
+          export DQA_P30A_PYTHON="$(command -v python)"
+          export DQA_P30B_PYTHON="$(command -v python)"
+          export DQA_P30C_PYTHON="$(command -v python)"
+          bash scripts/dqa-p30a-offline-web-mcp-parity-check.sh
+          bash scripts/dqa-p30b-disposable-asgi-check.sh
+          bash scripts/dqa-p30c-disposable-discovery-check.sh

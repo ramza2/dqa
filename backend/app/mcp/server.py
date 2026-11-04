@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.types import ASGIApp
 
@@ -61,11 +61,11 @@ def build_mcp_server(
     settings: Settings,
     *,
     registry: McpToolRegistry | None = None,
-) -> tuple[FastMCP, McpToolRegistry]:
-    """Construct FastMCP with foundation + Discovery + Template Query tools."""
+) -> tuple[MCPServer, McpToolRegistry]:
+    """Construct MCPServer with foundation + Discovery + Template Query tools."""
     tool_registry = registry or build_foundation_registry()
 
-    mcp = FastMCP(
+    mcp = MCPServer(
         name="dqa-mcp",
         instructions=(
             "DEMIS Query Assistant MCP (Phase 28-C). "
@@ -76,13 +76,6 @@ def build_mcp_server(
             "Authenticate via the DQA IdentityProvider; never pass user_id/role "
             "in tool arguments. Never pass raw SQL to execute_query."
         ),
-        # Advisory only for standalone FastMCP.run(); mounted ASGI uses Uvicorn.
-        host=settings.dqa_mcp_bind_host or "127.0.0.1",
-        streamable_http_path="/",
-        stateless_http=True,
-        json_response=True,
-        max_request_body_size=int(settings.dqa_mcp_max_body_bytes),
-        transport_security=_transport_security(settings),
     )
 
     @mcp.tool(
@@ -183,14 +176,22 @@ def build_protected_mcp_asgi(
     settings: Settings,
     *,
     registry: McpToolRegistry | None = None,
-) -> tuple[FastMCP, McpToolRegistry, ASGIApp, str] | None:
+) -> tuple[MCPServer, McpToolRegistry, ASGIApp, str] | None:
     """Build auth+ingress-wrapped MCP ASGI app, or None when mount is refused."""
     if not should_mount_mcp(settings):
         return None
 
     mcp, tool_registry = build_mcp_server(settings, registry=registry)
     mount_path = normalize_mcp_mount_path(settings.dqa_mcp_mount_path)
-    streamable = mcp.streamable_http_app()
+    # SDK v2 owns transport configuration at app creation, not construction.
+    streamable = mcp.streamable_http_app(
+        host=settings.dqa_mcp_bind_host or "127.0.0.1",
+        streamable_http_path="/",
+        stateless_http=True,
+        json_response=True,
+        max_request_body_size=int(settings.dqa_mcp_max_body_bytes),
+        transport_security=_transport_security(settings),
+    )
     authed: ASGIApp = McpAuthMiddleware(
         streamable,
         settings=settings,
@@ -204,7 +205,7 @@ def build_protected_mcp_asgi(
 def mount_mcp_asgi(
     application: FastAPI,
     *,
-    mcp: FastMCP,
+    mcp: MCPServer,
     registry: McpToolRegistry,
     asgi_app: ASGIApp,
     mount_path: str,
@@ -216,7 +217,7 @@ def mount_mcp_asgi(
 
 
 @asynccontextmanager
-async def mcp_session_lifespan(mcp: FastMCP | None) -> AsyncIterator[None]:
+async def mcp_session_lifespan(mcp: MCPServer | None) -> AsyncIterator[None]:
     """Run the MCP Streamable HTTP session manager when MCP is enabled."""
     if mcp is None:
         yield

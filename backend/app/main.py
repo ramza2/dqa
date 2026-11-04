@@ -3,7 +3,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from app import __version__
 from app.adapters.db.migration_head import assert_migrations_at_head
@@ -25,7 +25,7 @@ def create_app(*, check_migrations_on_startup: bool = True) -> FastAPI:
     (for example via ``./scripts/dqa-migrate.sh``) before bringing the backend up.
     """
     settings = get_settings()
-    mcp: FastMCP | None = None
+    mcp: MCPServer | None = None
     # May be None when disabled, or when private-boundary declaration is not
     # loopback (fail closed — DQA_MCP_BIND_HOST does not control Uvicorn listen).
     mcp_bundle = build_protected_mcp_asgi(settings)
@@ -82,7 +82,7 @@ def _docs_urls_for_env(settings: Settings) -> dict[str, str | None]:
     }
 
 
-def _build_lifespan(*, check_migrations_on_startup: bool, mcp: FastMCP | None):
+def _build_lifespan(*, check_migrations_on_startup: bool, mcp: MCPServer | None):
     @asynccontextmanager
     async def _lifespan(_application: FastAPI):
         if check_migrations_on_startup:
