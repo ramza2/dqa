@@ -152,6 +152,68 @@ def test_initialize_and_list_tools(mcp_client: TestClient) -> None:
     ]
 
 
+def test_current_2026_protocol_discovery_list_and_ready_without_initialize(
+    mcp_client: TestClient,
+) -> None:
+    """MCPFlow-style 2026-07-28 requests work without legacy initialize."""
+    version = "2026-07-28"
+
+    def post(method: str, request_id: str, extra: dict[str, Any] | None = None):
+        params: dict[str, Any] = {
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": version,
+                "io.modelcontextprotocol/clientCapabilities": {},
+                "io.modelcontextprotocol/clientInfo": {
+                    "name": "mcpflow-dqa-contract-test",
+                    "version": "0",
+                },
+            }
+        }
+        params.update(extra or {})
+        headers = {
+            **_MCP_HEADERS,
+            "MCP-Protocol-Version": version,
+            "Mcp-Method": method,
+        }
+        if method == "tools/call":
+            headers["Mcp-Name"] = "dqa.mcp_ready"
+        return mcp_client.post(
+            "/mcp/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method,
+                "params": params,
+            },
+        )
+
+    discovered = post("server/discover", "current-discover")
+    assert discovered.status_code == 200, discovered.text
+    assert isinstance(discovered.json().get("result"), dict)
+
+    listed = post("tools/list", "current-list")
+    assert listed.status_code == 200, listed.text
+    assert sorted(tool["name"] for tool in listed.json()["result"]["tools"]) == [
+        "demis.describe_resource",
+        "demis.execute_query",
+        "demis.prepare_query",
+        "demis.search_schema",
+        "dqa.mcp_ready",
+    ]
+
+    ready = post(
+        "tools/call",
+        "current-ready",
+        {"name": "dqa.mcp_ready", "arguments": {}},
+    )
+    assert ready.status_code == 200, ready.text
+    payload = ready.json()
+    assert "result" in payload
+    assert "28-C" in json.dumps(payload)
+    assert "mcp-tester" in json.dumps(payload)
+
+
 def test_mcp_ready_tool_no_side_effects(
     mcp_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
