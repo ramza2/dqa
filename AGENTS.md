@@ -254,6 +254,16 @@ Audit metadata should be sufficient to reconstruct:
 
 Do not log sensitive result rows by default.
 
+The optional `local_session` operator identity does not authorize DEMIS access
+on its own. Default remains `DQA_AUTH_PROVIDER=disabled` in production Compose;
+`dev_headers` remains development/test only. Local login requires operator-
+provisioned accounts, migrated account/session tables, a pinned application
+origin, a secret CSRF key and secure cookies behind approved HTTPS. Do not
+introduce public first-admin registration, demo passwords, client-provided
+roles or storage-backed bearer tokens. Preserve server RBAC, session expiry/
+revocation and separate external-service/clinical authorization gates.
+See `docs/local-operator-login.md` before modifying login UX or provider policy.
+
 ## 9. Architecture
 
 Recommended backend layering:

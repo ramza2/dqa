@@ -58,6 +58,8 @@ def _auth_http_error(exc: AuthError) -> HTTPException:
         AuthErrorCode.AUTHENTICATION_INVALID,
     }:
         status_code = status.HTTP_401_UNAUTHORIZED
+    elif exc.code == AuthErrorCode.AUTH_CSRF_INVALID:
+        status_code = status.HTTP_403_FORBIDDEN
     elif exc.code == AuthErrorCode.AUTHORIZATION_DENIED:
         status_code = status.HTTP_403_FORBIDDEN
     else:

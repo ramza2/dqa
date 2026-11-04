@@ -294,8 +294,11 @@ Authentication ("who") and authorization ("may this actor do this") are separate
 
 Identity:
 - `IdentityProvider` abstraction returns an `AuthenticatedActor`
-- production IdP (OIDC / JWT / SSO) is a future adapter implementing the same interface
+- production federation (OIDC / JWT / SSO) is a future adapter implementing the same interface
 - current `dev_headers` provider is for local development/test only
+- optional `local_session` interactive human-provider foundation uses DB-backed
+  users and opaque, revocable sessions; it is not enabled by on-prem production
+  Compose and is not an externally approved military identity service
 - `X-DQA-Dev-Actor` / `X-DQA-Dev-Roles` are identity assertions, not security
   credentials, and must never be trusted as production headers
 
@@ -387,7 +390,8 @@ Execution form metadata rules:
 - exposes only enabled environments; never host/user/db/credential refs/profile ids
 
 Not yet covered (follow-up / external integration):
-- OIDC/OAuth2/JWT verification, user directory, MFA, sessions
+- OIDC/OAuth2/JWT verification, institutional directory, MFA, approved production
+  IdP and HTTPS reverse-proxy policy (local operator sessions are optional only)
 - real DEMIS endpoint/network/credential wiring and read-only privilege validation
   (Oracle thin adapter is already registered)
 - production credential secret-store resolver (beyond env-prefix boundary)
