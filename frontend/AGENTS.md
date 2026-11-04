@@ -9,6 +9,28 @@ Target stack:
 - TypeScript
 - Vite
 
+## Analyzer UI/UX baseline
+
+For schema/catalog/DB-analysis screens, `ramza2/demis-schema-search-poc`
+is the primary visual and interaction baseline. Aim for near-identical
+left-sidebar information architecture, page density, labels, layout, navigation
+and feature behavior. Preserve the original Table Explorer and interactive
+React Flow + ELK ERD experience, including full/focused/category views,
+zoom/pan/minimap, search and FK column mappings. Preserve report, Run Diff
+and Catalog Package workflows, while integrating all existing DQA functions.
+
+Port compatible React/TypeScript code and CSS from
+`demis-schema-search-poc/frontend/erd_component/` after reviewing it.
+Remove its Streamlit bridge and use DQA API modules and Catalog revision
+guards. Do not fall back to a static three-column relationship list as the
+primary ERD. Keep legacy visual parity where safe; record any necessary
+differences due to accessibility, security, performance or DQA data contracts.
+
+Every UI migration PR should include a concise old-vs-new feature checklist,
+tests for its key interactions, and a visual review with the original screen.
+The operational safety, backend authorization and source/version visibility
+rules below still apply.
+
 ## Design priorities
 
 This is an operational tool, not a marketing site.
