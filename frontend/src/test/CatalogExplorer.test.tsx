@@ -101,16 +101,94 @@ describe("CatalogExplorer", () => {
     expect(screen.getByText("YES")).toBeInTheDocument();
     expect(screen.getByText("NO")).toBeInTheDocument();
 
+    expect(screen.getByText("Outbound FK")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Relations 2/i }));
     expect(screen.getByText("FK_ADM_ENC")).toBeInTheDocument();
-    expect(screen.getByText("OUT")).toBeInTheDocument();
-    expect(screen.getByText("IN")).toBeInTheDocument();
+    expect(screen.getByText("Outbound FK (1)")).toBeInTheDocument();
+    expect(screen.getByText("Inbound FK (1)")).toBeInTheDocument();
     expect(screen.getByText("ENC_ID → ENC_ID")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("tab", { name: /Indexes 1/i }));
     expect(screen.getByText("IX_ADM_ENC")).toBeInTheDocument();
     expect(screen.getByText("NORMAL")).toBeInTheDocument();
 
     const categories = screen.getByLabelText("Categories");
     expect(within(categories).getByText(/No categories in this Catalog/i)).toBeInTheDocument();
+    restore();
+  });
+
+  it("filters active tables by schema and category without changing server source", async () => {
+    const user = userEvent.setup();
+    const seenFilters: Array<{ schema: string | null; category: string | null }> = [];
+    const category = {
+      id: "clinical",
+      name: "진료",
+      description: null,
+      assignments: [{
+        schema_name: "DEMIS_OWNER",
+        table_name: "TB_ADM_HIST",
+        provenance: "reviewed",
+        is_primary: true,
+        confidence: 0.9,
+        note: "reviewed assignment",
+      }],
+    };
+    const handlers = defaultCatalogHandlers();
+    handlers.unshift((url) => {
+      if (url.pathname.endsWith("/tables")) {
+        seenFilters.push({
+          schema: url.searchParams.get("schema_name"),
+          category: url.searchParams.get("category"),
+        });
+        const all = [
+          { ...tablesResponse.items[0], category_ids: ["clinical"] },
+          { schema_name: "OTHER", name: "TB_DEVICE", comment: "장비", table_type: "BASE TABLE", category_ids: [] },
+        ];
+        const schema = url.searchParams.get("schema_name");
+        const categoryKey = url.searchParams.get("category");
+        const items = all.filter((table) =>
+          (!schema || table.schema_name === schema) &&
+          (!categoryKey || table.category_ids.includes(categoryKey)),
+        );
+        return jsonResponse({
+          ...tablesResponse,
+          total: items.length,
+          items,
+        });
+      }
+      if (url.pathname.endsWith("/categories")) {
+        return jsonResponse({ ...emptyCategories, total: 1, items: [category] });
+      }
+      return null;
+    });
+    const restore = installFetchMock(handlers);
+    render(<CatalogExplorer />);
+
+    expect(await screen.findByRole("button", { name: /TB_DEVICE/i })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Category 필터"), "clinical");
+    await waitFor(() => expect(seenFilters.some((item) => item.category === "clinical")).toBe(true));
+    expect(screen.queryByRole("button", { name: /TB_DEVICE/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /TB_ADM_HIST/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /TB_ADM_HIST/i }));
+    await screen.findByText("Overview");
+    await user.click(screen.getByRole("tab", { name: /Categories 1/i }));
+    expect(screen.getByText("reviewed assignment")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Schema 필터"), "OTHER");
+    expect(await screen.findByText("No tables match this search")).toBeInTheDocument();
+    expect(seenFilters.some((item) => item.category === "clinical" && item.schema === "OTHER")).toBe(true);
+    expect(screen.queryByText("reviewed assignment")).not.toBeInTheDocument();
+    restore();
+  });
+
+  it("warns when the server returns only a bounded first page", async () => {
+    const handlers = defaultCatalogHandlers();
+    handlers.unshift((url) => url.pathname.endsWith("/tables")
+      ? jsonResponse({ ...tablesResponse, total: 1001 }) : null);
+    const restore = installFetchMock(handlers);
+    render(<CatalogExplorer />);
+    expect(await screen.findByText(/검색 결과 1001건 중 서버가 반환한 1건만 탐색합니다/)).toBeInTheDocument();
     restore();
   });
 

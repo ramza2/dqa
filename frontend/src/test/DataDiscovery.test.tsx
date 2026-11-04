@@ -212,14 +212,14 @@ describe("App navigation Data Discovery", () => {
 });
 
 describe("DataDiscoveryPortal tabs", () => {
-  it("switches Schema Search, Schema Explorer, and Index Status", async () => {
+  it("switches Schema Search, Table Explorer, and Index Status", async () => {
     const user = userEvent.setup();
     const restore = installFetchMock(discoveryHandlers());
     render(<DataDiscoveryPortal />);
 
     expect(screen.getByTestId("schema-search")).toBeInTheDocument();
     await user.click(screen.getByTestId("dd-tab-explorer"));
-    expect(await screen.findByText("DQA / Catalog Explorer")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Table Explorer" })).toBeInTheDocument();
     await user.click(screen.getByTestId("dd-tab-index"));
     expect(await screen.findByTestId("data-discovery-index-status")).toBeInTheDocument();
     await user.click(screen.getByTestId("dd-tab-search"));
