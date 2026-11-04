@@ -60,3 +60,25 @@ jobs:
           tests/test_mcp_discovery_tools.py
           tests/test_mcp_template_query.py
           tests/test_p30a_web_mcp_offline_execution_parity.py
+
+  mcp-disposable-asgi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install DQA SDK v2 and test dependencies
+        working-directory: backend
+        run: python -m pip install -e '.[dev]'
+      - name: Isolated offline parity and Docker test DB regressions
+        run: |
+          export DQA_P30A_PYTHON="$(command -v python)"
+          export DQA_P30B_PYTHON="$(command -v python)"
+          export DQA_P30C_PYTHON="$(command -v python)"
+          bash scripts/dqa-p30a-offline-web-mcp-parity-check.sh
+          bash scripts/dqa-p30b-disposable-asgi-check.sh
+          bash scripts/dqa-p30c-disposable-discovery-check.sh
