@@ -5,6 +5,7 @@ on:
     paths:
       - 'backend/pyproject.toml'
       - 'backend/app/mcp/**'
+      - 'backend/app/main.py'
       - 'backend/tests/test_mcp_foundation.py'
       - 'backend/tests/test_mcp_discovery_tools.py'
       - 'backend/tests/test_mcp_template_query.py'
