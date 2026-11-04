@@ -32,6 +32,52 @@ officially designated military system; DQA does not create a second HITL UI.
 PR #66's clarification and PR #77's independent Preflight proposal remain
 **unmerged Drafts** (2026-10-15); do not treat them as implemented policy.
 
+## 1A. DEMIS Schema Analyzer UI/UX parity (approved target)
+
+The existing `ramza2/demis-schema-search-poc` user interface is the **primary
+UI/UX reference** for the DQA schema-analysis and catalog-administration
+workspace. Maximize **feature, interaction, layout and visual parity**; do not
+replace a rich Analyzer explorer with a simplified summary merely because DQA
+already has a minimal screen. The target is a single DQA application with
+Analyzer-quality exploration and all newer DQA controls, not a permanent PoC
+service dependency.
+
+Preserve, subject to DQA authorization and source-of-truth rules:
+- The clear left-side multipage navigation and DB Target workspace.
+- DB Analysis Preflight and schema-target selection workflows.
+- Table Explorer with table/column detail, comments, type, nullability,
+  PK/UK/FK, index, categories and relationships.
+- The original interactive ERD Explorer: **React Flow + ELK layered,
+  orthogonal layout**, full-graph and scoped/focused/category views,
+  selectable tables, relation-column mappings, pan, zoom and minimap.
+- DB Analysis Report (DOCX), Schema Run Diff and Catalog Package
+  Finalization screens with equivalent operational visibility.
+- Existing DQA functionality (Catalog import/activation, Inspector Snapshot,
+  query preview, approved read-only Query Templates, template reviews,
+  settings and audit) in the same coherent navigation and design system.
+
+Reference implementation: `demis-schema-search-poc/frontend/erd_component/`
+contains reusable React Flow/ELK rendering code; its
+`frontend/erd_explorer.py`, `frontend/table_explorer.py` and
+`frontend/pages/` document behavior. Reimplement the Streamlit shell and
+adapter as native DQA React/TypeScript components; reuse reviewed code and
+styles where compatible. Do **not** copy the Streamlit runtime, legacy
+credentials/persistence, raw Oracle data access, v1 package writer or PoC
+database into DQA.
+
+The **active validated Catalog revision** is the sole operational
+table/column/FK/index source, with source, revision and fingerprint checked
+throughout UI reads. Unapproved Inspector Snapshots may be explored only as
+explicitly labeled, read-only previews, never silently represented as active
+Catalog or execution permission. No UI-parity request bypasses backend
+authorization, DBA approval, credential handling or read-only execution gates.
+Large catalogs must support bounded/lazy rendering and focused navigation.
+
+Before declaring a migrated feature complete, compare it with the original
+Analyzer screen/interaction, document any intentional divergence and verify
+the same behavior with synthetic Oracle Mock data and frontend tests. Keep
+newly developed DQA features accessible; do not remove them to achieve parity.
+
 ## 2. Core boundary
 
 Target responsibilities within DQA (separate service/adapter boundaries):
