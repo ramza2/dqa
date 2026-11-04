@@ -1,0 +1,125 @@
+.dqa-erd-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 710px;
+  min-height: 520px;
+  border: 1px solid #dbe3ed;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.dqa-erd-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #475569;
+  background: #f8fafc;
+  font-size: 0.77rem;
+}
+
+.dqa-erd-canvas { position: relative; flex: 1; min-height: 0; }
+
+.dqa-erd-status {
+  position: absolute;
+  z-index: 30;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 90%;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.95);
+  color: #475569;
+  box-shadow: 0 4px 16px #0f172a14;
+  font-size: 0.78rem;
+}
+
+.dqa-erd-error { color: #b91c1c; border-color: #fecaca; }
+
+.dqa-erd-node {
+  position: relative;
+  width: 250px;
+  height: 94px;
+  padding: 10px 13px;
+  border: 1.5px solid #94a3b8;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 2px 7px #0f172a0f;
+  overflow: hidden;
+}
+
+.dqa-erd-node-focused { border: 3px solid #16a34a; background: #f0fdf4; }
+.dqa-erd-node-selected { border: 2px solid #16a34a; background: #f0fdf4; }
+.dqa-erd-node-hop1 { border: 2px solid #2563eb; background: #eff6ff; }
+.dqa-erd-node-hop2 { border-color: #64748b; background: #f8fafc; }
+
+.dqa-erd-schema {
+  color: #64748b;
+  font-size: 0.67rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dqa-erd-table {
+  margin-top: 2px;
+  font-size: 0.88rem;
+  font-weight: 750;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dqa-erd-comment {
+  color: #475569;
+  font-size: 0.7rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dqa-erd-category {
+  color: #7c3aed;
+  font-size: 0.65rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dqa-erd-handle {
+  width: 7px !important;
+  height: 7px !important;
+  border: 1px solid #94a3b8 !important;
+  background: #ffffff !important;
+  opacity: 0.18;
+}
+
+.dqa-erd-edge-label {
+  position: absolute;
+  padding: 2px 5px;
+  border: 1px solid #dbeafe;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.95);
+  color: #475569;
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
+.dqa-erd-root .react-flow__minimap {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.dqa-erd-root .react-flow__controls { border: 1px solid #e2e8f0; box-shadow: none; }
+
+@media (max-width: 800px) {
+  .dqa-erd-root { height: 570px; }
+}

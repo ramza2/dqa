@@ -1,0 +1,106 @@
+.dqa-erd-page { min-height: 100vh; background: #f8fafc; }
+
+.dqa-erd-content { padding: 1.1rem 1.4rem 2rem; }
+
+.dqa-erd-security-note {
+  color: #475569;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  margin: 0 0 1rem;
+}
+
+.dqa-erd-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 0.9rem;
+}
+
+.dqa-erd-metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+}
+
+.dqa-erd-metrics strong { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+.dqa-erd-metrics span { color: #64748b; font-size: 0.73rem; }
+
+.dqa-erd-content .banner { margin: 0.75rem 0; }
+
+.dqa-erd-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.9rem;
+  margin: 1.1rem 0;
+}
+
+.dqa-erd-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 150px;
+  max-width: 410px;
+  flex: 1 1 180px;
+  color: #475569;
+  font-size: 0.79rem;
+  font-weight: 600;
+}
+
+.dqa-erd-filters select,
+.dqa-erd-filters input {
+  min-height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.45rem 0.55rem;
+  background: #fff;
+  color: #0f172a;
+}
+
+.dqa-erd-notice {
+  margin: 1rem 1.4rem;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #475569;
+}
+
+.dqa-erd-retry,
+.dqa-erd-link-button {
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  padding: 0.4rem 0.65rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.dqa-erd-retry { margin-left: 0.7rem; }
+
+.dqa-erd-inspector {
+  margin-top: 1rem;
+  padding: 1rem 1.2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  font-size: 0.85rem;
+}
+
+.dqa-erd-inspector h3 { margin: 0 0 0.7rem; font-size: 1rem; }
+.dqa-erd-inspector p { color: #475569; }
+.dqa-erd-inspector ul { padding-left: 1.2rem; }
+.dqa-erd-inspector li { margin: 0.35rem 0; }
+.dqa-erd-link-button { margin: 0; text-align: left; }
+.dqa-erd-footnote { color: #64748b; font-size: 0.78rem; }
+
+@media (max-width: 760px) {
+  .dqa-erd-content { padding: 0.8rem; }
+  .dqa-erd-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dqa-erd-filters label { max-width: none; flex-basis: 100%; }
+}

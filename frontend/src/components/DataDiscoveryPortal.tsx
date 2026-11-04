@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { CatalogExplorer } from "./CatalogExplorer";
 import { DataDiscoveryIndexStatus } from "./DataDiscoveryIndexStatus";
 import { SchemaSearch } from "./SchemaSearch";
 import { SchemaSnapshotHistory } from "./SchemaSnapshotHistory";
 
-type DiscoveryTab = "search" | "explorer" | "index" | "snapshot";
+const ActiveCatalogErdExplorer = lazy(() => import("./ActiveCatalogErdExplorer")
+  .then((module) => ({ default: module.ActiveCatalogErdExplorer })));
+
+type DiscoveryTab = "search" | "explorer" | "erd" | "index" | "snapshot";
 
 export function DataDiscoveryPortal() {
   const [tab, setTab] = useState<DiscoveryTab>("search");
@@ -30,7 +33,17 @@ export function DataDiscoveryPortal() {
           onClick={() => setTab("explorer")}
           data-testid="dd-tab-explorer"
         >
-          Schema Explorer
+          Table Explorer
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "erd"}
+          className={tab === "erd" ? "nav-tab active" : "nav-tab"}
+          onClick={() => setTab("erd")}
+          data-testid="dd-tab-erd"
+        >
+          ERD Explorer
         </button>
         <button
           type="button"
@@ -56,6 +69,9 @@ export function DataDiscoveryPortal() {
 
       {tab === "search" ? <SchemaSearch /> : null}
       {tab === "explorer" ? <CatalogExplorer /> : null}
+      {tab === "erd" ? <Suspense fallback={<p role="status">ERD Explorer 로딩 중…</p>}>
+        <ActiveCatalogErdExplorer />
+      </Suspense> : null}
       {tab === "index" ? <DataDiscoveryIndexStatus /> : null}
       {tab === "snapshot" ? <SchemaSnapshotHistory /> : null}
     </div>
