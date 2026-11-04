@@ -2,12 +2,15 @@ import { useState } from "react";
 import { useCatalogExplorer } from "../hooks/useCatalogExplorer";
 import { FocusedErdPanel } from "./FocusedErdPanel";
 import { ActiveCatalogHeader, SourceSelector } from "./ActiveCatalogHeader";
+import { useCatalogSource, useOptionalCatalogSource } from "../hooks/catalogSourceContext";
+import { CatalogSourceProvider } from "./CatalogSourceContext";
 import { CategoriesPanel, TableDetailPanel } from "./TableDetail";
 import { StatusBanner } from "./StatusBanner";
 import { TableList } from "./TableList";
 
-export function CatalogExplorer() {
-  const explorer = useCatalogExplorer();
+function CatalogExplorerBody() {
+  const sourceSelection = useCatalogSource();
+  const explorer = useCatalogExplorer(sourceSelection);
   const [showErd, setShowErd] = useState(false);
   const schemas = [...new Set(explorer.tables.map((table) => table.schema_name))].sort();
   const selectedIsVisible = Boolean(explorer.selectedTable && explorer.tablesState.status === "ready");
@@ -17,9 +20,12 @@ export function CatalogExplorer() {
     explorer.selectedTable.schema_name === explorer.detail.schema_name &&
     explorer.selectedTable.name === explorer.detail.name,
   );
+  const sourceGate = explorer.sourcesState.status === "ready"
+    ? explorer.pointerState
+    : explorer.sourcesState;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell catalog-explorer-shell" data-testid="catalog-explorer">
       <header className="app-header">
         <div className="app-title-row">
           <h1>Table Explorer</h1>
@@ -30,11 +36,12 @@ export function CatalogExplorer() {
           selectedSource={explorer.selectedSource}
           onSelect={explorer.selectSource}
           disabled={explorer.sourcesState.status === "loading"}
+          emptyLabel="선택 가능한 활성 Catalog Source가 없습니다"
         />
-        {explorer.sourcesState.status === "loading" ||
-        explorer.sourcesState.status === "error" ||
-        explorer.sourcesState.status === "empty" ? (
-          <StatusBanner state={explorer.sourcesState} emptyLabel="No active Catalog" />
+        {sourceGate.status === "loading" ||
+        sourceGate.status === "error" ||
+        sourceGate.status === "empty" ? (
+          <StatusBanner state={sourceGate} emptyLabel="No active Catalog" />
         ) : (
           <ActiveCatalogHeader
             active={explorer.active}
@@ -43,7 +50,10 @@ export function CatalogExplorer() {
         )}
       </header>
 
-      {explorer.sourcesState.status === "ready" && explorer.selectedSource ? (
+      {explorer.sourcesState.status === "ready" &&
+      explorer.pointerState.status === "ready" &&
+      explorer.selectedSource &&
+      explorer.active ? (
         <>
           <div className="explorer-toolbar" aria-label="Table Explorer 필터">
             <label>
@@ -135,4 +145,16 @@ export function CatalogExplorer() {
       ) : null}
     </div>
   );
+}
+
+export function CatalogExplorer() {
+  const shared = useOptionalCatalogSource();
+  if (!shared) {
+    return (
+      <CatalogSourceProvider>
+        <CatalogExplorerBody />
+      </CatalogSourceProvider>
+    );
+  }
+  return <CatalogExplorerBody />;
 }

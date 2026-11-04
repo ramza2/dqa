@@ -19,6 +19,7 @@ import {
 } from "./mocks";
 
 afterEach(() => {
+  sessionStorage.clear();
   vi.useRealTimers();
 });
 
@@ -50,10 +51,10 @@ describe("CatalogExplorer", () => {
     const restore = installFetchMock(defaultCatalogHandlers());
     render(<CatalogExplorer />);
 
-    expect(await screen.findByTestId("active-catalog-status")).toBeInTheDocument();
+    const status = await screen.findByTestId("active-catalog-status");
     expect(screen.getAllByText("oracle_demis_mock").length).toBeGreaterThan(0);
-    expect(screen.getByText("1")).toBeInTheDocument();
-    expect(screen.getByText("READY")).toBeInTheDocument();
+    expect(within(status).getByText("1")).toBeInTheDocument();
+    expect(within(status).getByText("READY")).toBeInTheDocument();
     expect(screen.getByTitle(activeSource.schema_fingerprint)).toBeInTheDocument();
     restore();
   });

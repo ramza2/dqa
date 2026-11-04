@@ -6,15 +6,27 @@ interface Props {
   selectedSource: string;
   onSelect: (sourceName: string) => void;
   disabled?: boolean;
+  emptyLabel?: string;
 }
 
-export function SourceSelector({ sources, selectedSource, onSelect, disabled }: Props) {
+export function SourceSelector({
+  sources,
+  selectedSource,
+  onSelect,
+  disabled,
+  emptyLabel = "No active Catalog source",
+}: Props) {
   if (sources.length === 0) {
-    return null;
+    return (
+      <div className="status-item" data-testid="catalog-source-empty">
+        <span className="label">Source</span>
+        <span className="value muted">{emptyLabel}</span>
+      </div>
+    );
   }
   if (sources.length === 1) {
     return (
-      <div className="status-item">
+      <div className="status-item" data-testid="catalog-source-single">
         <span className="label">Source</span>
         <span className="value">{sources[0].source_name}</span>
       </div>
@@ -29,7 +41,13 @@ export function SourceSelector({ sources, selectedSource, onSelect, disabled }: 
         disabled={disabled}
         onChange={(event) => onSelect(event.target.value)}
         aria-label="Active Catalog source"
+        data-testid="catalog-source-select"
       >
+        {!selectedSource ? (
+          <option value="" disabled>
+            Catalog Source 선택
+          </option>
+        ) : null}
         {sources.map((source) => (
           <option key={source.source_name} value={source.source_name}>
             {source.source_name}

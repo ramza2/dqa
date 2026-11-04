@@ -34,7 +34,10 @@ const data: CatalogErdSnapshot = {
   totalTables: 2, totalRelations: 1, totalCategories: 1, truncated: false,
 };
 
-afterEach(() => vi.resetAllMocks());
+afterEach(() => {
+  sessionStorage.clear();
+  vi.resetAllMocks();
+});
 
 describe("ERD Explorer UI", () => {
   it("uses active Catalog metadata for full, focus, category and relation views", async () => {

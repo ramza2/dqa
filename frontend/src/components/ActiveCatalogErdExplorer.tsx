@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { listActiveCatalogs } from "../api/catalog";
 import { loadActiveCatalogErd, type CatalogErdSnapshot } from "../api/catalogErd";
-import type { CatalogActiveSummary } from "../types/catalog";
 import { buildCatalogGraph, selectErdGraph, type ErdMode } from "../utils/catalogErd";
 import { ActiveCatalogHeader, SourceSelector } from "./ActiveCatalogHeader";
+import { useCatalogSource, useOptionalCatalogSource } from "../hooks/catalogSourceContext";
+import { CatalogSourceProvider } from "./CatalogSourceContext";
 import { CatalogErdCanvas } from "./CatalogErdCanvas";
+import { StatusBanner } from "./StatusBanner";
 import "./ActiveCatalogErdExplorer.css";
 
-type Loading = "loading" | "ready" | "empty" | "error";
+type Loading = "idle" | "loading" | "ready" | "empty" | "error";
 
-export function ActiveCatalogErdExplorer() {
-  const [sources, setSources] = useState<CatalogActiveSummary[]>([]);
-  const [sourcesStatus, setSourcesStatus] = useState<Loading>("loading");
-  const [source, setSource] = useState("");
+function ActiveCatalogErdExplorerBody() {
+  const {
+    sources,
+    selectedSource: source,
+    selectSource,
+    sourcesState,
+  } = useCatalogSource();
   const [snapshot, setSnapshot] = useState<CatalogErdSnapshot | null>(null);
-  const [status, setStatus] = useState<Loading>("loading");
+  const [status, setStatus] = useState<Loading>("idle");
   const [reload, setReload] = useState(0);
   const [mode, setMode] = useState<ErdMode>("full");
   const [focus, setFocus] = useState("");
@@ -25,20 +29,9 @@ export function ActiveCatalogErdExplorer() {
   const [selectedLink, setSelectedLink] = useState("");
 
   useEffect(() => {
-    let valid = true;
-    listActiveCatalogs().then((items) => {
-      if (!valid) return;
-      setSources(items);
-      setSourcesStatus(items.length ? "ready" : "empty");
-      setSource((previous) => items.some((item) => item.source_name === previous)
-        ? previous : (items[0]?.source_name ?? ""));
-    }).catch(() => { if (valid) setSourcesStatus("error"); });
-    return () => { valid = false; };
-  }, []);
-
-  useEffect(() => {
-    if (!source) {
+    if (sourcesState.status !== "ready" || !source) {
       setSnapshot(null);
+      setStatus("idle");
       return;
     }
     let valid = true;
@@ -56,7 +49,7 @@ export function ActiveCatalogErdExplorer() {
       setStatus(result.tables.length ? "ready" : "empty");
     }).catch(() => { if (valid) setStatus("error"); });
     return () => { valid = false; };
-  }, [source, reload]);
+  }, [source, reload, sourcesState.status]);
 
   const graph = useMemo(() => snapshot
     ? buildCatalogGraph(snapshot.tables, snapshot.relations)
@@ -84,22 +77,33 @@ export function ActiveCatalogErdExplorer() {
         <h1>{title}</h1>
         <span className="subtitle">React Flow + ELK 기반 활성 Catalog 테이블 관계도</span>
       </div>
-      {sourcesStatus === "ready" ? (
-        <SourceSelector sources={sources} selectedSource={source}
-          onSelect={setSource} disabled={sourcesStatus !== "ready"} />
-      ) : null}
+      <SourceSelector
+        sources={sources}
+        selectedSource={source}
+        onSelect={selectSource}
+        disabled={sourcesState.status === "loading"}
+        emptyLabel="선택 가능한 활성 Catalog Source가 없습니다"
+      />
       {visibleSnapshot ? <ActiveCatalogHeader active={visibleSnapshot.active} staleWarning={null} /> : null}
     </header>
 
-    {sourcesStatus === "loading" ? <p className="dqa-erd-notice" role="status">활성 Catalog 목록 확인 중…</p> : null}
-    {sourcesStatus === "empty" ? <p className="dqa-erd-notice">활성 Catalog가 없습니다. 검증된 Package를 먼저 활성화해야 합니다.</p> : null}
-    {sourcesStatus === "error" ? <p className="dqa-erd-notice" role="alert">활성 Catalog 목록을 조회하지 못했습니다.</p> : null}
-    {source && status === "loading" ? <p className="dqa-erd-notice" role="status">Source·Revision·Fingerprint를 검증하며 ERD 메타데이터를 조회 중…</p> : null}
-    {source && status === "error" ? <div className="dqa-erd-notice banner banner-error" role="alert">
-      ERD 조회 또는 Catalog 버전 정합성 검증에 실패했습니다.
-      <button type="button" className="dqa-erd-retry" onClick={() => setReload((value) => value + 1)}>다시 조회</button>
-    </div> : null}
-    {source && status === "empty" ? <p className="dqa-erd-notice">활성 Catalog에 테이블이 없습니다.</p> : null}
+    {sourcesState.status === "loading" ? <p className="dqa-erd-notice" role="status">활성 Catalog 목록 확인 중…</p> : null}
+    {sourcesState.status === "empty" ? (
+      <p className="dqa-erd-notice">활성 Catalog가 없습니다. 검증된 Package를 먼저 활성화해야 합니다.</p>
+    ) : null}
+    {sourcesState.status === "error" ? <StatusBanner state={sourcesState} /> : null}
+    {sourcesState.status === "ready" && source && status === "loading" ? (
+      <p className="dqa-erd-notice" role="status">Source·Revision·Fingerprint를 검증하며 ERD 메타데이터를 조회 중…</p>
+    ) : null}
+    {sourcesState.status === "ready" && source && status === "error" ? (
+      <div className="dqa-erd-notice banner banner-error" role="alert">
+        ERD 조회 또는 Catalog 버전 정합성 검증에 실패했습니다.
+        <button type="button" className="dqa-erd-retry" onClick={() => setReload((value) => value + 1)}>다시 조회</button>
+      </div>
+    ) : null}
+    {sourcesState.status === "ready" && source && status === "empty" ? (
+      <p className="dqa-erd-notice">활성 Catalog에 테이블이 없습니다.</p>
+    ) : null}
 
     {status === "ready" && visibleSnapshot ? <main className="dqa-erd-content">
       <p className="dqa-erd-security-note">
@@ -198,4 +202,16 @@ export function ActiveCatalogErdExplorer() {
       <p className="dqa-erd-footnote">React Flow 그래프는 읽기 전용이며 테이블/관계선을 수정하지 않습니다. Source 또는 Revision이 변경되면 새로 조회합니다.</p>
     </main> : null}
   </div>;
+}
+
+export function ActiveCatalogErdExplorer() {
+  const shared = useOptionalCatalogSource();
+  if (!shared) {
+    return (
+      <CatalogSourceProvider>
+        <ActiveCatalogErdExplorerBody />
+      </CatalogSourceProvider>
+    );
+  }
+  return <ActiveCatalogErdExplorerBody />;
 }
