@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 from fastapi import HTTPException, Response
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 
 from app.adapters.demis.errors import DemisAdapterErrorCode
 from app.adapters.demis.fake import FakeReadOnlyDemisAdapter
