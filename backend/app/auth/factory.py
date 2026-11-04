@@ -5,6 +5,7 @@ from __future__ import annotations
 from app.auth.dev_headers import DevHeadersIdentityProvider
 from app.auth.errors import AuthError, AuthErrorCode
 from app.auth.provider import IdentityProvider
+from app.auth.local_session import LocalSessionIdentityProvider, validate_local_auth_settings
 from app.core.config import Settings
 
 _DEV_HEADERS_ALLOWED_ENVS = frozenset({"development", "test"})
@@ -25,6 +26,9 @@ def create_identity_provider(settings: Settings) -> IdentityProvider:
                 "dev_headers identity provider is not available in this environment",
             )
         return DevHeadersIdentityProvider()
+    if provider == "local_session":
+        validate_local_auth_settings(settings)
+        return LocalSessionIdentityProvider(settings)
     raise AuthError(
         AuthErrorCode.PROVIDER_UNAVAILABLE,
         "authentication provider is unavailable",

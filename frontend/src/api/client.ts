@@ -4,6 +4,12 @@ const DEFAULT_API_BASE = "/api/v1";
 
 const DEV_IDENTITY_HEADER_ACTOR = "X-DQA-Dev-Actor";
 const DEV_IDENTITY_HEADER_ROLES = "X-DQA-Dev-Roles";
+let localSessionCsrf: string | null = null;
+
+/** Kept only in browser memory. Never persist bearer/session secrets in storage. */
+export function setLocalSessionCsrf(value: string | null): void {
+  localSessionCsrf = value;
+}
 
 export function getApiBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL?.trim();
@@ -75,12 +81,16 @@ export function finalizeRequestHeaders(
 }
 
 function mergeRequestHeaders(init?: RequestInit, jsonBody?: boolean): Headers {
-  return finalizeRequestHeaders(init, {
+  const headers = finalizeRequestHeaders(init, {
     DEV: import.meta.env.DEV,
     jsonBody,
     VITE_DQA_DEV_ACTOR: import.meta.env.VITE_DQA_DEV_ACTOR,
     VITE_DQA_DEV_ROLES: import.meta.env.VITE_DQA_DEV_ROLES,
   });
+  if (jsonBody && localSessionCsrf) {
+    headers.set("X-DQA-CSRF", localSessionCsrf);
+  }
+  return headers;
 }
 
 function buildUrl(

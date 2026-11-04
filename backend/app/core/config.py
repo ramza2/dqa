@@ -75,10 +75,16 @@ class Settings(BaseSettings):
 
     # Authentication provider. Default disabled = fail-closed on protected routes.
     # ``dev_headers`` is development/test only and rejected outside those envs.
-    dqa_auth_provider: Literal["disabled", "dev_headers"] = Field(
+    dqa_auth_provider: Literal["disabled", "dev_headers", "local_session"] = Field(
         default="disabled",
         alias="DQA_AUTH_PROVIDER",
     )
+    # Local interactive login is opt-in and remains OFF in production Compose.
+    # A fixed, approved HTTPS origin and a distinct 32+-byte CSRF key are
+    # mandatory before it can be enabled in a production deployment.
+    dqa_local_auth_origin: str | None = Field(default=None, alias="DQA_LOCAL_AUTH_ORIGIN")
+    dqa_local_auth_csrf_key: SecretStr | None = Field(default=None, alias="DQA_LOCAL_AUTH_CSRF_KEY")
+    dqa_local_auth_cookie_secure: bool = Field(default=True, alias="DQA_LOCAL_AUTH_COOKIE_SECURE")
     # Dedicated env-var prefix for DEMIS Connection Profile credential refs
     # (``env:<NAME>``). Only names starting with this prefix may be resolved.
     dqa_demis_credential_env_prefix: str = Field(

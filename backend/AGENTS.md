@@ -177,6 +177,21 @@ Mask credentials, hosts, usernames, tokens, and connection strings where exposur
 
 Do not log result rows by default.
 
+## Internal operator login (opt-in)
+
+- `local_session` is an interactive human account provider, not an MCP/FHIR
+  service-client credential or source of DEMIS DBA/clinical approval.
+- Never trust `X-DQA-Dev-*` while using local sessions; keep production Compose
+  fail-closed until the deployment's HTTPS, origin, secret, MFA/IdP and policy
+  review are complete.
+- Use opaque, hashed-at-rest session tokens, HttpOnly/SameSite cookies, strict
+  Origin + CSRF checks for unsafe methods, bounded session TTL, account lockout,
+  revocation and server-side role mapping.
+- Only the server console may provision accounts. No first-user HTTP endpoint,
+  default administrator or password on the command line.
+- Any operator account/role mutation must revoke active sessions and be
+  security-reviewed separately from Catalog/Query Template audit.
+
 ## Tests
 
 Add focused pytest tests for each service boundary and security rule.
