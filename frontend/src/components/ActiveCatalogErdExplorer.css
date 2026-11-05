@@ -1,4 +1,11 @@
-.dqa-erd-page { min-height: 100vh; background: #f8fafc; }
+.dqa-erd-page {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+  overflow: auto;
+}
 
 .dqa-erd-content { padding: 1.1rem 1.4rem 2rem; }
 
@@ -70,6 +77,15 @@
   color: #475569;
 }
 
+.dqa-erd-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 1rem;
+  align-items: start;
+}
+
+.dqa-erd-graph-pane { min-width: 0; }
+
 .dqa-erd-retry,
 .dqa-erd-link-button {
   border: 1px solid #93c5fd;
@@ -82,22 +98,67 @@
 }
 
 .dqa-erd-retry { margin-left: 0.7rem; }
+.dqa-erd-detail-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.85rem; }
+.dqa-erd-detail-actions .dqa-erd-retry { margin-left: 0; }
 
 .dqa-erd-inspector {
-  margin-top: 1rem;
+  position: sticky;
+  top: 0.75rem;
   padding: 1rem 1.2rem;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: white;
   font-size: 0.85rem;
+  max-height: calc(100vh - 8rem);
+  overflow: auto;
 }
 
 .dqa-erd-inspector h3 { margin: 0 0 0.7rem; font-size: 1rem; }
+.dqa-erd-inspector h4 { margin: 0.85rem 0 0.4rem; font-size: 0.8rem; color: #475569; }
 .dqa-erd-inspector p { color: #475569; }
-.dqa-erd-inspector ul { padding-left: 1.2rem; }
-.dqa-erd-inspector li { margin: 0.35rem 0; }
-.dqa-erd-link-button { margin: 0; text-align: left; }
-.dqa-erd-footnote { color: #64748b; font-size: 0.78rem; }
+.dqa-erd-detail-badge {
+  display: inline-flex;
+  margin-bottom: 0.45rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+.dqa-erd-detail-path { line-height: 1.55; }
+.dqa-erd-mapping-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.dqa-erd-mapping-table th,
+.dqa-erd-mapping-table td {
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+}
+.dqa-erd-mapping-table th { background: #f8fafc; color: #64748b; font-weight: 600; }
+.dqa-erd-link-list { list-style: none; margin: 0.7rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+.dqa-erd-link-button {
+  margin: 0;
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 0.2rem;
+}
+.dqa-erd-link-button.selected {
+  border-color: #1d4ed8;
+  background: #dbeafe;
+}
+.dqa-erd-link-name { font-weight: 650; }
+.dqa-erd-link-map { color: #475569; font-size: 0.72rem; }
+.dqa-erd-footnote { color: #64748b; font-size: 0.78rem; margin-top: 1rem; }
+
+@media (max-width: 980px) {
+  .dqa-erd-workspace { grid-template-columns: 1fr; }
+  .dqa-erd-inspector { position: static; max-height: none; }
+}
 
 @media (max-width: 760px) {
   .dqa-erd-content { padding: 0.8rem; }

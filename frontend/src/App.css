@@ -1068,6 +1068,25 @@
 .erd-switch { display: flex; gap: .45rem; margin-top: .25rem; flex-wrap: wrap; }
 .erd-switch button { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); cursor: pointer; padding: .4rem .8rem; }
 .erd-switch button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 650; }
+.focused-erd-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-bottom: 0.35rem;
+}
+.focused-erd-heading h3 { margin: 0; }
+.erd-open-full {
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  padding: 0.4rem 0.7rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
 .erd-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(175px,.9fr) minmax(0,1fr); align-items: center; gap: 1rem; margin: 1rem 0; }
 .erd-center { border: 2px solid var(--accent); border-radius: 10px; background: var(--accent-soft); padding: 1.1rem .8rem; display: grid; gap: .55rem; text-align: center; overflow-wrap: anywhere; }
 .erd-side { min-width: 0; }

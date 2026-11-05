@@ -21,6 +21,7 @@ interface TableData extends Record<string, unknown> {
   categories: string[];
   distance: number | null;
   focused: boolean;
+  selected: boolean;
 }
 
 interface LinkData extends Record<string, unknown> {
@@ -28,21 +29,35 @@ interface LinkData extends Record<string, unknown> {
   points: { x: number; y: number }[];
   showLabel: boolean;
   selected: boolean;
+  incident: boolean;
+  mapping: { source: string; target: string }[];
 }
 
 type FlowTable = Node<TableData, "table">;
 type FlowLink = Edge<LinkData, "orthogonal">;
 
 function TableNode({ data, selected }: NodeProps<FlowTable>) {
-  const tone = data.focused ? "focused" : data.distance === 1 ? "hop1" :
-    data.distance === 2 ? "hop2" : selected ? "selected" : "normal";
+  const tone = data.focused ? "focused"
+    : data.selected || selected ? "selected"
+      : data.distance === 1 ? "hop1"
+        : data.distance === 2 ? "hop2"
+          : data.distance === 3 ? "hop3"
+            : "normal";
   return (
-    <div className={`dqa-erd-node dqa-erd-node-${tone}`} title={`${data.schema}.${data.name}`}>
+    <div
+      className={`dqa-erd-node dqa-erd-node-${tone}`}
+      title={`${data.schema}.${data.name}`}
+      data-testid={data.focused || data.selected ? "erd-highlighted-table" : undefined}
+      data-erd-table={`${data.schema}.${data.name}`}
+    >
       <Handle type="target" position={Position.Left} className="dqa-erd-handle" />
       <div className="dqa-erd-schema">{data.schema}</div>
       <div className="dqa-erd-table">{data.name}</div>
       <div className="dqa-erd-comment">{data.comment || "DB COMMENT 없음"}</div>
       {data.categories.length ? <div className="dqa-erd-category">{data.categories.join(", ")}</div> : null}
+      {data.distance != null && data.distance > 0 ? (
+        <div className="dqa-erd-hop-badge">{data.distance}단계</div>
+      ) : null}
       <Handle type="source" position={Position.Right} className="dqa-erd-handle" />
     </div>
   );
@@ -77,16 +92,30 @@ function OrthogonalEdge(props: EdgeProps<FlowLink>) {
     ? points.map((p, i) => `${i ? "L" : "M"} ${p.x} ${p.y}`).join(" ")
     : fallback;
   const middle = edgeMidpoint(points);
+  const selected = Boolean(props.data?.selected);
+  const incident = Boolean(props.data?.incident);
+  const stroke = selected ? "#1d4ed8" : incident ? "#2563eb" : "#94a3b8";
+  const width = selected ? 3.1 : incident ? 2.2 : 1.5;
   return (
     <>
       <BaseEdge path={path} markerEnd={props.markerEnd}
-        style={{ stroke: props.data?.selected ? "#2563eb" : "#94a3b8",
-          strokeWidth: props.data?.selected ? 2.8 : 1.5 }} />
-      {props.data?.showLabel && points.length >= 2 ? (
+        style={{ stroke, strokeWidth: width }} />
+      {(props.data?.showLabel || selected) && points.length >= 2 ? (
         <EdgeLabelRenderer>
-          <div className="dqa-erd-edge-label nodrag nopan" style={{
-            transform: `translate(-50%, -50%) translate(${middle.x}px,${middle.y}px)`,
-          }}>{props.data.name ?? "FK"}</div>
+          <div
+            className={`dqa-erd-edge-label nodrag nopan${selected ? " selected" : ""}`}
+            style={{
+              transform: `translate(-50%, -50%) translate(${middle.x}px,${middle.y}px)`,
+            }}
+            data-testid={selected ? "erd-highlighted-link-label" : undefined}
+          >
+            {props.data?.name ?? "FK"}
+            {selected && props.data?.mapping?.length ? (
+              <span className="dqa-erd-edge-map">
+                {props.data.mapping.map((item) => `${item.source}→${item.target}`).join(", ")}
+              </span>
+            ) : null}
+          </div>
         </EdgeLabelRenderer>
       ) : null}
     </>
@@ -126,7 +155,8 @@ async function layout(
       data: { schema: table.schema, name: table.name, comment: table.comment,
         categories: table.categories.map((id) => categoryNames[id] ?? id),
         distance: distances.get(table.id) ?? null,
-        focused: focus === table.id },
+        focused: focus === table.id,
+        selected: false },
     };
   });
   const edges: FlowLink[] = (result.edges ?? []).map((edge) => {
@@ -147,7 +177,9 @@ async function layout(
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
       data: { name: original.name, points,
         showLabel: links.length <= 16 && distances.size > 0,
-        selected: false },
+        selected: false,
+        incident: false,
+        mapping: original.mapping },
     };
   });
   return { nodes, edges };
@@ -170,32 +202,76 @@ function GraphCanvas(props: Props) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowLink>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const { fitView } = useReactFlow<FlowTable, FlowLink>();
-  const { tables, links, distances, focus, categoryNames, selectedLink } = props;
+  const { tables, links, distances, focus, categoryNames, selectedTable, selectedLink } = props;
 
   useEffect(() => {
     let current = true;
     setStatus("loading");
     layout(tables, links, distances, focus, categoryNames).then((result) => {
       if (!current) return;
-      setNodes(result.nodes);
-      setEdges(result.edges);
+      setNodes(result.nodes.map((node) => ({
+        ...node,
+        data: { ...node.data, selected: node.id === selectedTable },
+        selected: node.id === selectedTable,
+      })));
+      setEdges(result.edges.map((edge) => ({
+        ...edge,
+        data: {
+          ...edge.data!,
+          selected: edge.id === selectedLink,
+          incident: Boolean(selectedTable) &&
+            (edge.source === selectedTable || edge.target === selectedTable),
+        },
+      })));
       setStatus("ready");
       requestAnimationFrame(() => {
-        if (current) void fitView({ padding: 0.15, duration: 250, maxZoom: 1.15 });
+        if (!current) return;
+        if (selectedTable || focus) {
+          void fitView({
+            nodes: [{ id: selectedTable || focus }],
+            padding: 0.35,
+            duration: 280,
+            maxZoom: 1.2,
+          });
+        } else {
+          void fitView({ padding: 0.15, duration: 250, maxZoom: 1.15 });
+        }
       });
     }).catch(() => {
       if (current) setStatus("error");
     });
     return () => { current = false; };
+    // selectedTable/selectedLink are applied in a separate effect so layout is not rebuilt on every click.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tables, links, distances, focus, categoryNames, setNodes, setEdges, fitView]);
 
   useEffect(() => {
     if (status !== "ready") return;
+    setNodes((current) => current.map((node) => ({
+      ...node,
+      selected: node.id === selectedTable,
+      data: { ...node.data, selected: node.id === selectedTable },
+    })));
     setEdges((current) => current.map((edge) => ({
       ...edge,
-      data: { ...edge.data!, selected: edge.id === selectedLink },
+      data: {
+        ...edge.data!,
+        selected: edge.id === selectedLink,
+        incident: Boolean(selectedTable) &&
+          (edge.source === selectedTable || edge.target === selectedTable),
+      },
     })));
-  }, [selectedLink, status, setEdges]);
+    if (selectedTable) {
+      requestAnimationFrame(() => {
+        void fitView({
+          nodes: [{ id: selectedTable }],
+          padding: 0.35,
+          duration: 220,
+          maxZoom: 1.2,
+        });
+      });
+    }
+  }, [selectedTable, selectedLink, status, setNodes, setEdges, fitView]);
 
   return <div className="dqa-erd-canvas">
     {status === "loading" ? <div className="dqa-erd-status" role="status">ELK 자동 배치 계산 중…</div> : null}

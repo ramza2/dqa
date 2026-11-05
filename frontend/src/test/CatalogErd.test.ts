@@ -32,10 +32,20 @@ describe("active Catalog ERD graph", () => {
     expect(graph.links[0].mapping).toEqual([{ source: "PT_ID", target: "ID" }]);
   });
 
-  it("supports full, category and focused 1-/2-hop views", () => {
-    const graph = buildCatalogGraph(tables, relations);
+  it("supports full, category and focused 1-/2-/3-hop views", () => {
+    const extendedTables: CatalogTableItem[] = [
+      ...tables,
+      { schema_name: "DEMIS_OWNER", name: "LAB", comment: "검사", table_type: "BASE TABLE", category_ids: [] },
+    ];
+    const extendedRelations: CatalogRelationItem[] = [
+      ...relations,
+      { name: "FK_LAB_RX", schema_name: "DEMIS_OWNER", table_name: "LAB",
+        referenced_schema_name: "DEMIS_OWNER", referenced_table_name: "PRESCRIPTION",
+        columns: [{ column: "RX_ID", referenced_column: "ID" }] },
+    ];
+    const graph = buildCatalogGraph(extendedTables, extendedRelations);
     const selection = { mode: "full" as const, focus: "", category: "", search: "", hops: 1 as const };
-    expect(selectErdGraph(graph, selection).nodes).toHaveLength(4);
+    expect(selectErdGraph(graph, selection).nodes).toHaveLength(5);
     expect(selectErdGraph(graph, { ...selection, mode: "category", category: "medical" })
       .nodes.map((node) => node.name).sort()).toEqual(["ENCOUNTER", "PATIENT"]);
     expect(selectErdGraph(graph, { ...selection, search: "처방" }).nodes[0].name)
@@ -46,6 +56,10 @@ describe("active Catalog ERD graph", () => {
     const hop2 = selectErdGraph(graph, { ...selection, mode: "neighborhood", focus: center, hops: 2 });
     expect(hop2.nodes.map((node) => node.name).sort()).toEqual(["ENCOUNTER", "PATIENT", "PRESCRIPTION"]);
     expect(hop2.distances.get(tableIdentity("DEMIS_OWNER", "PRESCRIPTION"))).toBe(2);
+    const hop3 = selectErdGraph(graph, { ...selection, mode: "neighborhood", focus: center, hops: 3 });
+    expect(hop3.nodes.map((node) => node.name).sort())
+      .toEqual(["ENCOUNTER", "LAB", "PATIENT", "PRESCRIPTION"]);
+    expect(hop3.distances.get(tableIdentity("DEMIS_OWNER", "LAB"))).toBe(3);
   });
 
   it("bounds dense layouts and reports every omitted table and relation", () => {

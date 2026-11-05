@@ -7,6 +7,7 @@ interface Props {
   relations: DirectedRelation[];
   source: string;
   revision: number;
+  onOpenFullErd?: () => void;
 }
 
 function RelationCard({ relation }: { relation: FocusedErdEdge }) {
@@ -26,11 +27,23 @@ function RelationCard({ relation }: { relation: FocusedErdEdge }) {
   );
 }
 
-export function FocusedErdPanel({ detail, relations, source, revision }: Props) {
+export function FocusedErdPanel({ detail, relations, source, revision, onOpenFullErd }: Props) {
   const graph = buildFocusedErd(detail.schema_name, detail.name, relations);
   return (
     <section className="section focused-erd" aria-label="테이블 관계 ERD">
-      <h3>테이블 관계 ERD (1단계)</h3>
+      <div className="focused-erd-heading">
+        <h3>테이블 관계 ERD (1단계)</h3>
+        {onOpenFullErd ? (
+          <button
+            type="button"
+            className="erd-open-full"
+            data-testid="open-full-erd-explorer"
+            onClick={onOpenFullErd}
+          >
+            ERD Explorer에서 탐색
+          </button>
+        ) : null}
+      </div>
       <p className="muted">
         Source: {source} · Revision: {revision} · FK 관계 {graph.total}건
       </p>

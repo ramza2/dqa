@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadActiveCatalogErd, type CatalogErdSnapshot } from "../api/catalogErd";
-import { buildCatalogGraph, selectErdGraph, type ErdMode } from "../utils/catalogErd";
+import {
+  buildCatalogGraph,
+  selectErdGraph,
+  tableIdentity,
+  type ErdHops,
+  type ErdMode,
+} from "../utils/catalogErd";
 import { ActiveCatalogHeader, SourceSelector } from "./ActiveCatalogHeader";
 import { useCatalogSource, useOptionalCatalogSource } from "../hooks/catalogSourceContext";
+import { useOptionalErdFocus } from "../hooks/erdFocusContext";
 import { CatalogSourceProvider } from "./CatalogSourceContext";
 import { CatalogErdCanvas } from "./CatalogErdCanvas";
 import { StatusBanner } from "./StatusBanner";
@@ -17,6 +24,7 @@ function ActiveCatalogErdExplorerBody() {
     selectSource,
     sourcesState,
   } = useCatalogSource();
+  const erdFocus = useOptionalErdFocus();
   const [snapshot, setSnapshot] = useState<CatalogErdSnapshot | null>(null);
   const [status, setStatus] = useState<Loading>("idle");
   const [reload, setReload] = useState(0);
@@ -24,7 +32,7 @@ function ActiveCatalogErdExplorerBody() {
   const [focus, setFocus] = useState("");
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
-  const [hops, setHops] = useState<1 | 2>(1);
+  const [hops, setHops] = useState<ErdHops>(1);
   const [selectedTable, setSelectedTable] = useState("");
   const [selectedLink, setSelectedLink] = useState("");
 
@@ -43,6 +51,7 @@ function ActiveCatalogErdExplorerBody() {
     setCategory("");
     setSearch("");
     setMode("full");
+    setHops(1);
     loadActiveCatalogErd(source).then((result) => {
       if (!valid) return;
       setSnapshot(result);
@@ -63,18 +72,48 @@ function ActiveCatalogErdExplorerBody() {
   // SourceSelector updates before the async effect can clear the previous response.
   // Never render an earlier source's Catalog even for one intermediate frame.
   const visibleSnapshot = snapshot?.active.source_name === source ? snapshot : null;
-  const selectedNode = selection.nodes.find((node) => node.id === selectedTable);
-  const selectedRelation = selection.links.find((link) => link.id === selectedLink);
+  const selectedNode = selection.nodes.find((node) => node.id === selectedTable)
+    ?? graph.nodes.find((node) => node.id === selectedTable);
+  const selectedRelation = selection.links.find((link) => link.id === selectedLink)
+    ?? graph.links.find((link) => link.id === selectedLink);
   const tableLabel = (id: string) => {
     const node = graph.nodes.find((item) => item.id === id);
     return node ? `${node.schema}.${node.name}` : "확인되지 않은 테이블";
   };
-  const title = "ERD Explorer";
+
+  // Consume one-shot Table Explorer → ERD focus after the active Catalog load succeeds.
+  useEffect(() => {
+    const request = erdFocus?.focusRequest;
+    if (!request || status !== "ready" || !visibleSnapshot) {
+      return;
+    }
+    if (request.sourceName !== source) {
+      erdFocus.clearErdFocus();
+      return;
+    }
+    const id = tableIdentity(request.schemaName, request.tableName);
+    if (!graph.nodes.some((node) => node.id === id)) {
+      erdFocus.clearErdFocus();
+      return;
+    }
+    setMode("neighborhood");
+    setFocus(id);
+    setSelectedTable(id);
+    setSelectedLink("");
+    setSearch("");
+    setCategory("");
+    setHops(request.hops);
+    erdFocus.clearErdFocus();
+  }, [erdFocus, status, visibleSnapshot, source, graph.nodes]);
+
+  const incidentLinks = selectedNode
+    ? graph.links.filter((item) => item.source === selectedNode.id || item.target === selectedNode.id)
+    : [];
 
   return <div className="dqa-erd-page" data-testid="active-catalog-erd-explorer">
     <header className="app-header">
       <div className="app-title-row">
-        <h1>{title}</h1>
+        <h1>ERD Explorer</h1>
         <span className="subtitle">React Flow + ELK 기반 활성 Catalog 테이블 관계도</span>
       </div>
       <SourceSelector
@@ -127,7 +166,7 @@ function ActiveCatalogErdExplorerBody() {
       <div className="dqa-erd-filters">
         <label>View
           <select aria-label="ERD 보기 방식" value={mode} onChange={(event) => {
-            setMode(event.target.value as ErdMode); setSelectedLink(""); setSelectedTable("");
+            setMode(event.target.value as ErdMode); setSelectedLink("");
           }}>
             <option value="full">전체 ERD</option>
             <option value="neighborhood">선택 Table 주변</option>
@@ -135,7 +174,11 @@ function ActiveCatalogErdExplorerBody() {
           </select>
         </label>
         {mode === "neighborhood" ? <label>Focus Table
-          <select aria-label="ERD 중심 테이블" value={focus} onChange={(event) => setFocus(event.target.value)}>
+          <select aria-label="ERD 중심 테이블" value={focus} onChange={(event) => {
+            setFocus(event.target.value);
+            setSelectedTable(event.target.value);
+            setSelectedLink("");
+          }}>
             <option value="">테이블 선택</option>
             {graph.nodes.map((node) => <option key={node.id} value={node.id}>
               {node.schema}.{node.name} — {node.comment ?? "설명 없음"}
@@ -143,8 +186,11 @@ function ActiveCatalogErdExplorerBody() {
           </select>
         </label> : null}
         {mode === "neighborhood" ? <label>탐색 범위
-          <select aria-label="ERD 관계 단계" value={hops} onChange={(event) => setHops(Number(event.target.value) as 1 | 2)}>
-            <option value={1}>1단계 FK</option><option value={2}>2단계 FK</option>
+          <select aria-label="ERD 관계 단계" value={hops}
+            onChange={(event) => setHops(Number(event.target.value) as ErdHops)}>
+            <option value={1}>1단계 FK</option>
+            <option value={2}>2단계 FK</option>
+            <option value={3}>3단계 FK</option>
           </select>
         </label> : null}
         {mode === "category" ? <label>Category
@@ -162,43 +208,87 @@ function ActiveCatalogErdExplorerBody() {
         </label>
       </div>
 
-      {selection.nodes.length > 0 ? <CatalogErdCanvas
-        tables={selection.nodes} links={selection.links} distances={selection.distances}
-        focus={mode === "neighborhood" ? focus : ""}
-        categoryNames={categoryNames}
-        selectedTable={selectedTable} selectedLink={selectedLink}
-        onTableSelect={(id) => { setSelectedTable(id); setSelectedLink(""); }}
-        onLinkSelect={setSelectedLink}
-      /> : <p className="dqa-erd-notice">
-        {mode === "neighborhood" && !focus ? "중심 테이블을 선택하세요." :
-          mode === "category" && !category ? "Category를 선택하세요." :
-            "조건에 맞는 Table이 없습니다."}
-      </p>}
+      <div className="dqa-erd-workspace">
+        <div className="dqa-erd-graph-pane">
+          {selection.nodes.length > 0 ? <CatalogErdCanvas
+            tables={selection.nodes} links={selection.links} distances={selection.distances}
+            focus={mode === "neighborhood" ? focus : ""}
+            categoryNames={categoryNames}
+            selectedTable={selectedTable} selectedLink={selectedLink}
+            onTableSelect={(id) => { setSelectedTable(id); setSelectedLink(""); }}
+            onLinkSelect={setSelectedLink}
+          /> : <p className="dqa-erd-notice">
+            {mode === "neighborhood" && !focus ? "중심 테이블을 선택하세요." :
+              mode === "category" && !category ? "Category를 선택하세요." :
+                "조건에 맞는 Table이 없습니다."}
+          </p>}
+        </div>
 
-      <section className="dqa-erd-inspector" aria-label="ERD 관계 상세">
-        <h3>관계 상세</h3>
-        {selectedRelation ? <div>
-          <strong>{selectedRelation.name ?? "이름 없는 FK"}</strong>
-          <p>{tableLabel(selectedRelation.source)}{" → "}{tableLabel(selectedRelation.target)}</p>
-          <p className="mono">{selectedRelation.mapping.map((item) =>
-            `${item.source} → ${item.target}`).join(", ") || "컬럼 매핑 없음"}</p>
-        </div> : selectedNode ? <div>
-          <strong className="mono">{selectedNode.schema}.{selectedNode.name}</strong>
-          <p>{selectedNode.comment ?? "DB COMMENT 없음"}</p>
-          <p>연결된 FK {selection.links.filter((item) =>
-            item.source === selectedNode.id || item.target === selectedNode.id).length}건</p>
-          <button type="button" className="dqa-erd-retry" onClick={() => {
-            setFocus(selectedNode.id); setMode("neighborhood"); setSearch(""); setSelectedLink("");
-          }}>이 테이블 중심 보기</button>
-          <ul>{selection.links.filter((item) => item.source === selectedNode.id || item.target === selectedNode.id)
-            .map((item) => <li key={item.id}>
-              <button type="button" className="dqa-erd-link-button" onClick={() => setSelectedLink(item.id)}>
-                {item.name ?? "FK"}: {item.mapping.map((pair) =>
-                  `${pair.source} → ${pair.target}`).join(", ") || "컬럼 매핑 없음"}
+        <section className="dqa-erd-inspector" aria-label="ERD 관계 상세" data-testid="erd-relation-inspector">
+          <h3>관계 상세</h3>
+          {selectedRelation ? <div data-testid="erd-relation-detail">
+            <div className="dqa-erd-detail-badge">FK 관계</div>
+            <strong>{selectedRelation.name ?? "이름 없는 FK"}</strong>
+            <p className="dqa-erd-detail-path">
+              <span className="mono">{tableLabel(selectedRelation.source)}</span>
+              <span aria-hidden="true"> → </span>
+              <span className="mono">{tableLabel(selectedRelation.target)}</span>
+            </p>
+            <h4>컬럼 매핑</h4>
+            {selectedRelation.mapping.length ? (
+              <table className="dqa-erd-mapping-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Source column</th>
+                    <th scope="col">Referenced column</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedRelation.mapping.map((item) => (
+                    <tr key={`${item.source}->${item.target}`}>
+                      <td className="mono">{item.source}</td>
+                      <td className="mono">{item.target}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <p>컬럼 매핑 없음</p>}
+            <div className="dqa-erd-detail-actions">
+              <button type="button" className="dqa-erd-retry" onClick={() => {
+                setFocus(selectedRelation.source);
+                setSelectedTable(selectedRelation.source);
+                setMode("neighborhood");
+                setSearch("");
+              }}>Source 테이블 중심</button>
+              <button type="button" className="dqa-erd-retry" onClick={() => {
+                setFocus(selectedRelation.target);
+                setSelectedTable(selectedRelation.target);
+                setMode("neighborhood");
+                setSearch("");
+              }}>Referenced 테이블 중심</button>
+            </div>
+          </div> : selectedNode ? <div data-testid="erd-table-detail">
+            <div className="dqa-erd-detail-badge">Table</div>
+            <strong className="mono">{selectedNode.schema}.{selectedNode.name}</strong>
+            <p>{selectedNode.comment ?? "DB COMMENT 없음"}</p>
+            <p>연결된 FK {incidentLinks.length}건
+              {mode === "neighborhood" && focus === selectedNode.id
+                ? ` · 현재 ${hops}단계 탐색 중심` : null}
+            </p>
+            <button type="button" className="dqa-erd-retry" onClick={() => {
+              setFocus(selectedNode.id); setMode("neighborhood"); setSearch(""); setSelectedLink("");
+            }}>이 테이블 중심 보기</button>
+            <ul className="dqa-erd-link-list">{incidentLinks.map((item) => <li key={item.id}>
+              <button type="button" className={`dqa-erd-link-button${item.id === selectedLink ? " selected" : ""}`}
+                onClick={() => setSelectedLink(item.id)}>
+                <span className="dqa-erd-link-name">{item.name ?? "FK"}</span>
+                <span className="mono dqa-erd-link-map">{item.mapping.map((pair) =>
+                  `${pair.source} → ${pair.target}`).join(", ") || "컬럼 매핑 없음"}</span>
               </button>
             </li>)}</ul>
-        </div> : <p>그래프의 테이블 또는 FK 관계선을 선택하면 컬럼 매핑과 관계를 확인할 수 있습니다.</p>}
-      </section>
+          </div> : <p>그래프의 테이블 또는 FK 관계선을 선택하면 컬럼 매핑과 관계를 확인할 수 있습니다.</p>}
+        </section>
+      </div>
       <p className="dqa-erd-footnote">React Flow 그래프는 읽기 전용이며 테이블/관계선을 수정하지 않습니다. Source 또는 Revision이 변경되면 새로 조회합니다.</p>
     </main> : null}
   </div>;

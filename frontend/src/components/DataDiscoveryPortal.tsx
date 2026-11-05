@@ -1,6 +1,7 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { CatalogExplorer } from "./CatalogExplorer";
 import { CatalogSourceProvider } from "./CatalogSourceContext";
+import { ErdFocusProvider } from "./ErdFocusContext";
 import { DataDiscoveryIndexStatus } from "./DataDiscoveryIndexStatus";
 import { SchemaSearch } from "./SchemaSearch";
 import { SchemaSnapshotHistory } from "./SchemaSnapshotHistory";
@@ -12,6 +13,7 @@ type DiscoveryTab = "search" | "explorer" | "erd" | "index" | "snapshot";
 
 export function DataDiscoveryPortal() {
   const [tab, setTab] = useState<DiscoveryTab>("search");
+  const openErdTab = useCallback(() => setTab("erd"), []);
 
   return (
     <div className="dd-portal" data-testid="data-discovery-portal">
@@ -68,14 +70,16 @@ export function DataDiscoveryPortal() {
         </button>
       </div>
 
-      {/* Shared Source is scoped to Table/ERD only; other tabs keep independent flows. */}
+      {/* Shared Source + ERD focus handoff are scoped to Table/ERD only. */}
       <CatalogSourceProvider>
-        {tab === "explorer" ? <CatalogExplorer /> : null}
-        {tab === "erd" ? (
-          <Suspense fallback={<p role="status">ERD Explorer 로딩 중…</p>}>
-            <ActiveCatalogErdExplorer />
-          </Suspense>
-        ) : null}
+        <ErdFocusProvider onAfterRequest={openErdTab}>
+          {tab === "explorer" ? <CatalogExplorer /> : null}
+          {tab === "erd" ? (
+            <Suspense fallback={<p role="status">ERD Explorer 로딩 중…</p>}>
+              <ActiveCatalogErdExplorer />
+            </Suspense>
+          ) : null}
+        </ErdFocusProvider>
       </CatalogSourceProvider>
       {tab === "search" ? <SchemaSearch /> : null}
       {tab === "index" ? <DataDiscoveryIndexStatus /> : null}

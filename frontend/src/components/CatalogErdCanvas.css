@@ -55,10 +55,27 @@
   overflow: hidden;
 }
 
-.dqa-erd-node-focused { border: 3px solid #16a34a; background: #f0fdf4; }
-.dqa-erd-node-selected { border: 2px solid #16a34a; background: #f0fdf4; }
+.dqa-erd-node-focused { border: 3px solid #16a34a; background: #f0fdf4; box-shadow: 0 0 0 3px #86efac66; }
+.dqa-erd-node-selected { border: 2.5px solid #15803d; background: #ecfdf5; box-shadow: 0 0 0 2px #86efac55; }
 .dqa-erd-node-hop1 { border: 2px solid #2563eb; background: #eff6ff; }
-.dqa-erd-node-hop2 { border-color: #64748b; background: #f8fafc; }
+.dqa-erd-node-hop2 { border: 2px solid #64748b; background: #f8fafc; }
+.dqa-erd-node-hop3 { border: 1.5px dashed #94a3b8; background: #f1f5f9; color: #334155; }
+
+.dqa-erd-hop-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.62rem;
+  font-weight: 650;
+}
+
+.dqa-erd-node-hop1 .dqa-erd-hop-badge { background: #dbeafe; color: #1d4ed8; }
+.dqa-erd-node-hop2 .dqa-erd-hop-badge { background: #e2e8f0; color: #475569; }
+.dqa-erd-node-hop3 .dqa-erd-hop-badge { background: #e2e8f0; color: #64748b; }
 
 .dqa-erd-schema {
   color: #64748b;
@@ -103,6 +120,8 @@
 
 .dqa-erd-edge-label {
   position: absolute;
+  display: grid;
+  gap: 0.1rem;
   padding: 2px 5px;
   border: 1px solid #dbeafe;
   border-radius: 4px;
@@ -110,6 +129,20 @@
   color: #475569;
   font-size: 0.62rem;
   white-space: nowrap;
+}
+
+.dqa-erd-edge-label.selected {
+  border-color: #1d4ed8;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-weight: 650;
+}
+
+.dqa-erd-edge-map {
+  color: #475569;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.58rem;
+  font-weight: 500;
 }
 
 .dqa-erd-root .react-flow__minimap {
