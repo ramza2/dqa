@@ -713,6 +713,64 @@
   overflow: hidden;
 }
 
+.dd-source-toolbar {
+  padding: 0.55rem 1.25rem;
+  background: #eef5ff;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.dd-source-toolbar-main {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.dd-source-toolbar-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.dd-source-toolbar-picker select {
+  min-width: 185px;
+  max-width: min(100%, 340px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.dd-source-toolbar-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 1.25rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.dd-source-toolbar-details strong,
+.dd-source-toolbar-details code {
+  margin-left: 0.25rem;
+  color: var(--text);
+}
+
+.dd-source-toolbar-note {
+  margin: 0.35rem 0 0;
+  color: #415676;
+  font-size: 0.78rem;
+}
+
+.dd-source-toolbar .banner {
+  margin-top: 0.45rem;
+}
+
 .dd-subnav {
   display: flex;
   gap: 0.35rem;

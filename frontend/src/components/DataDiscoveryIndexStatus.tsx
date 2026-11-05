@@ -7,6 +7,7 @@ import {
 } from "../api/dataDiscovery";
 import type { LoadState } from "../hooks/useCatalogExplorer";
 import type { CatalogActiveSummary } from "../types/catalog";
+import { useOptionalCatalogSource } from "../hooks/catalogSourceContext";
 import { CatalogApiError } from "../types/catalog";
 import type {
   DataDiscoveryEmbeddingSyncResponse,
@@ -99,16 +100,28 @@ function responseMatchesSnapshot(
   );
 }
 
-export function DataDiscoveryIndexStatus() {
-  const [sources, setSources] = useState<CatalogActiveSummary[]>([]);
-  const [sourcesState, setSourcesState] = useState<LoadState>({
+export function DataDiscoveryIndexStatus({
+  sharedSourceBar = false,
+  onBusyChange,
+}: { sharedSourceBar?: boolean; onBusyChange?: (busy: boolean) => void } = {}) {
+  const sourceSelection = useOptionalCatalogSource();
+  const useShared = sharedSourceBar && sourceSelection !== null;
+  const [localSources, setLocalSources] = useState<CatalogActiveSummary[]>([]);
+  const [localSourcesState, setLocalSourcesState] = useState<LoadState>({
     status: "loading",
     message: null,
     code: null,
     httpStatus: null,
   });
-  const [selectedSource, setSelectedSource] = useState<string | null>(null);
-  const [active, setActive] = useState<CatalogActiveSummary | null>(null);
+  const [localSelectedSource, setLocalSelectedSource] = useState<string | null>(null);
+  const [localActive, setLocalActive] = useState<CatalogActiveSummary | null>(null);
+  const sources = useShared ? sourceSelection.sources : localSources;
+  const sourcesState = useShared ? sourceSelection.sourcesState : localSourcesState;
+  const selectedSource = useShared ? sourceSelection.selectedSource || null : localSelectedSource;
+  const active = useShared
+    ? sources.find((item) => item.source_name === selectedSource) ?? null
+    : localActive;
+  const reloadShared = useShared ? sourceSelection.reloadSources : null;
   const [status, setStatus] = useState<DataDiscoveryIndexStatusResponse | null>(null);
   const [statusState, setStatusState] = useState<LoadState>(idleState);
   const [staleWarning, setStaleWarning] = useState<string | null>(null);
@@ -121,12 +134,13 @@ export function DataDiscoveryIndexStatus() {
   const activeRef = useRef<CatalogActiveSummary | null>(null);
   const selectedSourceRef = useRef<string | null>(null);
 
+  activeRef.current = active;
+  selectedSourceRef.current = selectedSource;
+
   useEffect(() => {
-    activeRef.current = active;
-  }, [active]);
-  useEffect(() => {
-    selectedSourceRef.current = selectedSource;
-  }, [selectedSource]);
+    onBusyChange?.(busyAction !== null);
+    return () => onBusyChange?.(false);
+  }, [onBusyChange, busyAction]);
 
   const clearActionUi = useCallback(() => {
     setActionError(null);
@@ -134,7 +148,11 @@ export function DataDiscoveryIndexStatus() {
   }, []);
 
   const refreshSources = useCallback(async () => {
-    setSourcesState({
+    if (reloadShared) {
+      await reloadShared();
+      return;
+    }
+    setLocalSourcesState({
       status: "loading",
       message: null,
       code: null,
@@ -142,40 +160,40 @@ export function DataDiscoveryIndexStatus() {
     });
     try {
       const items = await listActiveCatalogs();
-      setSources(items);
+      setLocalSources(items);
       if (items.length === 0) {
-        setSourcesState({
+        setLocalSourcesState({
           status: "empty",
           message: null,
           code: null,
           httpStatus: null,
         });
-        setSelectedSource(null);
-        setActive(null);
+        setLocalSelectedSource(null);
+        setLocalActive(null);
         setStatus(null);
         return;
       }
-      setSourcesState({
+      setLocalSourcesState({
         status: "ready",
         message: null,
         code: null,
         httpStatus: null,
       });
-      setSelectedSource((prev) => {
+      setLocalSelectedSource((prev) => {
         if (prev && items.some((s) => s.source_name === prev)) {
           return prev;
         }
         return items[0].source_name;
       });
     } catch (error) {
-      setSources([]);
-      setSelectedSource(null);
-      setActive(null);
+      setLocalSources([]);
+      setLocalSelectedSource(null);
+      setLocalActive(null);
       setStatus(null);
       clearActionUi();
-      setSourcesState(toErrorState(error));
+      setLocalSourcesState(toErrorState(error));
     }
-  }, [clearActionUi]);
+  }, [clearActionUi, reloadShared]);
 
   const loadStatus = useCallback(
     async (sourceName: string, snapshot: CatalogActiveSummary) => {
@@ -234,21 +252,27 @@ export function DataDiscoveryIndexStatus() {
   );
 
   useEffect(() => {
-    void refreshSources();
-  }, [refreshSources]);
+    if (!useShared) void refreshSources();
+  }, [useShared, refreshSources]);
 
   useEffect(() => {
+    if (useShared) return;
     if (!selectedSource) {
-      setActive(null);
+      setLocalActive(null);
       setStatus(null);
       return;
     }
     const match = sources.find((s) => s.source_name === selectedSource) ?? null;
-    setActive(match);
-    if (match) {
-      void loadStatus(selectedSource, match);
+    setLocalActive(match);
+  }, [selectedSource, sources, useShared]);
+
+  useEffect(() => {
+    if (!selectedSource || !active || active.source_name !== selectedSource) {
+      setStatus(null);
+      return;
     }
-  }, [selectedSource, sources, loadStatus]);
+    void loadStatus(selectedSource, active);
+  }, [selectedSource, active, loadStatus]);
 
   const rejectStaleActionOnCurrentSource = useCallback(() => {
     clearActionUi();
@@ -365,13 +389,13 @@ export function DataDiscoveryIndexStatus() {
         <span className="subtitle">Discovery documents and embedding coverage</span>
       </div>
 
-      <SourceSelector
+      {!useShared ? <SourceSelector
         sources={sources}
         selectedSource={selectedSource ?? ""}
         onSelect={(name) => {
           requestSeq.current += 1;
           actionSeq.current += 1;
-          setSelectedSource(name);
+          setLocalSelectedSource(name);
           setStatus(null);
           setStatusState(idleState);
           setStaleWarning(null);
@@ -379,11 +403,11 @@ export function DataDiscoveryIndexStatus() {
           setBusyAction(null);
         }}
         disabled={sourcesState.status === "loading" || busyAction !== null}
-      />
+      /> : null}
 
-      {sourcesState.status === "loading" ||
+      {!useShared && (sourcesState.status === "loading" ||
       sourcesState.status === "error" ||
-      sourcesState.status === "empty" ? (
+      sourcesState.status === "empty") ? (
         <StatusBanner state={sourcesState} emptyLabel="No active Catalog" />
       ) : null}
 
@@ -414,7 +438,9 @@ export function DataDiscoveryIndexStatus() {
         </div>
       ) : null}
 
-      {status ? (
+      {status && active && status.source_name === selectedSource &&
+      status.catalog_revision_id === active?.revision_id &&
+      status.schema_fingerprint === active.schema_fingerprint ? (
         <div className="dd-index-body" data-testid="index-status-body">
           <section className="dd-index-section">
             <h3>Active Catalog</h3>
