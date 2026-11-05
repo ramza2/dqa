@@ -309,7 +309,7 @@ export function DataDiscoveryIndexStatus({
         return;
       }
       setActionMessage(
-        `Rebuilt ${result.document_count} documents (upserted ${result.upserted_count}, deleted ${result.deleted_count}).`,
+        `검색 문서 ${result.document_count}건 재생성 완료 (추가·갱신 ${result.upserted_count}건, 삭제 ${result.deleted_count}건).`,
       );
       const current = activeRef.current;
       if (current && current.source_name === snapshot.source_name) {
@@ -332,7 +332,7 @@ export function DataDiscoveryIndexStatus({
       return;
     }
     const confirmed = window.confirm(
-      "This sends derived schema metadata to the configured embedding service. Continue?",
+      "검색용 스키마 메타데이터가 설정된 임베딩 서비스로 전송됩니다. 임베딩 동기화를 진행할까요? 실제 환자·진료 데이터는 대상이 아닙니다.",
     );
     if (!confirmed) {
       return;
@@ -357,7 +357,7 @@ export function DataDiscoveryIndexStatus({
         return;
       }
       setActionMessage(
-        `Synced embeddings: embedded ${result.embedded_count}, skipped ${result.skipped_count}.`,
+        `임베딩 동기화 완료 (처리 ${result.embedded_count}건, 건너뜀 ${result.skipped_count}건).`,
       );
       const current = activeRef.current;
       if (current && current.source_name === snapshot.source_name) {
@@ -385,8 +385,8 @@ export function DataDiscoveryIndexStatus({
   return (
     <div className="dd-panel" data-testid="data-discovery-index-status">
       <div className="dd-panel-header">
-        <h2>Index Status</h2>
-        <span className="subtitle">Discovery documents and embedding coverage</span>
+        <h2>검색 인덱스 상태</h2>
+        <span className="subtitle">검색 문서와 임베딩 준비 상태를 확인하고 필요한 경우 갱신합니다.</span>
       </div>
 
       {!useShared ? <SourceSelector
@@ -408,7 +408,7 @@ export function DataDiscoveryIndexStatus({
       {!useShared && (sourcesState.status === "loading" ||
       sourcesState.status === "error" ||
       sourcesState.status === "empty") ? (
-        <StatusBanner state={sourcesState} emptyLabel="No active Catalog" />
+        <StatusBanner state={sourcesState} emptyLabel="활성 Catalog가 없습니다." />
       ) : null}
 
       {staleWarning ? (
@@ -429,7 +429,7 @@ export function DataDiscoveryIndexStatus({
 
       {statusState.status === "loading" ? (
         <div className="banner banner-empty" data-testid="index-status-loading">
-          Loading index status…
+          검색 인덱스 상태를 불러오는 중…
         </div>
       ) : null}
       {statusState.status === "error" ? (
@@ -442,35 +442,35 @@ export function DataDiscoveryIndexStatus({
       status.catalog_revision_id === active?.revision_id &&
       status.schema_fingerprint === active.schema_fingerprint ? (
         <div className="dd-index-body" data-testid="index-status-body">
-          <section className="dd-index-section">
-            <h3>Active Catalog</h3>
+          {!useShared ? <section className="dd-index-section">
+            <h3>활성 Catalog 정보</h3>
             <div className="status-grid dd-meta-grid">
               <div className="status-item">
-                <span className="label">Source</span>
+                <span className="label">데이터 소스</span>
                 <span className="value">{status.source_name}</span>
               </div>
               <div className="status-item">
-                <span className="label">Revision</span>
+                <span className="label">개정번호</span>
                 <span className="value">{status.catalog_revision_id}</span>
               </div>
               <div className="status-item">
-                <span className="label">Fingerprint</span>
+                <span className="label">스키마 지문</span>
                 <span className="value">{shortenFingerprint(status.schema_fingerprint)}</span>
               </div>
             </div>
-          </section>
+          </section> : null}
 
           <section className="dd-index-section">
-            <h3>Discovery Documents</h3>
+            <h3>검색 문서</h3>
             <div className="status-grid dd-meta-grid">
               <div className="status-item">
-                <span className="label">State</span>
+                <span className="label">상태</span>
                 <span className={stateBadgeClass(status.document_state)} data-testid="document-state">
                   {status.document_state}
                 </span>
               </div>
               <div className="status-item">
-                <span className="label">Document count</span>
+                <span className="label">문서 수</span>
                 <span className="value" data-testid="document-count">
                   {status.document_count}
                 </span>
@@ -478,16 +478,16 @@ export function DataDiscoveryIndexStatus({
             </div>
             {status.document_state === "NOT_READY" ? (
               <p className="dd-guidance" data-testid="doc-guidance">
-                Build discovery documents before searching.
+                검색을 시작하기 전에 검색 문서를 생성해 주세요.
               </p>
             ) : null}
           </section>
 
           <section className="dd-index-section">
-            <h3>Embedding</h3>
+            <h3>의미 검색용 임베딩</h3>
             <div className="status-grid dd-meta-grid">
               <div className="status-item">
-                <span className="label">State</span>
+                <span className="label">상태</span>
                 <span
                   className={stateBadgeClass(status.embedding_state)}
                   data-testid="embedding-state"
@@ -496,48 +496,47 @@ export function DataDiscoveryIndexStatus({
                 </span>
               </div>
               <div className="status-item">
-                <span className="label">Provider</span>
+                <span className="label">제공자</span>
                 <span className="value">{status.provider ?? "—"}</span>
               </div>
               <div className="status-item">
-                <span className="label">Model</span>
+                <span className="label">모델</span>
                 <span className="value">{status.model_name ?? "—"}</span>
               </div>
               <div className="status-item">
-                <span className="label">Model revision</span>
+                <span className="label">모델 개정번호</span>
                 <span className="value">{status.model_revision ?? "—"}</span>
               </div>
               <div className="status-item">
-                <span className="label">Model key</span>
+                <span className="label">모델 식별자</span>
                 <span className="value">{shortenModelKey(status.model_key)}</span>
               </div>
               <div className="status-item">
-                <span className="label">Dimension</span>
+                <span className="label">벡터 차원</span>
                 <span className="value">{status.dimension ?? "—"}</span>
               </div>
               <div className="status-item">
-                <span className="label">Normalized</span>
+                <span className="label">정규화 여부</span>
                 <span className="value">
                   {status.normalized === null || status.normalized === undefined
                     ? "—"
-                    : String(status.normalized)}
+                    : status.normalized ? "예" : "아니요"}
                 </span>
               </div>
             </div>
             {status.embedding_state === "NOT_CONFIGURED" ? (
               <p className="dd-guidance" data-testid="emb-guidance">
-                Keyword search is available. Semantic/Hybrid requires an embedding provider.
+                키워드 검색은 사용할 수 있습니다. 의미 검색과 통합 검색을 사용하려면 임베딩 서비스를 설정해야 합니다.
               </p>
             ) : null}
             {status.embedding_state === "NOT_READY" ? (
               <p className="dd-guidance" data-testid="emb-guidance">
-                Keyword search is available. Sync embeddings for Semantic/Hybrid search.
+                키워드 검색은 사용할 수 있습니다. 의미 검색과 통합 검색을 사용하려면 임베딩을 동기화해 주세요.
               </p>
             ) : null}
             {status.embedding_state === "CONFIGURATION_ERROR" ? (
               <p className="dd-guidance" data-testid="emb-guidance">
-                Embedding configuration is invalid. Keyword search is available; check the server
-                embedding settings.
+                임베딩 설정에 오류가 있습니다. 키워드 검색은 가능하며 서버의 임베딩 설정을 확인해야 합니다.
                 {status.embedding_error_code ? (
                   <>
                     {" "}
@@ -550,26 +549,26 @@ export function DataDiscoveryIndexStatus({
 
           {status.coverage ? (
             <section className="dd-index-section">
-              <h3>Coverage</h3>
+              <h3>인덱싱 처리 현황</h3>
               <div className="status-grid dd-meta-grid" data-testid="coverage-counts">
                 <div className="status-item">
-                  <span className="label">Documents</span>
+                  <span className="label">전체 문서</span>
                   <span className="value">{status.coverage.document_count}</span>
                 </div>
                 <div className="status-item">
-                  <span className="label">Embeddings</span>
+                  <span className="label">전체 임베딩</span>
                   <span className="value">{status.coverage.embedding_count}</span>
                 </div>
                 <div className="status-item">
-                  <span className="label">Current</span>
+                  <span className="label">최신</span>
                   <span className="value">{status.coverage.current_count}</span>
                 </div>
                 <div className="status-item">
-                  <span className="label">Stale</span>
+                  <span className="label">갱신 필요</span>
                   <span className="value">{status.coverage.stale_count}</span>
                 </div>
                 <div className="status-item">
-                  <span className="label">Missing</span>
+                  <span className="label">미생성</span>
                   <span className="value">{status.coverage.missing_count}</span>
                 </div>
               </div>
@@ -584,7 +583,7 @@ export function DataDiscoveryIndexStatus({
               disabled={busyAction !== null}
               data-testid="rebuild-documents"
             >
-              {busyAction === "rebuild" ? "Rebuilding…" : "Rebuild Documents"}
+              {busyAction === "rebuild" ? "문서 재생성 중…" : "검색 문서 재생성"}
             </button>
             <button
               type="button"
@@ -593,7 +592,7 @@ export function DataDiscoveryIndexStatus({
               disabled={syncDisabled}
               data-testid="sync-embeddings"
             >
-              {busyAction === "sync" ? "Syncing…" : "Sync Embeddings"}
+              {busyAction === "sync" ? "동기화 중…" : "임베딩 동기화"}
             </button>
           </div>
         </div>

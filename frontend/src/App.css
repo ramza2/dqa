@@ -771,6 +771,15 @@
   margin-top: 0.45rem;
 }
 
+.dd-inline-note {
+  margin: 0;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.82rem;
+  color: #415676;
+  background: #f3f7fd;
+  border-bottom: 1px solid var(--border);
+}
+
 .dd-subnav {
   display: flex;
   gap: 0.35rem;

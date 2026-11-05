@@ -111,7 +111,7 @@ describe("M5-UX4A ERD neighborhood focus and handoff", () => {
 
     await user.click(screen.getByTestId("dd-tab-explorer"));
     await user.click(await screen.findByRole("button", { name: /TB_ADM_HIST/i }));
-    await screen.findByText("Overview");
+    await screen.findByText("테이블 개요");
     await user.click(screen.getByRole("button", { name: "관계 ERD" }));
     await user.click(await screen.findByTestId("open-full-erd-explorer"));
 
@@ -144,8 +144,8 @@ describe("M5-UX4A ERD neighborhood focus and handoff", () => {
     await user.click(screen.getByRole("button", { name: "link:FK_ADM_ENC" }));
     const detail = await screen.findByTestId("erd-relation-detail");
     expect(within(detail).getByText("FK_ADM_ENC")).toBeInTheDocument();
-    expect(within(detail).getByRole("columnheader", { name: "Source column" })).toBeInTheDocument();
-    expect(within(detail).getByRole("columnheader", { name: "Referenced column" })).toBeInTheDocument();
+    expect(within(detail).getByRole("columnheader", { name: "참조하는 컬럼" })).toBeInTheDocument();
+    expect(within(detail).getByRole("columnheader", { name: "참조 대상 컬럼" })).toBeInTheDocument();
     expect(within(detail).getAllByText("ENC_ID").length).toBeGreaterThan(0);
     expect(within(detail).getAllByText("SITE_CD").length).toBeGreaterThan(0);
     restore();

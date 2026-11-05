@@ -16,7 +16,7 @@ export function DiscoverySourceToolbar({ snapshotTab, actionBusy }: Props) {
     <div className="dd-source-toolbar" data-testid="discovery-source-toolbar">
       <div className="dd-source-toolbar-main">
         <label className="dd-source-toolbar-picker">
-          <span>활성 Catalog Source</span>
+          <span>활성 Catalog 데이터 소스</span>
           <select
             aria-label="Active Catalog source"
             data-testid="catalog-source-toolbar-select"
@@ -34,16 +34,16 @@ export function DiscoverySourceToolbar({ snapshotTab, actionBusy }: Props) {
         </label>
         {active ? (
           <div className="dd-source-toolbar-details" data-testid="toolbar-catalog-metadata">
-            <span>Revision <strong>{active.revision_id}</strong></span>
-            <span>Package <strong>{active.package_version}</strong></span>
-            <span>Readiness <strong className={active.package_readiness === "READY" ? "badge badge-ready" : "badge badge-warn"}>{active.package_readiness}</strong></span>
-            <span>Fingerprint <code title={active.schema_fingerprint}>{shortenFingerprint(active.schema_fingerprint)}</code></span>
+            <span>개정번호 <strong>{active.revision_id}</strong></span>
+            <span>패키지 버전 <strong>{active.package_version}</strong></span>
+            <span>준비 상태 <strong className={active.package_readiness === "READY" ? "badge badge-ready" : "badge badge-warn"}>{active.package_readiness}</strong></span>
+            <span>스키마 지문 <code title={active.schema_fingerprint}>{shortenFingerprint(active.schema_fingerprint)}</code></span>
           </div>
         ) : null}
       </div>
       {snapshotTab ? (
         <p className="dd-source-toolbar-note" data-testid="snapshot-independent-source-note">
-          Snapshot History는 아래 화면에서 Source를 별도로 입력합니다. 활성 Catalog가 없어도 권한이 허용된 이력을 조회할 수 있습니다.
+          스키마 변경 이력은 아래에서 데이터 소스 이름을 별도로 입력합니다. 활성 Catalog가 없어도 조회 권한이 있는 이력을 확인할 수 있습니다.
         </p>
       ) : null}
       {!snapshotTab && sourcesState.status !== "ready" ? (

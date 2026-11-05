@@ -102,7 +102,7 @@ export function useCatalogSourceSelection(): CatalogSourceSelection {
         applySelection("", true);
         setSourcesState({
           status: "empty",
-          message: "No active Catalog",
+          message: "활성 Catalog가 없습니다.",
           code: null,
           httpStatus: null,
         });

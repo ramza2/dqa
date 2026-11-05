@@ -70,7 +70,7 @@ describe("M2-2A bounded active Catalog ERD", () => {
     try {
       render(<CatalogExplorer />);
       await user.click(await screen.findByRole("button", { name: /TB_ADM_HIST/i }));
-      expect(await screen.findByText("Overview")).toBeInTheDocument();
+      expect(await screen.findByText("테이블 개요")).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "관계 ERD" }));
       const region = await screen.findByRole("region", { name: "테이블 관계 ERD" });
       expect(within(region).getByText("DEMIS_OWNER.TB_ADM_HIST")).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe("M2-2A bounded active Catalog ERD", () => {
       expect(within(region).getByText(/FK_OTHER_TO_ADM/)).toBeInTheDocument();
       expect(within(region).getByText(/Revision: 1/)).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "상세정보" }));
-      expect(await screen.findByText("Overview")).toBeInTheDocument();
+      expect(await screen.findByText("테이블 개요")).toBeInTheDocument();
       expect(screen.queryByRole("region", { name: "테이블 관계 ERD" })).not.toBeInTheDocument();
     } finally {
       restore();
@@ -93,7 +93,7 @@ describe("M2-2A bounded active Catalog ERD", () => {
     try {
       render(<CatalogExplorer />);
       await user.click(await screen.findByRole("button", { name: /TB_ADM_HIST/i }));
-      await screen.findByText("Overview");
+      await screen.findByText("테이블 개요");
       await user.click(screen.getByRole("button", { name: "관계 ERD" }));
       expect(await screen.findByRole("region", { name: "테이블 관계 ERD" })).toBeInTheDocument();
       await user.selectOptions(screen.getByLabelText("Active Catalog source"), "other_source");

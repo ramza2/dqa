@@ -219,7 +219,7 @@ describe("DataDiscoveryPortal tabs", () => {
 
     expect(screen.getByTestId("schema-search")).toBeInTheDocument();
     await user.click(screen.getByTestId("dd-tab-explorer"));
-    expect(await screen.findByRole("heading", { name: "Table Explorer" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "테이블 탐색" })).toBeInTheDocument();
     await user.click(screen.getByTestId("dd-tab-index"));
     expect(await screen.findByTestId("data-discovery-index-status")).toBeInTheDocument();
     await user.click(screen.getByTestId("dd-tab-search"));
@@ -266,7 +266,7 @@ describe("SchemaSearch", () => {
     expect(await screen.findByTestId("search-results")).toBeInTheDocument();
     expect(screen.getByText("TB_LAB_RESULT")).toBeInTheDocument();
     expect(screen.getByText("blood glucose value")).toBeInTheDocument();
-    expect(screen.getByTestId("search-terminology")).toHaveTextContent("Matched concepts");
+    expect(screen.getByTestId("search-terminology")).toHaveTextContent("검색어와 일치하는 개념");
     expect(screen.getByTestId("search-related-tables")).toHaveTextContent(
       "DEMIS_OWNER.TB_ADM_HIST.LAB_ID",
     );
@@ -391,7 +391,7 @@ describe("DataDiscoveryIndexStatus", () => {
     const restore = installFetchMock(discoveryHandlers());
     render(<DataDiscoveryIndexStatus />);
     expect(await screen.findByTestId("embedding-state")).toHaveTextContent("NOT_CONFIGURED");
-    expect(screen.getByTestId("emb-guidance")).toHaveTextContent(/Keyword search is available/i);
+    expect(screen.getByTestId("emb-guidance")).toHaveTextContent(/키워드 검색은 사용할 수 있습니다/i);
     expect(screen.getByTestId("sync-embeddings")).toBeDisabled();
     restore();
   });
@@ -426,7 +426,7 @@ describe("DataDiscoveryIndexStatus", () => {
     await user.click(screen.getByTestId("rebuild-documents"));
     await waitFor(() => expect(rebuildCalls).toBe(1));
     expect(await screen.findByTestId("document-count")).toHaveTextContent("12");
-    expect(screen.getByTestId("index-action-message")).toHaveTextContent(/Rebuilt 12 documents/i);
+    expect(screen.getByTestId("index-action-message")).toHaveTextContent(/검색 문서 12건 재생성 완료/i);
     restore();
   });
 
@@ -471,7 +471,7 @@ describe("DataDiscoveryIndexStatus", () => {
     expect(await screen.findByTestId("embedding-state")).toHaveTextContent("NOT_READY");
     await user.click(screen.getByTestId("sync-embeddings"));
     expect(confirmSpy).toHaveBeenCalledWith(
-      expect.stringMatching(/derived schema metadata/i),
+      expect.stringMatching(/검색용 스키마 메타데이터/),
     );
     await waitFor(() => expect(syncCalls).toBe(1));
     expect(await screen.findByTestId("embedding-state")).toHaveTextContent("READY");
@@ -686,7 +686,7 @@ describe("DataDiscoveryIndexStatus", () => {
       "CONFIGURATION_ERROR",
     );
     expect(screen.getByTestId("emb-guidance")).toHaveTextContent(
-      /Embedding configuration is invalid/i,
+      /임베딩 설정에 오류가 있습니다/i,
     );
     expect(screen.getByTestId("emb-guidance")).toHaveTextContent("EMBEDDING_DIMENSION_MISMATCH");
     expect(screen.getByTestId("sync-embeddings")).toBeDisabled();
@@ -708,7 +708,7 @@ describe("refreshSources fail-closed", () => {
       },
     ]);
     render(<SchemaSearch />);
-    expect(await screen.findByText(/Catalog data could not be loaded/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Catalog 데이터를 불러오지 못했습니다/i)).toBeInTheDocument();
     expect(screen.queryByTestId("search-active-meta")).not.toBeInTheDocument();
     expect(screen.getByTestId("search-submit")).toBeDisabled();
     restore();
@@ -727,7 +727,7 @@ describe("refreshSources fail-closed", () => {
       },
     ]);
     render(<DataDiscoveryIndexStatus />);
-    expect(await screen.findByText(/Catalog data could not be loaded/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Catalog 데이터를 불러오지 못했습니다/i)).toBeInTheDocument();
     expect(screen.queryByTestId("index-status-body")).not.toBeInTheDocument();
     expect(screen.queryByTestId("rebuild-documents")).not.toBeInTheDocument();
     restore();

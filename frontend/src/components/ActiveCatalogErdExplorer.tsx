@@ -113,8 +113,8 @@ function ActiveCatalogErdExplorerBody({ sharedSourceBar = false }: { sharedSourc
   return <div className="dqa-erd-page" data-testid="active-catalog-erd-explorer">
     <header className="app-header">
       <div className="app-title-row">
-        <h1>ERD Explorer</h1>
-        <span className="subtitle">React Flow + ELK 기반 활성 Catalog 테이블 관계도</span>
+        <h1>ERD 관계도</h1>
+        <span className="subtitle">활성 Catalog의 테이블과 FK 관계를 시각적으로 탐색합니다.</span>
       </div>
       {!sharedSourceBar ? <SourceSelector
         sources={sources}
@@ -123,7 +123,7 @@ function ActiveCatalogErdExplorerBody({ sharedSourceBar = false }: { sharedSourc
         disabled={sourcesState.status === "loading"}
         emptyLabel="선택 가능한 활성 Catalog Source가 없습니다"
       /> : null}
-      {visibleSnapshot ? <ActiveCatalogHeader active={visibleSnapshot.active} staleWarning={null} hideSource={sharedSourceBar} /> : null}
+      {visibleSnapshot && !sharedSourceBar ? <ActiveCatalogHeader active={visibleSnapshot.active} staleWarning={null} /> : null}
     </header>
 
     {sourcesState.status === "loading" ? <p className="dqa-erd-notice" role="status">활성 Catalog 목록 확인 중…</p> : null}
@@ -150,10 +150,10 @@ function ActiveCatalogErdExplorerBody({ sharedSourceBar = false }: { sharedSourc
         미승인 Inspector Snapshot의 승인 상태를 뜻하지 않습니다.
       </p>
       <div className="dqa-erd-metrics" aria-label="ERD 메타데이터 건수">
-        <div><strong>{visibleSnapshot.totalTables}</strong><span>Catalog Tables</span></div>
-        <div><strong>{visibleSnapshot.totalRelations}</strong><span>Catalog FK Relations</span></div>
-        <div><strong>{visibleSnapshot.totalCategories}</strong><span>Categories</span></div>
-        <div><strong>{selection.nodes.length}</strong><span>화면 표시 Tables</span></div>
+        <div><strong>{visibleSnapshot.totalTables}</strong><span>전체 테이블</span></div>
+        <div><strong>{visibleSnapshot.totalRelations}</strong><span>FK 관계</span></div>
+        <div><strong>{visibleSnapshot.totalCategories}</strong><span>분류(Category)</span></div>
+        <div><strong>{selection.nodes.length}</strong><span>화면 표시 테이블</span></div>
       </div>
       {visibleSnapshot.truncated || graph.unresolved || selection.hiddenNodes || selection.hiddenLinks ? (
         <div className="banner banner-warn" role="status">
@@ -164,16 +164,16 @@ function ActiveCatalogErdExplorerBody({ sharedSourceBar = false }: { sharedSourc
         </div>
       ) : null}
       <div className="dqa-erd-filters">
-        <label>View
+        <label>보기 방식
           <select aria-label="ERD 보기 방식" value={mode} onChange={(event) => {
             setMode(event.target.value as ErdMode); setSelectedLink("");
           }}>
             <option value="full">전체 ERD</option>
-            <option value="neighborhood">선택 Table 주변</option>
-            <option value="category">Category ERD</option>
+            <option value="neighborhood">선택 테이블 주변</option>
+            <option value="category" disabled={visibleSnapshot.categories.length === 0}>분류별 ERD</option>
           </select>
         </label>
-        {mode === "neighborhood" ? <label>Focus Table
+        {mode === "neighborhood" ? <label>중심 테이블
           <select aria-label="ERD 중심 테이블" value={focus} onChange={(event) => {
             setFocus(event.target.value);
             setSelectedTable(event.target.value);
@@ -193,20 +193,25 @@ function ActiveCatalogErdExplorerBody({ sharedSourceBar = false }: { sharedSourc
             <option value={3}>3단계 FK</option>
           </select>
         </label> : null}
-        {mode === "category" ? <label>Category
+        {mode === "category" ? <label>분류(Category)
           <select aria-label="ERD Category" value={category} onChange={(event) => setCategory(event.target.value)}>
-            <option value="">Category 선택</option>
+            <option value="">분류 선택</option>
             {visibleSnapshot.categories.map((item) => <option key={item.id} value={item.id}>
               {item.name ?? item.id}
             </option>)}
           </select>
         </label> : null}
-        <label>Table / Comment 검색
+        <label>테이블명 / 설명 검색
           <input aria-label="ERD 테이블 검색" value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="예: TB_PATIENT, 진료" maxLength={128} />
         </label>
       </div>
+      {visibleSnapshot.categories.length === 0 ? (
+        <p className="dd-inline-note" role="status" data-testid="erd-category-empty-guidance">
+          현재 Catalog에는 분류 정보가 없어 분류별 ERD는 사용할 수 없습니다. 전체 ERD와 선택 테이블 주변 관계도는 정상적으로 볼 수 있습니다.
+        </p>
+      ) : null}
 
       <div className="dqa-erd-workspace">
         <div className="dqa-erd-graph-pane">
@@ -219,8 +224,8 @@ function ActiveCatalogErdExplorerBody({ sharedSourceBar = false }: { sharedSourc
             onLinkSelect={setSelectedLink}
           /> : <p className="dqa-erd-notice">
             {mode === "neighborhood" && !focus ? "중심 테이블을 선택하세요." :
-              mode === "category" && !category ? "Category를 선택하세요." :
-                "조건에 맞는 Table이 없습니다."}
+              mode === "category" && !category ? "분류를 선택하세요." :
+                "조건에 맞는 테이블이 없습니다."}
           </p>}
         </div>
 
@@ -239,8 +244,8 @@ function ActiveCatalogErdExplorerBody({ sharedSourceBar = false }: { sharedSourc
               <table className="dqa-erd-mapping-table">
                 <thead>
                   <tr>
-                    <th scope="col">Source column</th>
-                    <th scope="col">Referenced column</th>
+                    <th scope="col">참조하는 컬럼</th>
+                    <th scope="col">참조 대상 컬럼</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -259,16 +264,16 @@ function ActiveCatalogErdExplorerBody({ sharedSourceBar = false }: { sharedSourc
                 setSelectedTable(selectedRelation.source);
                 setMode("neighborhood");
                 setSearch("");
-              }}>Source 테이블 중심</button>
+              }}>참조하는 테이블 중심</button>
               <button type="button" className="dqa-erd-retry" onClick={() => {
                 setFocus(selectedRelation.target);
                 setSelectedTable(selectedRelation.target);
                 setMode("neighborhood");
                 setSearch("");
-              }}>Referenced 테이블 중심</button>
+              }}>참조 대상 테이블 중심</button>
             </div>
           </div> : selectedNode ? <div data-testid="erd-table-detail">
-            <div className="dqa-erd-detail-badge">Table</div>
+            <div className="dqa-erd-detail-badge">테이블</div>
             <strong className="mono">{selectedNode.schema}.{selectedNode.name}</strong>
             <p>{selectedNode.comment ?? "DB COMMENT 없음"}</p>
             <p>연결된 FK {incidentLinks.length}건
@@ -289,7 +294,7 @@ function ActiveCatalogErdExplorerBody({ sharedSourceBar = false }: { sharedSourc
           </div> : <p>그래프의 테이블 또는 FK 관계선을 선택하면 컬럼 매핑과 관계를 확인할 수 있습니다.</p>}
         </section>
       </div>
-      <p className="dqa-erd-footnote">React Flow 그래프는 읽기 전용이며 테이블/관계선을 수정하지 않습니다. Source 또는 Revision이 변경되면 새로 조회합니다.</p>
+      <p className="dqa-erd-footnote">ERD는 읽기 전용입니다. 테이블이나 FK 관계를 수정하지 않으며 데이터 소스 또는 개정번호가 바뀌면 관계도를 다시 조회합니다.</p>
     </main> : null}
   </div>;
 }

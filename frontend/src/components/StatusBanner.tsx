@@ -5,14 +5,14 @@ interface Props {
   emptyLabel?: string;
 }
 
-export function StatusBanner({ state, emptyLabel = "No data" }: Props) {
+export function StatusBanner({ state, emptyLabel = "표시할 데이터가 없습니다." }: Props) {
   if (state.status === "loading") {
-    return <div className="banner banner-empty">Loading…</div>;
+    return <div className="banner banner-empty">불러오는 중…</div>;
   }
   if (state.status === "error") {
     return (
       <div className="banner banner-error" role="alert">
-        <div>Catalog data could not be loaded.</div>
+        <div>Catalog 데이터를 불러오지 못했습니다.</div>
         <div>
           HTTP {state.httpStatus ?? "—"}
           {state.code ? (
