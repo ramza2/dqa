@@ -153,11 +153,17 @@ describe("shared active Catalog Source in the Discovery workspace", () => {
     restore();
   });
 
-  it("preserves the Snapshot History direct Source input without changing the active Catalog selection", async () => {
+  it("automatically follows the shared Catalog selection on Snapshot History without a search form", async () => {
     const user = userEvent.setup();
-    const restore = installFetchMock(
-      defaultCatalogHandlers({ actives: [activeSource, secondSource] }),
-    );
+    const requestedSources: string[] = [];
+    const restore = installFetchMock([
+      (url) => {
+        if (url.pathname !== "/api/v1/schema-inspector/snapshots") return null;
+        requestedSources.push(url.searchParams.get("source_name") ?? "");
+        return jsonResponse([]);
+      },
+      ...defaultCatalogHandlers({ actives: [activeSource, secondSource] }),
+    ]);
     render(<DataDiscoveryPortal />);
 
     await user.click(screen.getByTestId("dd-tab-explorer"));
@@ -165,13 +171,19 @@ describe("shared active Catalog Source in the Discovery workspace", () => {
     await user.selectOptions(selector, secondSource.source_name);
 
     await user.click(screen.getByTestId("dd-tab-snapshot"));
-    expect(await screen.findByTestId("snapshot-independent-source-note")).toBeInTheDocument();
+    expect(await screen.findByTestId("snapshot-selected-source")).toHaveTextContent(secondSource.source_name);
     expect(selector).toHaveValue(secondSource.source_name);
-    expect(selector).toBeDisabled();
+    expect(selector).toBeEnabled();
     expect(await screen.findByRole("heading", { name: /스키마 변경 이력/ })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Snapshot source name" })).not.toBeInTheDocument();
+    await waitFor(() => expect(requestedSources).toContain(secondSource.source_name));
+
+    await user.selectOptions(selector, activeSource.source_name);
+    expect(await screen.findByTestId("snapshot-selected-source")).toHaveTextContent(activeSource.source_name);
+    await waitFor(() => expect(requestedSources).toContain(activeSource.source_name));
 
     await user.click(screen.getByTestId("dd-tab-search"));
-    expect(selector).toHaveValue(secondSource.source_name);
+    expect(selector).toHaveValue(activeSource.source_name);
     expect(selector).toBeEnabled();
     restore();
   });

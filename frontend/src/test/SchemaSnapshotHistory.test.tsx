@@ -98,7 +98,9 @@ describe("S-05-A Snapshot read-only UI", () => {
     render(<DataDiscoveryPortal />);
     await user.click(screen.getByTestId("dd-tab-snapshot"));
     expect(screen.getByTestId("snapshot-not-authority")).toHaveTextContent("독립 DBA Preflight");
-    await enterSource(user);
+    expect(await screen.findByTestId("snapshot-selected-source")).toHaveTextContent(SRC_A);
+    expect(screen.queryByRole("textbox", { name: "Snapshot source name" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Snapshot 조회" })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Snapshot 10 상세 보기" }));
     expect(await screen.findByTestId("snapshot-diff")).toHaveTextContent("table_comment");
@@ -112,6 +114,77 @@ describe("S-05-A Snapshot read-only UI", () => {
     expect(await screen.findByTestId("snapshot-reviews")).toHaveTextContent("CHANGES_REQUESTED");
     expect(screen.queryByRole("button", { name: /activate|approve|READY|capture|import/i })).not.toBeInTheDocument();
     restore();
+  });
+
+  it("ignores an old active Source list after switching the shared Catalog selection", async () => {
+    const user = userEvent.setup();
+    let releaseOld: ((response: Response) => void) | undefined;
+    const pendingOld = new Promise<Response>((resolve) => { releaseOld = resolve; });
+    const restore = installFetchMock([
+      ...responses({
+        onList: (url) => url.searchParams.get("source_name") === SRC_A
+          ? pendingOld : jsonResponse([]),
+      }).slice(0, 3),
+      ...defaultCatalogHandlers({ actives: [
+        { source_name: SRC_A, revision_id: 1, schema_fingerprint: FP_A,
+          package_version: "2.0", package_readiness: "READY", activated_at: snapshot.captured_at },
+        { source_name: SRC_B, revision_id: 2, schema_fingerprint: FP_B,
+          package_version: "2.0", package_readiness: "READY", activated_at: snapshot.captured_at },
+      ] }),
+    ]);
+    try {
+      render(<DataDiscoveryPortal />);
+      await user.click(screen.getByTestId("dd-tab-snapshot"));
+      const selector = await screen.findByLabelText("Active Catalog source");
+      await waitFor(() => expect(screen.getByTestId("snapshot-selected-source")).toHaveTextContent(SRC_A));
+      await user.selectOptions(selector, SRC_B);
+      expect(await screen.findByText("이 Source에 저장된 Snapshot이 없습니다.")).toBeInTheDocument();
+      await act(async () => { releaseOld?.(jsonResponse([snapshot])); });
+      expect(screen.queryByRole("button", { name: "Snapshot 10 상세 보기" })).not.toBeInTheDocument();
+      expect(screen.getByTestId("snapshot-selected-source")).toHaveTextContent(SRC_B);
+    } finally { restore(); }
+  });
+
+  it("can query a non-active Snapshot Source without changing the Catalog selector", async () => {
+    const user = userEvent.setup();
+    const manualSnapshot = { ...snapshot, id: 20, source_name: SRC_B,
+      schema_fingerprint: FP_B, previous_revision_id: null,
+      diff_status: "NO_BASELINE" as const, total_changes: null };
+    const restore = installFetchMock(responses({
+      onList: (url) => jsonResponse(
+        url.searchParams.get("source_name") === SRC_B ? [manualSnapshot] : [snapshot],
+      ),
+    }));
+    try {
+      render(<DataDiscoveryPortal />);
+      await user.click(screen.getByTestId("dd-tab-snapshot"));
+      expect(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "다른 소스의 스냅샷 조회" }));
+      await enterSource(user, SRC_B);
+      expect(await screen.findByRole("button", { name: "Snapshot 20 상세 보기" })).toBeInTheDocument();
+      expect(screen.getByTestId("snapshot-selected-source")).toHaveTextContent(SRC_B);
+      expect(screen.getByLabelText("Active Catalog source")).toHaveValue(SRC_A);
+      await user.click(screen.getByRole("button", { name: "선택한 Catalog 소스로 돌아가기" }));
+      expect(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" })).toBeInTheDocument();
+      expect(screen.queryByRole("textbox", { name: "Snapshot source name" })).not.toBeInTheDocument();
+    } finally { restore(); }
+  });
+
+  it("keeps the manual Snapshot-only path when no Catalog is active", async () => {
+    const user = userEvent.setup();
+    const restore = installFetchMock([
+      (url) => url.pathname === "/api/v1/catalog/active" ? jsonResponse([]) : null,
+      ...responses(),
+    ]);
+    try {
+      render(<DataDiscoveryPortal />);
+      await user.click(screen.getByTestId("dd-tab-snapshot"));
+      expect(await screen.findByTestId("snapshot-no-active-source")).toHaveTextContent("스냅샷 전용 소스");
+      expect(screen.queryByRole("button", { name: "Snapshot 10 상세 보기" })).not.toBeInTheDocument();
+      await enterSource(user);
+      expect(await screen.findByRole("button", { name: "Snapshot 10 상세 보기" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Active Catalog source")).toBeDisabled();
+    } finally { restore(); }
   });
 
   it("shows object-type Diff aggregates without deriving Catalog approval", async () => {

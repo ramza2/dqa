@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getSnapshotHistoryDetail, getSnapshotReviewPreview,
   listSnapshotHistory, listSnapshotReviewEvents,
 } from "../api/schemaSnapshot";
 import { CatalogApiError } from "../types/catalog";
 import { SnapshotCatalogContext } from "./SnapshotCatalogContext";
+import { useOptionalCatalogSource } from "../hooks/catalogSourceContext";
 import { SnapshotErdPanel } from "./SnapshotErdPanel";
 import { SnapshotReviewGates } from "./SnapshotReviewGates";
 import { OfflineMetadataSummaryPanel } from "./OfflineMetadataSummaryPanel";
@@ -44,8 +45,15 @@ function dateLabel(value: string): string {
 }
 
 export function SchemaSnapshotHistory() {
-  // Source may have Snapshots without an active Catalog. Direct entry does not
-  // imply permission to access unapproved databases or elevate WARNING.
+  // Snapshot-only Sources remain readable without an active Catalog. An active
+  // Catalog selection is a navigation convenience, never Snapshot authority.
+  const catalogSource = useOptionalCatalogSource();
+  const hasCatalogSource = catalogSource !== null;
+  const sourceStatus = catalogSource?.sourcesState.status;
+  const activeSource = sourceStatus === "ready"
+    && catalogSource?.sources.some((item) => item.source_name === catalogSource.selectedSource)
+    ? catalogSource.selectedSource : "";
+  const [manualOpen, setManualOpen] = useState(false);
   const [sourceInput, setSourceInput] = useState("");
   const [source, setSource] = useState<string | null>(null);
   const sourceRef = useRef<string | null>(null);
@@ -68,25 +76,29 @@ export function SchemaSnapshotHistory() {
     sourceRef.current = null;
   }, []);
 
-  const resetDetail = () => {
+  const resetDetail = useCallback(() => {
     detailSeq.current += 1;
     setSelection(null);
     setDetail(idle());
     setPreview(idle());
     setReviews(idle());
-  };
+  }, []);
 
-  const editSource = (next: string) => {
+  const clearHistory = useCallback(() => {
     listSeq.current += 1;
     sourceRef.current = null;
-    setSourceInput(next);
     setSource(null);
     setHistory(idle());
     setOffset(0);
     resetDetail();
+  }, [resetDetail]);
+
+  const editSource = (next: string) => {
+    clearHistory();
+    setSourceInput(next);
   };
 
-  const loadHistory = async (nextSource: string, nextOffset: number) => {
+  const loadHistory = useCallback(async (nextSource: string, nextOffset: number) => {
     const requestId = ++listSeq.current;
     sourceRef.current = nextSource;
     setSource(nextSource);
@@ -106,7 +118,22 @@ export function SchemaSnapshotHistory() {
         setHistory(failed(errorText(error)));
       }
     }
-  };
+  }, [resetDetail]);
+
+  useEffect(() => {
+    if (!hasCatalogSource || sourceStatus === "loading") return;
+    // Every change to the server-validated active selection invalidates the
+    // previous Source's list and open Diff/Review requests.
+    setManualOpen(false);
+    setSourceInput("");
+    if (activeSource) {
+      void loadHistory(activeSource, 0);
+    } else {
+      clearHistory();
+    }
+  }, [hasCatalogSource, sourceStatus, activeSource, clearHistory, loadHistory]);
+
+  const manualVisible = !catalogSource || (sourceStatus !== "loading" && (!activeSource || manualOpen));
 
   const loadDiff = (row: SnapshotSummary, requestId: number, expectedSource: string) => {
     if (requestId !== detailSeq.current || sourceRef.current !== expectedSource) return;
@@ -203,29 +230,61 @@ export function SchemaSnapshotHistory() {
         Snapshot 검토 및 WARNING 후보 확인은 독립 DBA Preflight, Catalog READY 승인 또는 활성화를 의미하지 않습니다.
       </div>
 
-      <form className="dd-search-form" onSubmit={(event) => {
-        event.preventDefault();
-        const name = sourceInput.trim();
-        if (!SOURCE_PATTERN.test(name)) {
-          setHistory(failed("Source 이름은 영문·숫자로 시작하고 영문·숫자·_·.·:·-만 허용합니다."));
-          return;
-        }
-        void loadHistory(name, 0);
-      }}>
-        <div className="dd-form-row">
-          <label className="dd-field">
-            <span>스냅샷 데이터 소스 이름</span>
-            <input
-              aria-label="Snapshot source name"
-              value={sourceInput}
-              maxLength={255}
-              onChange={(event) => editSource(event.target.value)}
-              placeholder="예: oracle_demis_mock"
-            />
-          </label>
+      {catalogSource && sourceStatus === "loading" ? (
+        <p className="dd-guidance" role="status">활성 Catalog 데이터 소스를 확인 중…</p>
+      ) : null}
+      {activeSource ? (
+        <div className="dd-snapshot-source" data-testid="snapshot-selected-source">
+          <p className="dd-guidance">
+            스냅샷 조회 대상: <strong>{manualOpen && source ? source : activeSource}</strong>
+            {manualOpen ? " · 별도 조회이며 상단 Catalog 선택은 변경되지 않습니다." : " · 상단 데이터 소스를 변경하면 이력이 자동으로 갱신됩니다."}
+          </p>
+          <button type="button" className="dd-secondary-btn"
+            aria-expanded={manualOpen} aria-controls="snapshot-manual-source"
+            onClick={() => {
+              if (manualOpen) {
+                setManualOpen(false);
+                setSourceInput("");
+                void loadHistory(activeSource, 0);
+              } else {
+                setManualOpen(true);
+                setSourceInput("");
+              }
+            }}>
+            {manualOpen ? "선택한 Catalog 소스로 돌아가기" : "다른 소스의 스냅샷 조회"}
+          </button>
         </div>
-        <button type="submit" className="dd-primary-btn">Snapshot 조회</button>
-      </form>
+      ) : null}
+      {!activeSource && sourceStatus !== "loading" && catalogSource ? (
+        <p className="dd-guidance" data-testid="snapshot-no-active-source">
+          선택 가능한 활성 Catalog가 없습니다. 권한이 있는 스냅샷 전용 소스를 아래에서 직접 조회할 수 있습니다.
+        </p>
+      ) : null}
+      {manualVisible ? (
+        <form id="snapshot-manual-source" className="dd-search-form" onSubmit={(event) => {
+          event.preventDefault();
+          const name = sourceInput.trim();
+          if (!SOURCE_PATTERN.test(name)) {
+            setHistory(failed("Source 이름은 영문·숫자로 시작하고 영문·숫자·_·.·:·-만 허용합니다."));
+            return;
+          }
+          void loadHistory(name, 0);
+        }}>
+          <div className="dd-form-row">
+            <label className="dd-field">
+              <span>스냅샷 데이터 소스 이름 (별도 조회)</span>
+              <input
+                aria-label="Snapshot source name"
+                value={sourceInput}
+                maxLength={255}
+                onChange={(event) => editSource(event.target.value)}
+                placeholder="예: oracle_demis_mock"
+              />
+            </label>
+          </div>
+          <button type="submit" className="dd-primary-btn">Snapshot 조회</button>
+        </form>
+      ) : null}
 
       {status(history, "Snapshot 이력")}
       {history.status === "ready" && history.data && source ? (
