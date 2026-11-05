@@ -22,10 +22,10 @@ interface DetailProps {
 type DetailTab = "columns" | "relations" | "indexes" | "categories";
 
 const DETAIL_TABS: { id: DetailTab; label: string }[] = [
-  { id: "columns", label: "Columns" },
-  { id: "relations", label: "Relations" },
-  { id: "indexes", label: "Indexes" },
-  { id: "categories", label: "Categories" },
+  { id: "columns", label: "컬럼" },
+  { id: "relations", label: "관계" },
+  { id: "indexes", label: "인덱스" },
+  { id: "categories", label: "분류" },
 ];
 
 export function TableDetailPanel({
@@ -38,13 +38,13 @@ export function TableDetailPanel({
 }: DetailProps) {
   const [tab, setTab] = useState<DetailTab>("columns");
   if (state.status === "idle") {
-    return <div className="placeholder">Select a table to inspect metadata.</div>;
+    return <div className="placeholder">왼쪽 목록에서 테이블을 선택하면 상세정보를 확인할 수 있습니다.</div>;
   }
   if (state.status === "loading" || state.status === "error") {
     return <StatusBanner state={state} />;
   }
   if (!detail) {
-    return <div className="placeholder">No table detail available.</div>;
+    return <div className="placeholder">테이블 상세정보가 없습니다.</div>;
   }
 
   const outbound = relations.filter((relation) => relation.direction === "OUT");
@@ -70,7 +70,7 @@ export function TableDetailPanel({
     ) : (
       <div className="table-scroll">
         <table className="data-table">
-          <thead><tr><th>Constraint</th><th>Related Table</th><th>Column Mapping</th></tr></thead>
+          <thead><tr><th>제약조건</th><th>관련 테이블</th><th>컬럼 연결</th></tr></thead>
           <tbody>
             {items.map((relation) => (
               <tr key={relation.key}>
@@ -92,37 +92,37 @@ export function TableDetailPanel({
   return (
     <div className="table-detail-workspace">
       <section className="section" aria-label="Table overview">
-        <h3>Overview</h3>
+        <h3>테이블 개요</h3>
         <p className="table-detail-title mono">{detail.schema_name}.{detail.name}</p>
         <div className="meta-grid">
           <div className="meta-card">
-            <div className="label">Schema</div>
+            <div className="label">스키마</div>
             <div className="value">{detail.schema_name}</div>
           </div>
           <div className="meta-card">
-            <div className="label">Table</div>
+            <div className="label">테이블명</div>
             <div className="value">{detail.name}</div>
           </div>
           <div className="meta-card">
-            <div className="label">Type</div>
+            <div className="label">유형</div>
             <div className="value">{detail.table_type ?? "—"}</div>
           </div>
           <div className="meta-card">
-            <div className="label">Comment</div>
+            <div className="label">설명</div>
             <div className="value">{detail.comment ?? "—"}</div>
           </div>
           <div className="meta-card">
-            <div className="label">Categories</div>
+            <div className="label">분류</div>
             <div className="value">
               {detail.category_ids.length > 0 ? detail.category_ids.join(", ") : "—"}
             </div>
           </div>
         </div>
         <div className="explorer-metrics" aria-label="선택 테이블 메타데이터 건수">
-          <div><strong>{columns.length}</strong><span>Columns</span></div>
-          <div><strong>{outbound.length}</strong><span>Outbound FK</span></div>
-          <div><strong>{inbound.length}</strong><span>Inbound FK</span></div>
-          <div><strong>{indexes.length}</strong><span>Indexes</span></div>
+          <div><strong>{columns.length}</strong><span>컬럼</span></div>
+          <div><strong>{outbound.length}</strong><span>참조하는 FK</span></div>
+          <div><strong>{inbound.length}</strong><span>참조받는 FK</span></div>
+          <div><strong>{indexes.length}</strong><span>인덱스</span></div>
         </div>
       </section>
 
@@ -142,18 +142,18 @@ export function TableDetailPanel({
       </div>
 
       {tab === "columns" ? <section className="section" aria-label="Columns">
-        <h3>Columns ({columns.length})</h3>
+        <h3>컬럼 ({columns.length})</h3>
         <div className="table-scroll">
         <table className="data-table">
           <thead>
             <tr>
               <th>#</th>
-              <th>Column</th>
-              <th>Type</th>
-              <th>Nullable</th>
-              <th>Flags</th>
-              <th>Default</th>
-              <th>Comment</th>
+              <th>컬럼명</th>
+              <th>데이터 유형</th>
+              <th>NULL 허용</th>
+              <th>속성</th>
+              <th>기본값</th>
+              <th>설명</th>
             </tr>
           </thead>
           <tbody>
@@ -179,25 +179,25 @@ export function TableDetailPanel({
       </section> : null}
 
       {tab === "relations" ? <section className="section" aria-label="Relationships">
-        <h3>Relationships ({relations.length})</h3>
-        <h4>Outbound FK ({outbound.length})</h4>
+        <h3>테이블 관계 ({relations.length})</h3>
+        <h4>참조하는 FK ({outbound.length})</h4>
         {relationTable(outbound, "OUT")}
-        <h4>Inbound FK ({inbound.length})</h4>
+        <h4>참조받는 FK ({inbound.length})</h4>
         {relationTable(inbound, "IN")}
       </section> : null}
 
       {tab === "indexes" ? <section className="section" aria-label="Indexes">
-        <h3>Indexes ({indexes.length})</h3>
+        <h3>인덱스 ({indexes.length})</h3>
         {indexes.length === 0 ? (
-          <div className="placeholder">No indexes for this table.</div>
+          <div className="placeholder">이 테이블에는 인덱스가 없습니다.</div>
         ) : (
           <div className="table-scroll"><table className="data-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Unique</th>
-                <th>Method</th>
-                <th>Columns</th>
+                <th>인덱스명</th>
+                <th>고유 여부</th>
+                <th>방식</th>
+                <th>컬럼</th>
               </tr>
             </thead>
             <tbody>
@@ -215,10 +215,10 @@ export function TableDetailPanel({
       </section> : null}
 
       {tab === "categories" ? <section className="section" aria-label="Table categories">
-        <h3>Categories ({tableCategories.length})</h3>
-        {tableCategories.length === 0 ? <p className="placeholder">지정된 Category가 없습니다.</p> : (
+        <h3>분류 ({tableCategories.length})</h3>
+        {tableCategories.length === 0 ? <p className="placeholder">이 테이블에는 지정된 분류가 없습니다.</p> : (
           <div className="table-scroll"><table className="data-table">
-            <thead><tr><th>Category</th><th>Key</th><th>Primary</th><th>Source</th><th>Confidence</th><th>Note</th></tr></thead>
+            <thead><tr><th>분류명</th><th>키</th><th>주분류</th><th>출처</th><th>신뢰도</th><th>비고</th></tr></thead>
             <tbody>{tableCategories.flatMap((category) => {
               const assignments = category.assignments.filter((assignment) =>
                 assignment.table_name === detail.name &&
@@ -241,8 +241,8 @@ export function TableDetailPanel({
 
       <details className="table-technical-info">
         <summary>기술 정보</summary>
-        <div>Table Type: {detail.table_type ?? "—"}</div>
-        <div>Category Keys: {detail.category_ids.join(", ") || "—"}</div>
+        <div>테이블 유형: {detail.table_type ?? "—"}</div>
+        <div>분류 키: {detail.category_ids.join(", ") || "—"}</div>
       </details>
     </div>
   );
@@ -256,17 +256,17 @@ interface CategoriesProps {
 export function CategoriesPanel({ categories, state }: CategoriesProps) {
   return (
     <section className="categories-panel" aria-label="Categories">
-      <h3>Categories</h3>
+      <h3>분류 정보</h3>
       {state.status === "loading" || state.status === "error" || state.status === "empty" ? (
-        <StatusBanner state={state} emptyLabel="No categories in this Catalog" />
+        <StatusBanner state={state} emptyLabel="이 Catalog에는 등록된 분류 정보가 없습니다. 테이블 및 관계 탐색은 계속 사용할 수 있습니다." />
       ) : (
         <table className="data-table">
           <thead>
             <tr>
               <th>ID</th>
-              <th>Name</th>
-              <th>Description</th>
-              <th>Assignments</th>
+              <th>이름</th>
+              <th>설명</th>
+              <th>할당 테이블</th>
             </tr>
           </thead>
           <tbody>

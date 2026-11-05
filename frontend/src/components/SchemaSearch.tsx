@@ -223,8 +223,8 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
   return (
     <div className="dd-panel" data-testid="schema-search">
       <div className="dd-panel-header">
-        <h2>Schema Search</h2>
-        <span className="subtitle">Keyword / semantic / hybrid catalog search</span>
+        <h2>스키마 검색</h2>
+        <span className="subtitle">활성 Catalog에서 테이블·컬럼을 키워드 또는 의미 기반으로 검색합니다.</span>
       </div>
 
       {!useShared ? <SourceSelector
@@ -243,7 +243,7 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
       {!useShared && (sourcesState.status === "loading" ||
       sourcesState.status === "error" ||
       sourcesState.status === "empty") ? (
-        <StatusBanner state={sourcesState} emptyLabel="No active Catalog" />
+        <StatusBanner state={sourcesState} emptyLabel="활성 Catalog가 없습니다." />
       ) : !useShared && active ? (
         <div className="status-grid dd-meta-grid" data-testid="search-active-meta">
           <div className="status-item">
@@ -271,12 +271,12 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
         }}
       >
         <label className="dd-field">
-          <span>Query</span>
+          <span>검색어</span>
           <input
             type="text"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="e.g. blood glucose"
+            placeholder="예: blood, 혈액검사, 환자"
             data-testid="search-query-input"
             autoComplete="off"
           />
@@ -284,19 +284,19 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
 
         <div className="dd-form-row">
           <label className="dd-field">
-            <span>Search Mode</span>
+            <span>검색 방식</span>
             <select
               value={mode}
               onChange={(event) => setMode(event.target.value as DataDiscoverySearchMode)}
               data-testid="search-mode"
             >
-              <option value="keyword">Keyword</option>
-              <option value="semantic">Semantic</option>
-              <option value="hybrid">Hybrid</option>
+              <option value="keyword">키워드 검색</option>
+              <option value="semantic">의미 검색 (임베딩 필요)</option>
+              <option value="hybrid">통합 검색 (키워드 + 의미)</option>
             </select>
           </label>
           <label className="dd-field">
-            <span>Object Type</span>
+            <span>검색 대상</span>
             <select
               value={objectType}
               onChange={(event) =>
@@ -304,13 +304,13 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
               }
               data-testid="search-object-type"
             >
-              <option value="ALL">All</option>
-              <option value="TABLE">Table</option>
-              <option value="COLUMN">Column</option>
+              <option value="ALL">전체</option>
+              <option value="TABLE">테이블</option>
+              <option value="COLUMN">컬럼</option>
             </select>
           </label>
           <label className="dd-field">
-            <span>Relation hops</span>
+            <span>관계 확장 단계</span>
             <select
               value={maxRelationHops}
               onChange={(event) => setMaxRelationHops(Number(event.target.value))}
@@ -331,7 +331,7 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
               onChange={(event) => setExpandTerms(event.target.checked)}
               data-testid="search-expand-terms"
             />
-            Expand medical terms
+            의료 용어 확장
           </label>
           <label className="dd-check">
             <input
@@ -340,7 +340,7 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
               onChange={(event) => setExpandRelations(event.target.checked)}
               data-testid="search-expand-relations"
             />
-            Expand relations
+            관련 테이블 함께 찾기
           </label>
         </div>
 
@@ -350,13 +350,13 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
           disabled={!selectedSource || !query.trim() || searchState.status === "loading"}
           data-testid="search-submit"
         >
-          {searchState.status === "loading" ? "Searching…" : "Search"}
+          {searchState.status === "loading" ? "검색 중…" : "검색"}
         </button>
       </form>
 
       {searchState.status === "error" ? (
         <div className="banner banner-error" data-testid="search-error">
-          {searchState.message ?? "Search failed."}
+          {searchState.message ?? "검색에 실패했습니다."}
         </div>
       ) : null}
 
@@ -364,31 +364,31 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
       result.catalog_revision_id === active?.revision_id &&
       result.schema_fingerprint === active.schema_fingerprint ? (
         <div className="dd-search-results" data-testid="search-results">
-          <div className="status-grid dd-meta-grid">
-            <div className="status-item">
+          <div className="status-grid dd-meta-grid" data-testid="search-result-summary">
+            {!useShared ? <div className="status-item">
               <span className="label">Source</span>
               <span className="value">{result.source_name}</span>
-            </div>
-            <div className="status-item">
+            </div> : null}
+            {!useShared ? <div className="status-item">
               <span className="label">Revision</span>
               <span className="value">{result.catalog_revision_id}</span>
-            </div>
-            <div className="status-item">
+            </div> : null}
+            {!useShared ? <div className="status-item">
               <span className="label">Fingerprint</span>
               <span className="value">{shortenFingerprint(result.schema_fingerprint)}</span>
-            </div>
+            </div> : null}
             <div className="status-item">
-              <span className="label">Mode</span>
-              <span className="value">{result.mode}</span>
+              <span className="label">검색 방식</span>
+              <span className="value">{result.mode === "keyword" ? "키워드" : result.mode === "semantic" ? "의미" : "통합"}</span>
             </div>
             {result.mode !== "keyword" ? (
               <div className="status-item">
-                <span className="label">Model key</span>
+                <span className="label">임베딩 모델 식별자</span>
                 <span className="value">{shortenModelKey(result.model_key)}</span>
               </div>
             ) : null}
             <div className="status-item">
-              <span className="label">Elapsed</span>
+              <span className="label">검색 소요 시간</span>
               <span className="value">{result.timings.total_ms.toFixed(1)} ms</span>
             </div>
           </div>
@@ -397,7 +397,7 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
             <div className="dd-expansion" data-testid="search-terminology">
               {result.matched_concepts.length > 0 ? (
                 <div>
-                  <span className="label">Matched concepts</span>
+                  <span className="label">검색어와 일치하는 개념</span>
                   <div className="dd-term-list">
                     {result.matched_concepts.map((term) => (
                       <code key={term}>{term}</code>
@@ -407,7 +407,7 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
               ) : null}
               {result.expanded_terms.length > 0 ? (
                 <div>
-                  <span className="label">Expanded terms</span>
+                  <span className="label">확장된 검색어</span>
                   <div className="dd-term-list">
                     {result.expanded_terms.map((term) => (
                       <code key={term}>{term}</code>
@@ -422,18 +422,18 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
             <table className="data-table" data-testid="search-result-table">
               <thead>
                 <tr>
-                  <th>Rank</th>
-                  <th>Type</th>
-                  <th>Schema</th>
-                  <th>Table</th>
-                  <th>Column</th>
-                  <th>Kw score</th>
-                  <th>Kw rank</th>
-                  <th>Sem score</th>
-                  <th>Sem rank</th>
+                  <th>순위</th>
+                  <th>유형</th>
+                  <th>스키마</th>
+                  <th>테이블</th>
+                  <th>컬럼</th>
+                  <th>키워드 점수</th>
+                  <th>키워드 순위</th>
+                  <th>의미 점수</th>
+                  <th>의미 순위</th>
                   <th>RRF</th>
-                  <th>Evidence</th>
-                  <th>Snippet</th>
+                  <th>검색 근거</th>
+                  <th>메타데이터 요약</th>
                 </tr>
               </thead>
               <tbody>
@@ -459,14 +459,14 @@ export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: bo
 
           {result.related_tables.length > 0 ? (
             <div className="dd-related" data-testid="search-related-tables">
-              <h3>Related tables</h3>
+              <h3>함께 연결된 테이블</h3>
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Related</th>
-                    <th>Seed</th>
-                    <th>Hops</th>
-                    <th>Path</th>
+                    <th>관련 테이블</th>
+                    <th>기준 테이블</th>
+                    <th>관계 단계</th>
+                    <th>연결 경로</th>
                   </tr>
                 </thead>
                 <tbody>

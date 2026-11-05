@@ -196,8 +196,8 @@ export function SchemaSnapshotHistory() {
   return (
     <section className="dd-panel" data-testid="schema-snapshot-history">
       <header className="dd-panel-header">
-        <h2>Schema Snapshot History</h2>
-        <span className="subtitle">메타데이터 이력·변경 Diff · 조회 전용</span>
+        <h2>스키마 변경 이력</h2>
+        <span className="subtitle">메타데이터 스냅샷·변경 내역 비교 · 조회 전용</span>
       </header>
       <div className="banner banner-warn" data-testid="snapshot-not-authority">
         Snapshot 검토 및 WARNING 후보 확인은 독립 DBA Preflight, Catalog READY 승인 또는 활성화를 의미하지 않습니다.
@@ -214,7 +214,7 @@ export function SchemaSnapshotHistory() {
       }}>
         <div className="dd-form-row">
           <label className="dd-field">
-            <span>Source name</span>
+            <span>스냅샷 데이터 소스 이름</span>
             <input
               aria-label="Snapshot source name"
               value={sourceInput}

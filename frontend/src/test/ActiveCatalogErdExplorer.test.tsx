@@ -65,7 +65,7 @@ describe("ERD Explorer UI", () => {
     expect(screen.getAllByText(/FK_ADM_ENC/).length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: "canvas:FK_ADM_ENC" }));
     expect(await screen.findByTestId("erd-relation-detail")).toHaveTextContent("ENC_ID");
-    expect(screen.getByTestId("erd-relation-detail")).toHaveTextContent("Source column");
+    expect(screen.getByTestId("erd-relation-detail")).toHaveTextContent("참조하는 컬럼");
 
     await user.selectOptions(screen.getByLabelText("ERD 보기 방식"), "category");
     await user.selectOptions(screen.getByLabelText("ERD Category"), "clinical");
@@ -73,7 +73,7 @@ describe("ERD Explorer UI", () => {
     expect(screen.queryByRole("button", { name: "TB_ADM_HIST" })).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("ERD 테이블 검색"), "존재하지않음");
-    expect(screen.getByText("조건에 맞는 Table이 없습니다.")).toBeInTheDocument();
+    expect(screen.getByText("조건에 맞는 테이블이 없습니다.")).toBeInTheDocument();
     expect(loadActiveCatalogErd).toHaveBeenCalledTimes(1);
   });
 
@@ -93,6 +93,20 @@ describe("ERD Explorer UI", () => {
     resolveOld(data);
     await waitFor(() => expect(screen.queryByTestId("mock-erd-canvas")).not.toBeInTheDocument());
     expect(screen.queryByText("TB_ADM_HIST")).not.toBeInTheDocument();
+  });
+
+  it("explains why Category ERD is unavailable when the active Catalog has no categories", async () => {
+    vi.mocked(listActiveCatalogs).mockResolvedValue([activeSource]);
+    vi.mocked(loadActiveCatalogErd).mockResolvedValue({
+      ...data, categories: [], totalCategories: 0,
+    });
+    render(<ActiveCatalogErdExplorer />);
+    expect(await screen.findByTestId("erd-category-empty-guidance")).toHaveTextContent(
+      "전체 ERD와 선택 테이블 주변 관계도는 정상적으로",
+    );
+    expect(within(screen.getByLabelText("ERD 보기 방식")).getByRole("option", {
+      name: "분류별 ERD",
+    })).toBeDisabled();
   });
 
   it("hides loaded metadata as soon as the user switches source", async () => {

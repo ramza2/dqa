@@ -91,7 +91,7 @@ describe("CatalogExplorer", () => {
     await screen.findByText("TB_ADM_HIST");
     await user.click(screen.getByRole("button", { name: /TB_ADM_HIST/i }));
 
-    expect(await screen.findByText("Overview")).toBeInTheDocument();
+    expect(await screen.findByText("테이블 개요")).toBeInTheDocument();
     expect(screen.getAllByText("BASE TABLE").length).toBeGreaterThan(0);
     expect(screen.getAllByText("환자 입원 이력").length).toBeGreaterThan(0);
 
@@ -102,19 +102,21 @@ describe("CatalogExplorer", () => {
     expect(screen.getByText("YES")).toBeInTheDocument();
     expect(screen.getByText("NO")).toBeInTheDocument();
 
-    expect(screen.getByText("Outbound FK")).toBeInTheDocument();
-    await user.click(screen.getByRole("tab", { name: /Relations 2/i }));
+    expect(screen.getByText("참조하는 FK")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /관계 2/i }));
     expect(screen.getByText("FK_ADM_ENC")).toBeInTheDocument();
-    expect(screen.getByText("Outbound FK (1)")).toBeInTheDocument();
-    expect(screen.getByText("Inbound FK (1)")).toBeInTheDocument();
+    expect(screen.getByText("참조하는 FK (1)")).toBeInTheDocument();
+    expect(screen.getByText("참조받는 FK (1)")).toBeInTheDocument();
     expect(screen.getByText("ENC_ID → ENC_ID")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /Indexes 1/i }));
+    await user.click(screen.getByRole("tab", { name: /인덱스 1/i }));
     expect(screen.getByText("IX_ADM_ENC")).toBeInTheDocument();
     expect(screen.getByText("NORMAL")).toBeInTheDocument();
 
     const categories = screen.getByLabelText("Categories");
-    expect(within(categories).getByText(/No categories in this Catalog/i)).toBeInTheDocument();
+    expect(within(categories).getByText(/등록된 분류 정보가 없습니다/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Category 필터")).toBeDisabled();
+    expect(screen.getByTestId("catalog-category-empty-guidance")).toHaveTextContent("테이블·컬럼·관계 탐색은 정상적으로");
     restore();
   });
 
@@ -172,12 +174,12 @@ describe("CatalogExplorer", () => {
     expect(screen.getByRole("button", { name: /TB_ADM_HIST/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /TB_ADM_HIST/i }));
-    await screen.findByText("Overview");
-    await user.click(screen.getByRole("tab", { name: /Categories 1/i }));
+    await screen.findByText("테이블 개요");
+    await user.click(screen.getByRole("tab", { name: /분류 1/i }));
     expect(screen.getByText("reviewed assignment")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Schema 필터"), "OTHER");
-    expect(await screen.findByText("No tables match this search")).toBeInTheDocument();
+    expect(await screen.findByText("검색 조건에 맞는 테이블이 없습니다.")).toBeInTheDocument();
     expect(seenFilters.some((item) => item.category === "clinical" && item.schema === "OTHER")).toBe(true);
     expect(screen.queryByText("reviewed assignment")).not.toBeInTheDocument();
     restore();
@@ -209,14 +211,14 @@ describe("CatalogExplorer", () => {
     render(<CatalogExplorer />);
     expect(await screen.findByRole("alert")).toBeInTheDocument();
     expect(screen.getByText("CATALOG_ACTIVE_REVISION_NOT_FOUND")).toBeInTheDocument();
-    expect(screen.getByText(/Catalog data could not be loaded/i)).toBeInTheDocument();
+    expect(screen.getByText(/Catalog 데이터를 불러오지 못했습니다/i)).toBeInTheDocument();
     restore();
   });
 
   it("shows empty state when no active Catalog exists", async () => {
     const restore = installFetchMock(defaultCatalogHandlers({ actives: [] }));
     render(<CatalogExplorer />);
-    expect(await screen.findByText("No active Catalog")).toBeInTheDocument();
+    expect(await screen.findByText("활성 Catalog가 없습니다.")).toBeInTheDocument();
     restore();
   });
 
@@ -229,13 +231,13 @@ describe("CatalogExplorer", () => {
 
     await screen.findByLabelText("Active Catalog source");
     await user.click(await screen.findByRole("button", { name: /TB_ADM_HIST/i }));
-    expect(await screen.findByText("Overview")).toBeInTheDocument();
+    expect(await screen.findByText("테이블 개요")).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Active Catalog source"), "oracle_demis_other");
     await waitFor(() => {
-      expect(screen.queryByText("Overview")).not.toBeInTheDocument();
+      expect(screen.queryByText("테이블 개요")).not.toBeInTheDocument();
     });
-    expect(screen.getByText(/Select a table to inspect metadata/i)).toBeInTheDocument();
+    expect(screen.getByText(/왼쪽 목록에서 테이블을 선택하면/i)).toBeInTheDocument();
     restore();
   });
 
@@ -395,7 +397,7 @@ describe("CatalogExplorer", () => {
     expect(
       await screen.findByText(/Catalog revision changed\. Refreshing metadata/i),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("테이블 개요")).not.toBeInTheDocument();
     expect(screen.queryByText("WARD_CD")).not.toBeInTheDocument();
     restore();
   });
@@ -500,11 +502,11 @@ describe("CatalogExplorer", () => {
     });
 
     const categories = screen.getByLabelText("Categories");
-    expect(within(categories).getByText(/No categories in this Catalog/i)).toBeInTheDocument();
+    expect(within(categories).getByText(/등록된 분류 정보가 없습니다/i)).toBeInTheDocument();
     expect(screen.queryByText("Stale Category Name")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /TB_ADM_HIST/i }));
-    expect(await screen.findByText("Overview")).toBeInTheDocument();
+    expect(await screen.findByText("테이블 개요")).toBeInTheDocument();
     expect(screen.getByText("WARD_CD")).toBeInTheDocument();
     restore();
   });

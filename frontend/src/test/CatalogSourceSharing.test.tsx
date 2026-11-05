@@ -30,18 +30,26 @@ describe("shared active Catalog Source in the Discovery workspace", () => {
     );
 
     render(<DataDiscoveryPortal />);
+    expect(screen.getByRole("tab", { name: "스키마 검색" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "테이블 탐색" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "ERD 관계도" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "검색 인덱스 상태" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "스키마 변경 이력" })).toBeInTheDocument();
     const selector = await screen.findByTestId("catalog-source-toolbar-select");
     expect(selector).toHaveValue(activeSource.source_name);
     expect(screen.getAllByLabelText("Active Catalog source")).toHaveLength(1);
 
     await user.click(screen.getByTestId("dd-tab-explorer"));
-    expect(await screen.findByRole("heading", { name: "Table Explorer" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "테이블 탐색" })).toBeInTheDocument();
+    expect(screen.queryByTestId("active-catalog-status")).not.toBeInTheDocument();
+    expect(screen.getByTestId("toolbar-catalog-metadata")).toHaveTextContent("개정번호");
     await user.selectOptions(selector, secondSource.source_name);
     expect(selector).toHaveValue(secondSource.source_name);
     expect(screen.getAllByLabelText("Active Catalog source")).toHaveLength(1);
 
     await user.click(screen.getByTestId("dd-tab-erd"));
     expect(await screen.findByTestId("active-catalog-erd-explorer")).toBeInTheDocument();
+    expect(screen.queryByTestId("active-catalog-status")).not.toBeInTheDocument();
     expect(selector).toHaveValue(secondSource.source_name);
 
     await user.click(screen.getByTestId("dd-tab-search"));
@@ -51,6 +59,7 @@ describe("shared active Catalog Source in the Discovery workspace", () => {
 
     await user.click(screen.getByTestId("dd-tab-index"));
     expect(await screen.findByTestId("data-discovery-index-status")).toBeInTheDocument();
+    expect(screen.queryByText("활성 Catalog 정보")).not.toBeInTheDocument();
     expect(selector).toHaveValue(secondSource.source_name);
     expect(screen.getAllByLabelText("Active Catalog source")).toHaveLength(1);
 
@@ -114,7 +123,7 @@ describe("shared active Catalog Source in the Discovery workspace", () => {
       </CatalogSourceProvider>,
     );
     expect(await screen.findByTestId("catalog-source-empty")).toBeInTheDocument();
-    expect(screen.getByText(/No active Catalog/i)).toBeInTheDocument();
+    expect(screen.getByText(/활성 Catalog가 없습니다/)).toBeInTheDocument();
     restore();
   });
 
@@ -159,7 +168,7 @@ describe("shared active Catalog Source in the Discovery workspace", () => {
     expect(await screen.findByTestId("snapshot-independent-source-note")).toBeInTheDocument();
     expect(selector).toHaveValue(secondSource.source_name);
     expect(selector).toBeDisabled();
-    expect(await screen.findByRole("heading", { name: /Schema Snapshot History/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /스키마 변경 이력/ })).toBeInTheDocument();
 
     await user.click(screen.getByTestId("dd-tab-search"));
     expect(selector).toHaveValue(secondSource.source_name);

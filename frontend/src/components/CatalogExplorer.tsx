@@ -30,8 +30,8 @@ function CatalogExplorerBody({ sharedSourceBar = false }: { sharedSourceBar?: bo
     <div className="app-shell catalog-explorer-shell" data-testid="catalog-explorer">
       <header className="app-header">
         <div className="app-title-row">
-          <h1>Table Explorer</h1>
-          <span className="subtitle">활성 Catalog의 Table·Column·관계·Index·Category 탐색</span>
+          <h1>테이블 탐색</h1>
+          <span className="subtitle">활성 Catalog에 등록된 테이블·컬럼·관계·인덱스·분류 정보</span>
         </div>
         {!sharedSourceBar ? <SourceSelector
           sources={explorer.sources}
@@ -43,13 +43,13 @@ function CatalogExplorerBody({ sharedSourceBar = false }: { sharedSourceBar?: bo
         {sourceGate.status === "loading" ||
         sourceGate.status === "error" ||
         sourceGate.status === "empty" ? (
-          <StatusBanner state={sourceGate} emptyLabel="No active Catalog" />
+          <StatusBanner state={sourceGate} emptyLabel="활성 Catalog가 없습니다." />
         ) : (
-          <ActiveCatalogHeader
-            active={explorer.active}
-            staleWarning={explorer.staleWarning}
-            hideSource={sharedSourceBar}
-          />
+          sharedSourceBar ? (
+            explorer.staleWarning ? <div className="banner banner-warn">{explorer.staleWarning}</div> : null
+          ) : (
+            <ActiveCatalogHeader active={explorer.active} staleWarning={explorer.staleWarning} />
+          )
         )}
       </header>
 
@@ -60,20 +60,20 @@ function CatalogExplorerBody({ sharedSourceBar = false }: { sharedSourceBar?: bo
         <>
           <div className="explorer-toolbar" aria-label="Table Explorer 필터">
             <label>
-              Category
+              분류(Category)
               <select aria-label="Category 필터" value={explorer.categoryFilter}
-                disabled={explorer.categoriesState.status !== "ready"}
+                disabled={explorer.categoriesState.status !== "ready" || explorer.categories.length === 0}
                 onChange={(event) => explorer.setCategoryFilter(event.target.value)}>
-                <option value="">전체 Category</option>
+                <option value="">전체 분류</option>
                 {explorer.categories.map((category) => (
                   <option key={category.id} value={category.id}>{category.name ?? category.id}</option>
                 ))}
               </select>
             </label>
             <label>
-              Schema
+              스키마(Schema)
               <input aria-label="Schema 필터" list="catalog-schema-suggestions"
-                placeholder="전체 Schema (직접 입력 가능)"
+                placeholder="전체 스키마 (직접 입력 가능)"
                 value={explorer.schemaFilter}
                 onChange={(event) => explorer.setSchemaFilter(event.target.value)} />
               <datalist id="catalog-schema-suggestions">
@@ -81,11 +81,16 @@ function CatalogExplorerBody({ sharedSourceBar = false }: { sharedSourceBar?: bo
               </datalist>
             </label>
             <div className="explorer-table-count" role="status">
-              <strong>{explorer.tables.length}</strong> loaded tables
+              <strong>{explorer.tables.length}</strong>개 테이블 표시
               {explorer.tableTotal != null && explorer.tableTotal > explorer.tables.length
                 ? <span> (서버 검색 총 {explorer.tableTotal}건)</span> : null}
             </div>
           </div>
+          {explorer.categoriesState.status === "empty" ? (
+            <p className="dd-inline-note" role="status" data-testid="catalog-category-empty-guidance">
+              현재 Catalog에는 분류 정보가 등록되지 않았습니다. 분류 필터만 사용할 수 없으며 테이블·컬럼·관계 탐색은 정상적으로 이용할 수 있습니다.
+            </p>
+          ) : null}
           <div className="main-layout">
             <TableList
               query={explorer.tableQuery}

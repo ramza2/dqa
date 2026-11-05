@@ -21,38 +21,38 @@ export function DataDiscoveryPortal() {
     <div className="dd-portal" data-testid="data-discovery-portal">
       <CatalogSourceProvider>
         <DiscoverySourceToolbar snapshotTab={tab === "snapshot"} actionBusy={indexBusy} />
-        <div className="dd-subnav" role="tablist" aria-label="Data Discovery">
+        <div className="dd-subnav" role="tablist" aria-label="스키마·Catalog 탐색 메뉴">
           <button type="button" role="tab" aria-selected={tab === "search"}
             className={tab === "search" ? "nav-tab active" : "nav-tab"}
             onClick={() => setTab("search")} data-testid="dd-tab-search">
-            Schema Search
+            스키마 검색
           </button>
           <button type="button" role="tab" aria-selected={tab === "explorer"}
             className={tab === "explorer" ? "nav-tab active" : "nav-tab"}
             onClick={() => setTab("explorer")} data-testid="dd-tab-explorer">
-            Table Explorer
+            테이블 탐색
           </button>
           <button type="button" role="tab" aria-selected={tab === "erd"}
             className={tab === "erd" ? "nav-tab active" : "nav-tab"}
             onClick={() => setTab("erd")} data-testid="dd-tab-erd">
-            ERD Explorer
+            ERD 관계도
           </button>
           <button type="button" role="tab" aria-selected={tab === "index"}
             className={tab === "index" ? "nav-tab active" : "nav-tab"}
             onClick={() => setTab("index")} data-testid="dd-tab-index">
-            Index Status
+            검색 인덱스 상태
           </button>
           <button type="button" role="tab" aria-selected={tab === "snapshot"}
             className={tab === "snapshot" ? "nav-tab active" : "nav-tab"}
             onClick={() => setTab("snapshot")} data-testid="dd-tab-snapshot">
-            Snapshot History
+            스키마 변경 이력
           </button>
         </div>
 
         <ErdFocusProvider onAfterRequest={openErdTab}>
           {tab === "explorer" ? <CatalogExplorer sharedSourceBar /> : null}
           {tab === "erd" ? (
-            <Suspense fallback={<p role="status">ERD Explorer 로딩 중…</p>}>
+            <Suspense fallback={<p role="status">ERD 관계도 로딩 중…</p>}>
               <ActiveCatalogErdExplorer sharedSourceBar />
             </Suspense>
           ) : null}

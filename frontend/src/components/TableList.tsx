@@ -29,7 +29,7 @@ export function TableList({
     <aside className="pane" aria-label="Table explorer">
       <div className="pane-header">
         <div className="table-list-heading">
-          <h2>Tables</h2>
+          <h2>테이블 목록</h2>
           {loadedCount != null ? (
             <span className="muted" aria-label="표시된 테이블 수">
               {loadedCount}건 표시
@@ -39,7 +39,7 @@ export function TableList({
         <input
           className="search-input"
           type="search"
-          placeholder="Search tables (name or comment)"
+          placeholder="테이블명 또는 설명 검색"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           aria-label="Search tables"
@@ -53,7 +53,7 @@ export function TableList({
       </div>
       {state.status === "loading" || state.status === "error" || state.status === "empty" ? (
         <div className="pane-status">
-          <StatusBanner state={state} emptyLabel="No tables" />
+          <StatusBanner state={state} emptyLabel="조건에 맞는 테이블이 없습니다." />
         </div>
       ) : null}
       <ul className="table-list">

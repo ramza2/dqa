@@ -306,7 +306,7 @@ export function useCatalogExplorer(sourceSelection: CatalogSourceSelection) {
           response.items.length === 0
             ? {
                 status: "empty",
-                message: "No tables match this search",
+                message: "검색 조건에 맞는 테이블이 없습니다.",
                 code: null,
                 httpStatus: null,
               }
@@ -365,7 +365,7 @@ export function useCatalogExplorer(sourceSelection: CatalogSourceSelection) {
           response.items.length === 0
             ? {
                 status: "empty",
-                message: "No categories in this Catalog",
+                message: "이 Catalog에는 등록된 분류 정보가 없습니다. 테이블 및 관계 탐색은 계속 사용할 수 있습니다.",
                 code: null,
                 httpStatus: null,
               }
