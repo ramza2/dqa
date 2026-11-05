@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useCatalogExplorer } from "../hooks/useCatalogExplorer";
+import { useOptionalErdFocus } from "../hooks/erdFocusContext";
 import { FocusedErdPanel } from "./FocusedErdPanel";
 import { ActiveCatalogHeader, SourceSelector } from "./ActiveCatalogHeader";
 import { useCatalogSource, useOptionalCatalogSource } from "../hooks/catalogSourceContext";
@@ -11,6 +12,7 @@ import { TableList } from "./TableList";
 function CatalogExplorerBody() {
   const sourceSelection = useCatalogSource();
   const explorer = useCatalogExplorer(sourceSelection);
+  const erdFocus = useOptionalErdFocus();
   const [showErd, setShowErd] = useState(false);
   const schemas = [...new Set(explorer.tables.map((table) => table.schema_name))].sort();
   const selectedIsVisible = Boolean(explorer.selectedTable && explorer.tablesState.status === "ready");
@@ -117,6 +119,14 @@ function CatalogExplorerBody() {
                   relations={explorer.relations}
                   source={explorer.selectedSource}
                   revision={explorer.active.revision_id}
+                  onOpenFullErd={erdFocus && explorer.selectedTable ? () => {
+                    erdFocus.requestErdFocus({
+                      sourceName: explorer.selectedSource,
+                      schemaName: explorer.selectedTable!.schema_name,
+                      tableName: explorer.selectedTable!.name,
+                      hops: 1,
+                    });
+                  } : undefined}
                 />
               ) : (
                 <TableDetailPanel

@@ -18,12 +18,14 @@ export interface ErdLink {
 
 export type ErdMode = "full" | "neighborhood" | "category";
 
+export type ErdHops = 1 | 2 | 3;
+
 export interface ErdSelection {
   mode: ErdMode;
   focus: string;
   category: string;
   search: string;
-  hops: 1 | 2;
+  hops: ErdHops;
 }
 
 const MAX_VISIBLE_TABLES = 80;

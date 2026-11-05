@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActiveCatalogErdExplorer } from "../components/ActiveCatalogErdExplorer";
@@ -10,12 +10,16 @@ import type { CatalogErdSnapshot } from "../api/catalogErd";
 vi.mock("../api/catalog", () => ({ listActiveCatalogs: vi.fn() }));
 vi.mock("../api/catalogErd", () => ({ loadActiveCatalogErd: vi.fn() }));
 vi.mock("../components/CatalogErdCanvas", () => ({
-  CatalogErdCanvas: ({ tables, onTableSelect }: {
+  CatalogErdCanvas: ({ tables, links, onTableSelect, onLinkSelect }: {
     tables: { id: string; name: string }[];
+    links: { id: string; name: string | null }[];
     onTableSelect: (id: string) => void;
+    onLinkSelect: (id: string) => void;
   }) => <div data-testid="mock-erd-canvas">
     {tables.map((table) => <button key={table.id} type="button"
       onClick={() => onTableSelect(table.id)}>{table.name}</button>)}
+    {links.map((link) => <button key={link.id} type="button"
+      onClick={() => onLinkSelect(link.id)}>canvas:{link.name ?? "FK"}</button>)}
   </div>,
 }));
 
@@ -56,7 +60,12 @@ describe("ERD Explorer UI", () => {
     await user.click(screen.getByRole("button", { name: "이 테이블 중심 보기" }));
     expect(screen.getByLabelText("ERD 보기 방식")).toHaveValue("neighborhood");
     expect(screen.getByLabelText("ERD 관계 단계")).toHaveValue("1");
-    expect(screen.getByText(/FK_ADM_ENC/)).toBeInTheDocument();
+    expect(within(screen.getByLabelText("ERD 관계 단계"))
+      .getByRole("option", { name: "3단계 FK" })).toBeInTheDocument();
+    expect(screen.getAllByText(/FK_ADM_ENC/).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "canvas:FK_ADM_ENC" }));
+    expect(await screen.findByTestId("erd-relation-detail")).toHaveTextContent("ENC_ID");
+    expect(screen.getByTestId("erd-relation-detail")).toHaveTextContent("Source column");
 
     await user.selectOptions(screen.getByLabelText("ERD 보기 방식"), "category");
     await user.selectOptions(screen.getByLabelText("ERD Category"), "clinical");
