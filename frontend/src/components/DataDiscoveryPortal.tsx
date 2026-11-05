@@ -20,7 +20,7 @@ export function DataDiscoveryPortal() {
   return (
     <div className="dd-portal" data-testid="data-discovery-portal">
       <CatalogSourceProvider>
-        <DiscoverySourceToolbar snapshotTab={tab === "snapshot"} actionBusy={indexBusy} />
+        <DiscoverySourceToolbar actionBusy={indexBusy} />
         <div className="dd-subnav" role="tablist" aria-label="스키마·Catalog 탐색 메뉴">
           <button type="button" role="tab" aria-selected={tab === "search"}
             className={tab === "search" ? "nav-tab active" : "nav-tab"}

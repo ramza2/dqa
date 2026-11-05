@@ -3,12 +3,11 @@ import { shortenFingerprint } from "../utils/fingerprint";
 import { StatusBanner } from "./StatusBanner";
 
 interface Props {
-  snapshotTab: boolean;
   actionBusy: boolean;
 }
 
 /** One permission-filtered active Catalog workspace, independent of connection profiles. */
-export function DiscoverySourceToolbar({ snapshotTab, actionBusy }: Props) {
+export function DiscoverySourceToolbar({ actionBusy }: Props) {
   const { sources, selectedSource, selectSource, sourcesState } = useCatalogSource();
   const active = sources.find((item) => item.source_name === selectedSource) ?? null;
 
@@ -21,7 +20,7 @@ export function DiscoverySourceToolbar({ snapshotTab, actionBusy }: Props) {
             aria-label="Active Catalog source"
             data-testid="catalog-source-toolbar-select"
             value={active ? selectedSource : ""}
-            disabled={snapshotTab || actionBusy || sourcesState.status !== "ready"}
+            disabled={actionBusy || sourcesState.status !== "ready"}
             onChange={(event) => selectSource(event.target.value)}
           >
             {!active ? <option value="">선택 가능한 활성 Catalog 없음</option> : null}
@@ -41,12 +40,7 @@ export function DiscoverySourceToolbar({ snapshotTab, actionBusy }: Props) {
           </div>
         ) : null}
       </div>
-      {snapshotTab ? (
-        <p className="dd-source-toolbar-note" data-testid="snapshot-independent-source-note">
-          스키마 변경 이력은 아래에서 데이터 소스 이름을 별도로 입력합니다. 활성 Catalog가 없어도 조회 권한이 있는 이력을 확인할 수 있습니다.
-        </p>
-      ) : null}
-      {!snapshotTab && sourcesState.status !== "ready" ? (
+      {sourcesState.status !== "ready" ? (
         <StatusBanner state={sourcesState} emptyLabel="활성 Catalog가 없습니다." />
       ) : null}
     </div>

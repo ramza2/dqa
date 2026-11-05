@@ -22,8 +22,8 @@ function LiveCatalogSourceProvider({ children }: { children: ReactNode }) {
 
 /**
  * Shares one permission-filtered active Catalog Source selection across
- * Schema Search, Table Explorer, ERD Explorer and Index Status.
- * Snapshot History intentionally retains its independent historical Source input.
+ * Schema Search, Table Explorer, ERD Explorer, Index Status and the default
+ * Snapshot History view. Snapshot-only Sources retain a separate manual path.
  */
 export function CatalogSourceProvider({ children, value }: ProviderProps) {
   if (value) {
