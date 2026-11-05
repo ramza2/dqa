@@ -61,9 +61,10 @@ export function SourceSelector({
 interface HeaderProps {
   active: CatalogActiveSummary | null;
   staleWarning: string | null;
+  hideSource?: boolean;
 }
 
-export function ActiveCatalogHeader({ active, staleWarning }: HeaderProps) {
+export function ActiveCatalogHeader({ active, staleWarning, hideSource = false }: HeaderProps) {
   if (!active) {
     return null;
   }
@@ -76,10 +77,10 @@ export function ActiveCatalogHeader({ active, staleWarning }: HeaderProps) {
   return (
     <>
       <div className="status-grid" data-testid="active-catalog-status">
-        <div className="status-item">
+        {!hideSource ? <div className="status-item">
           <span className="label">Source</span>
           <span className="value">{active.source_name}</span>
-        </div>
+        </div> : null}
         <div className="status-item">
           <span className="label">Revision</span>
           <span className="value">{active.revision_id}</span>

@@ -18,31 +18,46 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("shared Catalog Source across Table/ERD Explorer", () => {
-  it("keeps the selected source when switching Table Explorer and ERD Explorer tabs", async () => {
+describe("shared active Catalog Source in the Discovery workspace", () => {
+  it("keeps one toolbar selection across Search, Table, ERD and Index tabs", async () => {
     const user = userEvent.setup();
+    const paths: string[] = [];
     const restore = installFetchMock(
-      defaultCatalogHandlers({ actives: [activeSource, secondSource] }),
+      [
+        (url) => { paths.push(url.pathname); return null; },
+        ...defaultCatalogHandlers({ actives: [activeSource, secondSource] }),
+      ],
     );
 
     render(<DataDiscoveryPortal />);
+    const selector = await screen.findByTestId("catalog-source-toolbar-select");
+    expect(selector).toHaveValue(activeSource.source_name);
+    expect(screen.getAllByLabelText("Active Catalog source")).toHaveLength(1);
+
     await user.click(screen.getByTestId("dd-tab-explorer"));
     expect(await screen.findByRole("heading", { name: "Table Explorer" })).toBeInTheDocument();
-
-    const selector = await screen.findByLabelText("Active Catalog source");
     await user.selectOptions(selector, secondSource.source_name);
     expect(selector).toHaveValue(secondSource.source_name);
+    expect(screen.getAllByLabelText("Active Catalog source")).toHaveLength(1);
 
     await user.click(screen.getByTestId("dd-tab-erd"));
     expect(await screen.findByTestId("active-catalog-erd-explorer")).toBeInTheDocument();
-    expect(await screen.findByLabelText("Active Catalog source")).toHaveValue(
-      secondSource.source_name,
-    );
+    expect(selector).toHaveValue(secondSource.source_name);
+
+    await user.click(screen.getByTestId("dd-tab-search"));
+    expect(await screen.findByTestId("schema-search")).toBeInTheDocument();
+    expect(selector).toHaveValue(secondSource.source_name);
+    expect(screen.getAllByLabelText("Active Catalog source")).toHaveLength(1);
+
+    await user.click(screen.getByTestId("dd-tab-index"));
+    expect(await screen.findByTestId("data-discovery-index-status")).toBeInTheDocument();
+    expect(selector).toHaveValue(secondSource.source_name);
+    expect(screen.getAllByLabelText("Active Catalog source")).toHaveLength(1);
 
     await user.click(screen.getByTestId("dd-tab-explorer"));
-    expect(await screen.findByLabelText("Active Catalog source")).toHaveValue(
-      secondSource.source_name,
-    );
+    expect(selector).toHaveValue(secondSource.source_name);
+    expect(paths).toContain("/api/v1/catalog/active");
+    expect(paths.some((path) => path.includes("connection-profiles"))).toBe(false);
     restore();
   });
 
@@ -129,7 +144,7 @@ describe("shared Catalog Source across Table/ERD Explorer", () => {
     restore();
   });
 
-  it("does not let Schema Search inherit the shared Table/ERD source selection", async () => {
+  it("preserves the Snapshot History direct Source input without changing the active Catalog selection", async () => {
     const user = userEvent.setup();
     const restore = installFetchMock(
       defaultCatalogHandlers({ actives: [activeSource, secondSource] }),
@@ -137,13 +152,33 @@ describe("shared Catalog Source across Table/ERD Explorer", () => {
     render(<DataDiscoveryPortal />);
 
     await user.click(screen.getByTestId("dd-tab-explorer"));
-    const explorerSelect = await screen.findByLabelText("Active Catalog source");
-    await user.selectOptions(explorerSelect, secondSource.source_name);
+    const selector = await screen.findByLabelText("Active Catalog source");
+    await user.selectOptions(selector, secondSource.source_name);
+
+    await user.click(screen.getByTestId("dd-tab-snapshot"));
+    expect(await screen.findByTestId("snapshot-independent-source-note")).toBeInTheDocument();
+    expect(selector).toHaveValue(secondSource.source_name);
+    expect(selector).toBeDisabled();
+    expect(await screen.findByRole("heading", { name: /Schema Snapshot History/ })).toBeInTheDocument();
 
     await user.click(screen.getByTestId("dd-tab-search"));
-    const searchSelect = await screen.findByLabelText("Active Catalog source");
-    // Schema Search keeps an independent default (first source), not the shared ERD/Table pick.
-    expect(searchSelect).toHaveValue(activeSource.source_name);
+    expect(selector).toHaveValue(secondSource.source_name);
+    expect(selector).toBeEnabled();
+    restore();
+  });
+
+  it("does not expose a stale unauthorized Source in the shared toolbar", async () => {
+    sessionStorage.setItem(CATALOG_SOURCE_STORAGE_KEY, secondSource.source_name);
+    const restore = installFetchMock(defaultCatalogHandlers());
+    render(<DataDiscoveryPortal />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("catalog-source-toolbar-select")).toHaveValue(
+        activeSource.source_name,
+      );
+    });
+    expect(screen.getAllByLabelText("Active Catalog source")).toHaveLength(1);
+    expect(sessionStorage.getItem(CATALOG_SOURCE_STORAGE_KEY)).toBe(activeSource.source_name);
     restore();
   });
 });

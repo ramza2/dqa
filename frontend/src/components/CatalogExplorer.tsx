@@ -9,7 +9,7 @@ import { CategoriesPanel, TableDetailPanel } from "./TableDetail";
 import { StatusBanner } from "./StatusBanner";
 import { TableList } from "./TableList";
 
-function CatalogExplorerBody() {
+function CatalogExplorerBody({ sharedSourceBar = false }: { sharedSourceBar?: boolean }) {
   const sourceSelection = useCatalogSource();
   const explorer = useCatalogExplorer(sourceSelection);
   const erdFocus = useOptionalErdFocus();
@@ -33,13 +33,13 @@ function CatalogExplorerBody() {
           <h1>Table Explorer</h1>
           <span className="subtitle">활성 Catalog의 Table·Column·관계·Index·Category 탐색</span>
         </div>
-        <SourceSelector
+        {!sharedSourceBar ? <SourceSelector
           sources={explorer.sources}
           selectedSource={explorer.selectedSource}
           onSelect={explorer.selectSource}
           disabled={explorer.sourcesState.status === "loading"}
           emptyLabel="선택 가능한 활성 Catalog Source가 없습니다"
-        />
+        /> : null}
         {sourceGate.status === "loading" ||
         sourceGate.status === "error" ||
         sourceGate.status === "empty" ? (
@@ -48,6 +48,7 @@ function CatalogExplorerBody() {
           <ActiveCatalogHeader
             active={explorer.active}
             staleWarning={explorer.staleWarning}
+            hideSource={sharedSourceBar}
           />
         )}
       </header>
@@ -157,14 +158,14 @@ function CatalogExplorerBody() {
   );
 }
 
-export function CatalogExplorer() {
+export function CatalogExplorer({ sharedSourceBar = false }: { sharedSourceBar?: boolean }) {
   const shared = useOptionalCatalogSource();
   if (!shared) {
     return (
       <CatalogSourceProvider>
-        <CatalogExplorerBody />
+        <CatalogExplorerBody sharedSourceBar={sharedSourceBar} />
       </CatalogSourceProvider>
     );
   }
-  return <CatalogExplorerBody />;
+  return <CatalogExplorerBody sharedSourceBar={sharedSourceBar} />;
 }

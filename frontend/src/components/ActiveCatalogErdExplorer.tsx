@@ -17,7 +17,7 @@ import "./ActiveCatalogErdExplorer.css";
 
 type Loading = "idle" | "loading" | "ready" | "empty" | "error";
 
-function ActiveCatalogErdExplorerBody() {
+function ActiveCatalogErdExplorerBody({ sharedSourceBar = false }: { sharedSourceBar?: boolean }) {
   const {
     sources,
     selectedSource: source,
@@ -116,14 +116,14 @@ function ActiveCatalogErdExplorerBody() {
         <h1>ERD Explorer</h1>
         <span className="subtitle">React Flow + ELK 기반 활성 Catalog 테이블 관계도</span>
       </div>
-      <SourceSelector
+      {!sharedSourceBar ? <SourceSelector
         sources={sources}
         selectedSource={source}
         onSelect={selectSource}
         disabled={sourcesState.status === "loading"}
         emptyLabel="선택 가능한 활성 Catalog Source가 없습니다"
-      />
-      {visibleSnapshot ? <ActiveCatalogHeader active={visibleSnapshot.active} staleWarning={null} /> : null}
+      /> : null}
+      {visibleSnapshot ? <ActiveCatalogHeader active={visibleSnapshot.active} staleWarning={null} hideSource={sharedSourceBar} /> : null}
     </header>
 
     {sourcesState.status === "loading" ? <p className="dqa-erd-notice" role="status">활성 Catalog 목록 확인 중…</p> : null}
@@ -294,14 +294,14 @@ function ActiveCatalogErdExplorerBody() {
   </div>;
 }
 
-export function ActiveCatalogErdExplorer() {
+export function ActiveCatalogErdExplorer({ sharedSourceBar = false }: { sharedSourceBar?: boolean }) {
   const shared = useOptionalCatalogSource();
   if (!shared) {
     return (
       <CatalogSourceProvider>
-        <ActiveCatalogErdExplorerBody />
+        <ActiveCatalogErdExplorerBody sharedSourceBar={sharedSourceBar} />
       </CatalogSourceProvider>
     );
   }
-  return <ActiveCatalogErdExplorerBody />;
+  return <ActiveCatalogErdExplorerBody sharedSourceBar={sharedSourceBar} />;
 }

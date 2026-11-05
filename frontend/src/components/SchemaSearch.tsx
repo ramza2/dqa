@@ -3,6 +3,7 @@ import { listActiveCatalogs } from "../api/catalog";
 import { searchDataDiscovery } from "../api/dataDiscovery";
 import type { LoadState } from "../hooks/useCatalogExplorer";
 import type { CatalogActiveSummary } from "../types/catalog";
+import { useOptionalCatalogSource } from "../hooks/catalogSourceContext";
 import { CatalogApiError } from "../types/catalog";
 import type {
   DataDiscoverySearchMode,
@@ -44,16 +45,25 @@ function toErrorState(error: unknown): LoadState {
   };
 }
 
-export function SchemaSearch() {
-  const [sources, setSources] = useState<CatalogActiveSummary[]>([]);
-  const [sourcesState, setSourcesState] = useState<LoadState>({
+export function SchemaSearch({ sharedSourceBar = false }: { sharedSourceBar?: boolean }) {
+  const sourceSelection = useOptionalCatalogSource();
+  const useShared = sharedSourceBar && sourceSelection !== null;
+  const [localSources, setLocalSources] = useState<CatalogActiveSummary[]>([]);
+  const [localSourcesState, setLocalSourcesState] = useState<LoadState>({
     status: "loading",
     message: null,
     code: null,
     httpStatus: null,
   });
-  const [selectedSource, setSelectedSource] = useState<string | null>(null);
-  const [active, setActive] = useState<CatalogActiveSummary | null>(null);
+  const [localSelectedSource, setLocalSelectedSource] = useState<string | null>(null);
+  const [localActive, setLocalActive] = useState<CatalogActiveSummary | null>(null);
+  const sources = useShared ? sourceSelection.sources : localSources;
+  const sourcesState = useShared ? sourceSelection.sourcesState : localSourcesState;
+  const selectedSource = useShared ? sourceSelection.selectedSource || null : localSelectedSource;
+  const active = useShared
+    ? sources.find((item) => item.source_name === selectedSource) ?? null
+    : localActive;
+  const reloadShared = useShared ? sourceSelection.reloadSources : null;
 
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<DataDiscoverySearchMode>("hybrid");
@@ -70,15 +80,23 @@ export function SchemaSearch() {
   const activeRef = useRef<CatalogActiveSummary | null>(null);
   const selectedSourceRef = useRef<string | null>(null);
 
+  activeRef.current = active;
+  selectedSourceRef.current = selectedSource;
+
   useEffect(() => {
-    activeRef.current = active;
-  }, [active]);
-  useEffect(() => {
-    selectedSourceRef.current = selectedSource;
-  }, [selectedSource]);
+    if (!useShared) return;
+    requestSeq.current += 1;
+    setResult(null);
+    setStaleWarning(null);
+    setSearchState(idleState);
+  }, [useShared, selectedSource, active?.revision_id, active?.schema_fingerprint]);
 
   const refreshSources = useCallback(async () => {
-    setSourcesState({
+    if (reloadShared) {
+      await reloadShared();
+      return;
+    }
+    setLocalSourcesState({
       status: "loading",
       message: null,
       code: null,
@@ -86,53 +104,54 @@ export function SchemaSearch() {
     });
     try {
       const items = await listActiveCatalogs();
-      setSources(items);
+      setLocalSources(items);
       if (items.length === 0) {
-        setSourcesState({
+        setLocalSourcesState({
           status: "empty",
           message: null,
           code: null,
           httpStatus: null,
         });
-        setSelectedSource(null);
-        setActive(null);
+        setLocalSelectedSource(null);
+        setLocalActive(null);
         return;
       }
-      setSourcesState({
+      setLocalSourcesState({
         status: "ready",
         message: null,
         code: null,
         httpStatus: null,
       });
-      setSelectedSource((prev) => {
+      setLocalSelectedSource((prev) => {
         if (prev && items.some((s) => s.source_name === prev)) {
           return prev;
         }
         return items[0].source_name;
       });
     } catch (error) {
-      setSources([]);
-      setSelectedSource(null);
-      setActive(null);
+      setLocalSources([]);
+      setLocalSelectedSource(null);
+      setLocalActive(null);
       setResult(null);
       setStaleWarning(null);
       setSearchState(idleState);
-      setSourcesState(toErrorState(error));
+      setLocalSourcesState(toErrorState(error));
     }
-  }, []);
+  }, [reloadShared]);
 
   useEffect(() => {
-    void refreshSources();
-  }, [refreshSources]);
+    if (!useShared) void refreshSources();
+  }, [useShared, refreshSources]);
 
   useEffect(() => {
+    if (useShared) return;
     if (!selectedSource) {
-      setActive(null);
+      setLocalActive(null);
       return;
     }
     const match = sources.find((s) => s.source_name === selectedSource) ?? null;
-    setActive(match);
-  }, [selectedSource, sources]);
+    setLocalActive(match);
+  }, [selectedSource, sources, useShared]);
 
   const runSearch = async () => {
     if (!selectedSource || !active || !query.trim()) {
@@ -208,24 +227,24 @@ export function SchemaSearch() {
         <span className="subtitle">Keyword / semantic / hybrid catalog search</span>
       </div>
 
-      <SourceSelector
+      {!useShared ? <SourceSelector
         sources={sources}
         selectedSource={selectedSource ?? ""}
         onSelect={(name) => {
           requestSeq.current += 1;
-          setSelectedSource(name);
+          setLocalSelectedSource(name);
           setResult(null);
           setStaleWarning(null);
           setSearchState(idleState);
         }}
         disabled={sourcesState.status === "loading"}
-      />
+      /> : null}
 
-      {sourcesState.status === "loading" ||
+      {!useShared && (sourcesState.status === "loading" ||
       sourcesState.status === "error" ||
-      sourcesState.status === "empty" ? (
+      sourcesState.status === "empty") ? (
         <StatusBanner state={sourcesState} emptyLabel="No active Catalog" />
-      ) : active ? (
+      ) : !useShared && active ? (
         <div className="status-grid dd-meta-grid" data-testid="search-active-meta">
           <div className="status-item">
             <span className="label">Source</span>
@@ -341,7 +360,9 @@ export function SchemaSearch() {
         </div>
       ) : null}
 
-      {result ? (
+      {result && active && result.source_name === selectedSource &&
+      result.catalog_revision_id === active?.revision_id &&
+      result.schema_fingerprint === active.schema_fingerprint ? (
         <div className="dd-search-results" data-testid="search-results">
           <div className="status-grid dd-meta-grid">
             <div className="status-item">
