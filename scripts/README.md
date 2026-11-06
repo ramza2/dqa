@@ -2,16 +2,22 @@
 
 ## Cloud Agent development environment
 
-- `cloud-agent-install.sh`: idempotent install phase referenced by
-  `.cursor/environment.json`. Provisions the toolchain for the planned stack
-  (PostgreSQL, Python build tooling) and installs backend/frontend dependencies
-  once their manifests exist. Also seeds a local `.env` from `.env.example`.
-- `cloud-agent-start.sh`: per-boot start phase that brings up the local
-  development PostgreSQL cluster and ensures the DQA application role/database
-  exist. Safe to run repeatedly.
+`.cursor/environment.json` points at these scripts:
 
-These scripts only prepare a local development database with a non-secret
-development password; they never contain production credentials.
+- `cloud-agent-install.sh`: idempotent install phase. Installs PostgreSQL,
+  pgvector, and Python build tooling, then installs backend and frontend
+  dependencies when their manifests exist. Seeds a gitignored `.env` from
+  `.env.example` with the local database password `dqa` and
+  `DQA_AUTH_PROVIDER=dev_headers`.
+- `cloud-agent-start.sh`: per-boot start phase. Starts the local PostgreSQL
+  cluster, ensures the DQA role and database exist, creates the `vector`
+  extension when pgvector is installed, applies Alembic migrations when the
+  backend venv has them, and starts the API (`127.0.0.1:8000`) and Vite
+  (`127.0.0.1:5173`) when dependencies are installed. Safe to run repeatedly.
+
+`dev_headers` and the password `dqa` are local development defaults only.
+Do not copy the generated `.env` to an on-prem or production host.
+These scripts never contain production credentials.
 
 ## On-prem / internal deployment
 
