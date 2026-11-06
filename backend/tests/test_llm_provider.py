@@ -392,7 +392,7 @@ def test_structured_success_without_usage() -> None:
             200,
             json=_success_body(
                 content='{"selected_template_id": 3, "confidence": 0.2}',
-                finish_reason="length",
+                finish_reason="stop",
             ),
         )
 
@@ -403,8 +403,37 @@ def test_structured_success_without_usage() -> None:
         purpose=LLMRequestPurpose.CATALOG_EXPLANATION,
     )
     assert result.usage is None
-    assert result.finish_reason == "length"
+    assert result.finish_reason == "stop"
     assert isinstance(result.data, ExampleRecommendation)
+    provider.close()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"selected_template_id": 3, "confidence": 0.2}',
+        '{"selected_template_id": 3, "confidence":',
+    ],
+)
+def test_structured_response_with_length_finish_reason_fails_closed(content: str) -> None:
+    """Even valid JSON must not be accepted when the response hit max_tokens."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_success_body(content=content, finish_reason="length"),
+        )
+
+    provider = _provider_with_handler(handler)
+    with pytest.raises(LLMProviderError) as exc_info:
+        provider.generate_structured(
+            messages=[LLMMessage(role="user", content="x")],
+            response_model=ExampleRecommendation,
+            purpose=LLMRequestPurpose.TEMPLATE_RECOMMENDATION,
+            max_tokens=512,
+        )
+    assert exc_info.value.code == LLMProviderErrorCode.STRUCTURED_OUTPUT_INVALID
+    assert "prompt" not in str(exc_info.value)
     provider.close()
 
 

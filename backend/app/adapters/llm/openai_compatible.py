@@ -111,6 +111,14 @@ class OpenAICompatibleLLMProvider:
         )
         response = self._post(payload)
         envelope = self._parse_envelope(response)
+        # A syntactically valid JSON object is not trustworthy if generation
+        # stopped at the output-token limit. Do not return partial rankings
+        # or parameter extraction as successful advisory results.
+        if envelope.get("finish_reason") == "length":
+            raise LLMProviderError(
+                LLMProviderErrorCode.STRUCTURED_OUTPUT_INVALID,
+                "LLM provider structured output was truncated at the token limit",
+            )
         content = self._extract_content(envelope)
         data = self._validate_structured(content, response_model)
         return LLMStructuredResult[T](
