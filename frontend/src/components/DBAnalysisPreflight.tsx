@@ -5,10 +5,27 @@ import {
 import type {
   ConnectionProfile, ConnectionProfileDiagnostics, ConnectionProfileList,
 } from "../types/connectionProfile";
+import { CatalogApiError } from "../types/catalog";
 import { InspectorTargetReviewPanel } from "./InspectorTargetReviewPanel";
 import { MockInspectorPanel } from "./MockInspectorPanel";
 
 const PAGE_SIZE = 20;
+
+/** Never expose backend error bodies: they can contain connection details. */
+function preflightReadError(error: unknown, scope: "목록" | "상세"): string {
+  if (error instanceof CatalogApiError) {
+    if (error.status === 403) {
+      return "DB 분석 사전점검은 연결 프로필 관리 권한이 필요합니다. 현재 권한으로는 Target을 조회할 수 없습니다. 승인된 관리자 계정으로 접근하세요.";
+    }
+    if (error.status === 401) {
+      return "인증 정보가 확인되지 않았습니다. 인증 상태를 확인한 뒤 다시 시도하세요.";
+    }
+    if (error.status === 503) {
+      return "인증 서비스가 준비되지 않았습니다. DQA 관리자에게 서버 인증 설정 확인을 요청하세요.";
+    }
+  }
+  return `DB Target ${scope} 정보를 불러오지 못했습니다. 서버 연결 상태를 확인한 뒤 다시 시도하세요.`;
+}
 
 /**
  * Analyzer-inspired, read-only preflight workspace. The existing DQA backend
@@ -43,7 +60,7 @@ export function DBAnalysisPreflight() {
         }
         setList(response);
       })
-      .catch(() => { if (active) setListError("대상 DB 목록을 조회할 권한이 없거나 서버에 연결할 수 없습니다."); })
+      .catch((error: unknown) => { if (active) setListError(preflightReadError(error, "목록")); })
       .finally(() => { if (active) setListLoading(false); });
     return () => { active = false; };
   }, [page, refresh]);
@@ -75,8 +92,8 @@ export function DBAnalysisPreflight() {
       }
       setProfile(detail);
       setDiagnostics(status);
-    }).catch(() => {
-      if (active) setDetailError("대상 정보를 확인할 수 없습니다. 관리자 권한과 서버 상태를 확인하세요.");
+    }).catch((error: unknown) => {
+      if (active) setDetailError(preflightReadError(error, "상세"));
     }).finally(() => { if (active) setDetailLoading(false); });
     return () => { active = false; };
   }, [selectedId, refresh]);
