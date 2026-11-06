@@ -1172,6 +1172,33 @@
 .cp-target-review-result p { margin: 0 0 0.3rem; }
 .cp-target-review-result p:last-child { margin-bottom: 0; }
 
+/* M5-UX6: read-only Analyzer Preflight workspace, isolated from live DB actions. */
+.preflight-workspace { align-content: start; }
+.preflight-section {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.preflight-section h3 { font-size: 0.98rem; margin: 0; }
+.preflight-section-heading,
+.preflight-selector-row,
+.preflight-pagination {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.preflight-section-heading { justify-content: space-between; }
+.preflight-selector-row { justify-content: space-between; }
+.preflight-selector-row .dd-field { flex: 1 1 250px; min-width: 0; }
+.preflight-pagination { font-size: 0.82rem; color: var(--muted); }
+.preflight-metadata-grid { margin: 0; }
+.preflight-section > .banner { margin: 0; }
+
 /* S-05-D: advisory Snapshot Gate list; never implies verified/READY status. */
 .snapshot-gates {
   padding-top: 0.7rem;

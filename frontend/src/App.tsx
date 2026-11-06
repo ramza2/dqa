@@ -4,14 +4,18 @@ import { DataDiscoveryPortal, type DiscoveryTab } from "./components/DataDiscove
 import { QueryAssistant } from "./components/QueryAssistant";
 import { TemplateReviewPortal } from "./components/TemplateReviewPortal";
 import { ConnectionProfilePortal } from "./components/ConnectionProfilePortal";
+import { DBAnalysisPreflight } from "./components/DBAnalysisPreflight";
 import { WorkflowDashboard, type WorkflowDestination } from "./components/WorkflowDashboard";
 import "./App.css";
 
-type AppView = "dashboard" | "integration-settings" | WorkflowDestination;
+type AppView = "dashboard" | "integration-settings" | "preflight" | WorkflowDestination;
 
 const NAV_GROUPS: { title: string; items: { view: AppView; label: string }[] }[] = [
   { title: "시작", items: [{ view: "dashboard", label: "대시보드" }] },
-  { title: "DB 분석", items: [{ view: "profiles", label: "DB 연결 관리" }] },
+  { title: "DB 분석", items: [
+    { view: "profiles", label: "DB 연결 관리" },
+    { view: "preflight", label: "DB 분석 사전점검" },
+  ] },
   { title: "스키마·Catalog", items: [{ view: "discovery", label: "스키마·Catalog" }] },
   { title: "조회 및 관리", items: [
     { view: "assistant", label: "조회 시험" },
@@ -67,7 +71,7 @@ export default function App() {
                 ))}
               </div>
               {group.title === "DB 분석" ? (
-                <p className="app-sidebar-note">Preflight·개발용 Inspector는 Target 상세에서 확인합니다.</p>
+                <p className="app-sidebar-note">운영 DBA Preflight 승인 기능은 별도 절차가 필요합니다.</p>
               ) : null}
               {group.title === "스키마·Catalog" ? (
                 <div className="app-sidebar-subnav" aria-label="Catalog 세부 메뉴">
@@ -101,6 +105,7 @@ export default function App() {
       <div className="app-workspace">
         {view === "dashboard" ? <WorkflowDashboard onNavigate={navigateTo} /> : null}
         {view === "profiles" ? <ConnectionProfilePortal /> : null}
+        {view === "preflight" ? <DBAnalysisPreflight /> : null}
         {view === "discovery" ? (
           <DataDiscoveryPortal activeTab={discoveryTab}
             onTabChange={setDiscoveryTab} hideTabNavigation />

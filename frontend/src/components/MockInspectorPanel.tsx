@@ -5,7 +5,7 @@ import {
   type MockInspectionSummary, type MockInspectorReadiness, type MockSnapshotSummary,
 } from "../api/mockInspector";
 
-type Props = { profile: ConnectionProfile };
+type Props = { profile: ConnectionProfile; readinessOnly?: boolean };
 
 const ERROR_LABELS: Record<string, string> = {
   MOCK_INSPECTOR_DISABLED: "개발용 Mock Inspector 기능 비활성",
@@ -19,7 +19,7 @@ const ERROR_LABELS: Record<string, string> = {
   MOCK_INSPECTOR_ACCOUNT_NOT_SEPARATE: "읽기용 계정과 별도 Inspector 계정 필요",
 };
 
-export function MockInspectorPanel({ profile }: Props) {
+export function MockInspectorPanel({ profile, readinessOnly = false }: Props) {
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [readiness, setReadiness] = useState<MockInspectorReadiness | null>(null);
@@ -134,10 +134,11 @@ export function MockInspectorPanel({ profile }: Props) {
 
   return (
     <section className="cp-editor" aria-label="Oracle Mock Schema Inspector">
-      <h4>Schema Inspector · Oracle Mock (개발 전용)</h4>
+      <h4>{readinessOnly ? "Oracle Mock 분석 조건 점검 (개발 전용)" : "Schema Inspector · Oracle Mock (개발 전용)"}</h4>
       <p className="dd-guidance">
-        연결 조건 확인은 DB에 접속하지 않습니다. 분석·Snapshot 저장은 서버에 별도로
-        구성된 메타데이터 전용 계정으로 Oracle 사전정보(ALL_*)만 조회합니다.
+        연결 조건 확인은 DB에 접속하지 않습니다.
+        {readinessOnly ? " 이 화면에서는 분석과 Snapshot 저장을 실행하지 않습니다. " :
+          " 분석·Snapshot 저장은 서버에 별도로 구성된 메타데이터 전용 계정으로 Oracle 사전정보(ALL_*)만 조회합니다. "}
         실제 DEMIS 승인이나 Catalog 활성화를 의미하지 않습니다.
       </p>
       <div className="dd-action-row">
@@ -145,13 +146,13 @@ export function MockInspectorPanel({ profile }: Props) {
           disabled={checking || busy} onClick={() => { void check(); }}>
           {checking ? "확인 중…" : "Inspector 연계 조건 확인 (접속 없음)"}
         </button>
-        {readiness?.ready ? (
+        {!readinessOnly && readiness?.ready ? (
           <button type="button" className="dd-secondary-btn" disabled={checking || busy}
             onClick={() => { void inspect(); }}>
             {busy ? "처리 중…" : "스키마 메타데이터 분석"}
           </button>
         ) : null}
-        {summary && readiness?.ready ? (
+        {!readinessOnly && summary && readiness?.ready ? (
           <button type="button" className="dd-primary-btn" disabled={checking || busy}
             onClick={() => { void capture(); }}>
             Snapshot 저장 (별도 확인)
