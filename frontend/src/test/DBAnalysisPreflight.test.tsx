@@ -159,8 +159,24 @@ describe("M5-UX6 read-only DB Analysis Preflight workspace", () => {
     try {
       render(<App />);
       await userEvent.click(screen.getByRole("tab", { name: "DB 분석 사전점검" }));
-      expect(await screen.findByRole("alert")).toHaveTextContent("권한이 없거나");
+      expect(await screen.findByRole("alert")).toHaveTextContent("연결 프로필 관리 권한이 필요합니다");
       expect(screen.queryByText(HIDDEN)).not.toBeInTheDocument();
+    } finally { denied(); }
+  });
+
+  it.each([
+    { status: 401, message: "인증 정보가 확인되지 않았습니다" },
+    { status: 503, message: "인증 서비스가 준비되지 않았습니다" },
+    { status: 502, message: "서버 연결 상태를 확인" },
+  ])("distinguishes HTTP $status without echoing a potentially sensitive API error", async ({ status, message }) => {
+    const denied = installFetchMock([(url) => url.pathname === ROOT
+      ? jsonResponse({ detail: `untrusted ${HIDDEN}` }, status) : null]);
+    try {
+      render(<App />);
+      await userEvent.click(screen.getByRole("tab", { name: "DB 분석 사전점검" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(message);
+      expect(screen.queryByText(HIDDEN)).not.toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "Preflight DB Target" })).toBeDisabled();
     } finally { denied(); }
   });
 });
